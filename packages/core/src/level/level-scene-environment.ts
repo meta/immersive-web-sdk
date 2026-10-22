@@ -15,7 +15,6 @@ import {
   LinearToneMapping,
   NoToneMapping,
   PCFShadowMap,
-  PCFSoftShadowMap,
   ReinhardToneMapping,
   Scene,
   WebGLRenderer,
@@ -147,8 +146,9 @@ function resolveShadowMapType(
       return BasicShadowMap;
     case 'pcf':
       return PCFShadowMap;
+    // PCFShadowMap is soft since three r182, which deprecated PCFSoftShadowMap.
     case 'pcf-soft':
-      return PCFSoftShadowMap;
+      return PCFShadowMap;
   }
 }
 

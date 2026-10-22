@@ -9,7 +9,7 @@ import { parse, stringify } from 'yaml';
 
 const BASE_OVERRIDES = {
   sharp: '0.35.4',
-  three: 'npm:super-three@0.181.0',
+  three: 'npm:super-three@0.185.0',
 } as const;
 
 const ONLY_BUILT_DEPENDENCIES = ['esbuild', 'protobufjs', 'sharp'] as const;

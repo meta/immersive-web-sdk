@@ -28,11 +28,14 @@ import {
   Matrix4,
   Mesh,
   RGBAFormat,
+  REVISION,
   Sphere,
 } from 'three';
 
 const ID_ATTR_NAME = 'batchId';
 const _identityMatrix = new Matrix4();
+// Since r183, three's vertex color varying is always a vec4.
+const VEC4_VERTEX_COLORS = parseInt(REVISION) >= 183;
 
 // Helper to copy attribute data
 function copyAttributeData(
@@ -157,12 +160,12 @@ export class SimpleBatchedMesh extends Mesh {
         #endif
         #ifdef USE_BATCHING_COLOR
           uniform sampler2D batchingColorTexture;
-          vec3 getBatchingColor( const in float i ) {
+          vec4 getBatchingColor( const in float i ) {
             int size = textureSize( batchingColorTexture, 0 ).x;
             int j = int( i );
             int x = j % size;
             int y = j / size;
-            return texelFetch( batchingColorTexture, ivec2( x, y ), 0 ).rgb;
+            return texelFetch( batchingColorTexture, ivec2( x, y ), 0 );
           }
         #endif
       `;
@@ -185,9 +188,28 @@ export class SimpleBatchedMesh extends Mesh {
         batchingVertex,
       );
 
-      // Replace color_vertex to use batchId for batching color (r165 style)
-      // The r181 version uses getIndirectIndex(gl_DrawID) which we don't support
-      const colorVertex = `
+      // Replace color_vertex to use batchId for batching color (r165 style);
+      // three's own chunk uses getIndirectIndex(gl_DrawID), which we don't
+      // support. vColor is a vec4 since r183 and a vec3 (vec4 with
+      // USE_COLOR_ALPHA) before that.
+      const colorVertex = VEC4_VERTEX_COLORS
+        ? `
+        #if defined( USE_COLOR ) || defined( USE_COLOR_ALPHA ) || defined( USE_INSTANCING_COLOR ) || defined( USE_BATCHING_COLOR )
+          vColor = vec4( 1.0 );
+        #endif
+        #ifdef USE_COLOR_ALPHA
+          vColor *= color;
+        #elif defined( USE_COLOR )
+          vColor.rgb *= color;
+        #endif
+        #ifdef USE_INSTANCING_COLOR
+          vColor.rgb *= instanceColor.rgb;
+        #endif
+        #ifdef USE_BATCHING_COLOR
+          vColor *= getBatchingColor( batchId );
+        #endif
+      `
+        : `
         #if defined( USE_COLOR_ALPHA )
           vColor = vec4( 1.0 );
         #elif defined( USE_COLOR ) || defined( USE_INSTANCING_COLOR ) || defined( USE_BATCHING_COLOR )
@@ -200,8 +222,7 @@ export class SimpleBatchedMesh extends Mesh {
           vColor.xyz *= instanceColor.xyz;
         #endif
         #ifdef USE_BATCHING_COLOR
-          vec3 batchingColor = getBatchingColor( batchId );
-          vColor.xyz *= batchingColor.xyz;
+          vColor.xyz *= getBatchingColor( batchId ).xyz;
         #endif
       `;
 

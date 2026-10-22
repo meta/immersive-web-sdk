@@ -38,7 +38,7 @@ import {
   MeshStandardMaterial,
   NoToneMapping,
   Object3D,
-  PCFSoftShadowMap,
+  PCFShadowMap,
   Scene,
 } from '../../src/runtime/index.js';
 
@@ -660,7 +660,8 @@ describe('importer metadata and environment', () => {
     expect(clearAlpha).toBe(0.25);
     expect((renderer as any).toneMapping).toBe(ACESFilmicToneMapping);
     expect((renderer as any).shadowMap.enabled).toBe(true);
-    expect((renderer as any).shadowMap.type).toBe(PCFSoftShadowMap);
+    // 'pcf-soft' uses PCFShadowMap, which is soft since three r182.
+    expect((renderer as any).shadowMap.type).toBe(PCFShadowMap);
 
     restoreSceneEnvironment(scene, renderer, previous);
     expect(scene.background).toBe(originalBackground);

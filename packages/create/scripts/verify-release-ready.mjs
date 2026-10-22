@@ -51,7 +51,7 @@ try {
   );
   if (
     packageJson.overrides?.sharp !== '0.35.4' ||
-    packageJson.overrides?.three !== 'npm:super-three@0.181.0'
+    packageJson.overrides?.three !== 'npm:super-three@0.185.0'
   ) {
     blockers.push(
       'generated package.json is missing the npm Sharp/Three overrides',
@@ -61,7 +61,7 @@ try {
     pnpmWorkspace.packages?.length !== 1 ||
     pnpmWorkspace.packages[0] !== '.' ||
     pnpmWorkspace.overrides?.sharp !== '0.35.4' ||
-    pnpmWorkspace.overrides?.three !== 'npm:super-three@0.181.0' ||
+    pnpmWorkspace.overrides?.three !== 'npm:super-three@0.185.0' ||
     pnpmWorkspace.allowBuilds?.sharp !== true ||
     pnpmWorkspace.allowBuilds?.['@meta-quest/metavr'] !== false ||
     pnpmWorkspace.allowBuilds?.['onnxruntime-node'] !== false

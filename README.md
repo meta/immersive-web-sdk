@@ -24,7 +24,7 @@ npm create @iwsdk@latest
 Or install into an existing project:
 
 ```bash
-npm install @iwsdk/core three@npm:super-three@0.181.0
+npm install @iwsdk/core three@npm:super-three@0.185.0
 ```
 
 Keep the exact `three` alias at the application root and override transitive
@@ -35,10 +35,10 @@ resolutions so the app and IWSDK share one runtime. npm reads the override from
 {
   "dependencies": {
     "@iwsdk/core": "^1.0.0",
-    "three": "npm:super-three@0.181.0"
+    "three": "npm:super-three@0.185.0"
   },
   "overrides": {
-    "three": "npm:super-three@0.181.0"
+    "three": "npm:super-three@0.185.0"
   }
 }
 ```
@@ -49,7 +49,7 @@ pnpm 10 and 11 read root overrides from `pnpm-workspace.yaml`:
 packages:
   - '.'
 overrides:
-  three: npm:super-three@0.181.0
+  three: npm:super-three@0.185.0
 ```
 
 ## Documentation

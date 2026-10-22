@@ -464,7 +464,7 @@ function assertExample({
   if (
     hasReferenceDependency &&
     (packageManifest.overrides?.sharp !== REFERENCE_SHARP_OVERRIDE ||
-      packageManifest.overrides?.three !== 'npm:super-three@0.181.0')
+      packageManifest.overrides?.three !== 'npm:super-three@0.185.0')
   ) {
     failures.push(
       `${packageFile} installs @iwsdk/reference without the required npm sharp ${REFERENCE_SHARP_OVERRIDE} security override`,

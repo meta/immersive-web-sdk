@@ -183,7 +183,7 @@ describe('installDependenciesFromBundle', () => {
       overrides: {
         custom: '1.0.0',
         sharp: '0.35.4',
-        three: 'npm:super-three@0.181.0',
+        three: 'npm:super-three@0.185.0',
         ...bundlePackageSpecs,
       },
       onlyBuiltDependencies: ['esbuild', 'protobufjs', 'sharp'],

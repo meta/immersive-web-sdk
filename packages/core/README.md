@@ -26,7 +26,7 @@ This will guide you through creating a new project with all the recommended tool
 ## Manual Installation
 
 ```bash
-npm install @iwsdk/core three@npm:super-three@0.181.0
+npm install @iwsdk/core three@npm:super-three@0.185.0
 ```
 
 Keep `three` pinned to the same alias in your application manifest. The
@@ -37,14 +37,14 @@ instance:
 {
   "dependencies": {
     "@iwsdk/core": "^1.0.0",
-    "three": "npm:super-three@0.181.0"
+    "three": "npm:super-three@0.185.0"
   },
   "overrides": {
-    "three": "npm:super-three@0.181.0"
+    "three": "npm:super-three@0.185.0"
   },
   "pnpm": {
     "overrides": {
-      "three": "npm:super-three@0.181.0"
+      "three": "npm:super-three@0.185.0"
     }
   }
 }

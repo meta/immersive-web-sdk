@@ -8,7 +8,7 @@
 import { describe, expect, test } from 'vitest';
 import { findUnsupportedThreeDeclarations } from '../../../scripts/check-three-version.mjs';
 
-const expectedInstallSpec = 'npm:super-three@0.181.0';
+const expectedInstallSpec = 'npm:super-three@0.185.0';
 
 describe('published Three.js declarations', () => {
   test('rejects an unrecorded floating peer dependency', () => {

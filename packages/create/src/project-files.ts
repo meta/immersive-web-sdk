@@ -116,7 +116,7 @@ function createProjectPackageJson(
       '@pmndrs/uikit': '^1.0.74',
       '@pmndrs/uikit-horizon': '^1.0.74',
       '@pmndrs/uikit-lucide': '^1.0.74',
-      three: 'npm:super-three@0.181.0',
+      three: 'npm:super-three@0.185.0',
     },
     devDependencies: {
       '@iwsdk/reference': packageSpec('@iwsdk/reference'),
@@ -124,13 +124,13 @@ function createProjectPackageJson(
       '@iwsdk/vite-plugin-dev': packageSpec('@iwsdk/vite-plugin-dev'),
       '@meta-quest/metavr': '^1.8.1',
       ...(language === 'ts'
-        ? { '@types/three': '^0.181.0', typescript: '^5.5.0' }
+        ? { '@types/three': '^0.185.0', typescript: '^5.5.0' }
         : {}),
       vite: '^7.1.4',
     },
     overrides: {
       sharp: '0.35.4',
-      three: 'npm:super-three@0.181.0',
+      three: 'npm:super-three@0.185.0',
     },
     engines: {
       node: '>=20.19.0 <21.0.0-0 || >=22.12.0 <23.0.0-0 || >=24.0.0',

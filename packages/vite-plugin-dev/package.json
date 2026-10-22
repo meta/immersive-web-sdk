@@ -64,7 +64,7 @@
     "playwright": "^1.58.2",
     "preact": "^10.29.7",
     "sharp": "^0.35.4",
-    "three": "npm:super-three@0.181.0",
+    "three": "npm:super-three@0.185.0",
     "three-viewport-gizmo": "^2.2.0",
     "ws": "^8.21.1"
   },

@@ -73,10 +73,10 @@ import { MCPRuntime } from '../mcp/index.js';
 // when `features.physics` is enabled so non-physics projects don't pay the
 // bundle-size tax.
 import {
-  Clock,
   PerspectiveCamera,
   SRGBColorSpace,
   Scene,
+  Timer,
   WebGLRenderer,
 } from '../runtime/index.js';
 import {
@@ -897,11 +897,14 @@ async function registerFeatureSystems(
  * Setup the main render loop
  */
 function setupRenderLoop(world: World, renderer: WebGLRenderer) {
-  const clock = new Clock();
+  // Timer replaces Clock (deprecated in three r183). Without a timestamp,
+  // update() uses performance.now(), as Clock did.
+  const timer = new Timer();
 
   const render = () => {
-    const delta = clock.getDelta();
-    const elapsedTime = clock.elapsedTime;
+    timer.update();
+    const delta = timer.getDelta();
+    const elapsedTime = timer.getElapsed();
     world.visibilityState.value = (world.session?.visibilityState ??
       VisibilityState.NonImmersive) as VisibilityState;
     // Run ECS systems in priority order (InputSystem => LocomotionSystem => GrabSystem)

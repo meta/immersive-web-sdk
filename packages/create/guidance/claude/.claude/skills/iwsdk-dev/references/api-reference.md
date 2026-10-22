@@ -18,7 +18,7 @@ IWSDK is built on three pillars:
 
 1. **ECS (Entity Component System)** via `elics` library
 2. **Reactive Signals** via `@preact/signals-core`
-3. **Three.js Integration** with zero-copy transform binding (super-three v0.181.0)
+3. **Three.js Integration** with zero-copy transform binding (super-three v0.185.0)
 
 IWSDK is a 3D web framework with first-class XR support. `World.create()` always creates a persistent `world.player` origin and keeps `world.camera` under it, even when `xr: false` is used for browser-only apps. For first-person browser movement, move `world.player`; for orbit, editor, product, cinematic, or third-person cameras, it is fine to keep `world.player` at the origin and drive `world.camera`. Remember that `world.camera.position` is local to `world.player`, so use `camera.getWorldPosition(...)` when world-space viewer position matters.
 

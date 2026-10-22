@@ -67,13 +67,13 @@ export interface System<S extends SystemSchema, Q extends SystemQueries>
 
   init(): void;
   /**
-   * Per-frame tick. Both arguments are in seconds (Three.js `Clock` convention),
+   * Per-frame tick. Both arguments are in seconds (Three.js `Timer` convention),
    * not milliseconds.
    *
    * @param delta Seconds since the previous frame.
-   * @param time  Accumulated `Clock.elapsedTime` (seconds since the render loop
-   *              started ticking the clock); monotonic across frames within a
-   *              session.
+   * @param time  Accumulated `Timer.getElapsed()` (seconds since the render
+   *              loop started ticking the timer); monotonic across frames
+   *              within a session.
    */
   update(delta: number, time: number): void;
   play(): void;

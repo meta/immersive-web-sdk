@@ -80,6 +80,7 @@ import {
   BUNDLED_FONT_MODULES,
   createDisabledBundledFontsModule,
   resolveBundledFontNames,
+  rewriteThreeDecoderDefaults,
 } from './bundle-feature-gates.js';
 import {
   createEditorRuntimeModuleSource,
@@ -3392,6 +3393,12 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       if (id === PROJECT_MODULE_ID) {
         return RESOLVED_PROJECT_MODULE_ID;
       }
+    },
+
+    transform(code, id) {
+      return config.command === 'build'
+        ? rewriteThreeDecoderDefaults(code, id)
+        : null;
     },
 
     async load(id) {

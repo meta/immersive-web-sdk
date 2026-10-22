@@ -74,9 +74,9 @@ describe('@iwsdk/create packed contract', () => {
     expect(JSON.parse(readme.slice(jsonStart, jsonEnd))).toMatchObject({
       dependencies: {
         '@iwsdk/core': '^1.0.0',
-        three: 'npm:super-three@0.181.0',
+        three: 'npm:super-three@0.185.0',
       },
-      overrides: { three: 'npm:super-three@0.181.0' },
+      overrides: { three: 'npm:super-three@0.185.0' },
     });
   });
 

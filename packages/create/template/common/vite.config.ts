@@ -19,7 +19,7 @@ export default defineConfig({
   },
   esbuild: { target: 'esnext' },
   // @drawcall/uikitml otherwise pulls a second three/@pmndrs/uikit graph
-  // (three@0.185 vs app super-three@0.181). Duplicate Component classes break
+  // (its own three vs the app's super-three alias). Duplicate Component classes break
   // instanceof checks → "Only pmndrs/uikit components can be added as children".
   resolve: {
     dedupe: [

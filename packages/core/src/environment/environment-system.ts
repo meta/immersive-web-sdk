@@ -332,6 +332,9 @@ export class EnvironmentSystem extends createSystem({
     if (src === 'room') {
       // Build RoomEnvironment scene and PMREM it
       const room = new RoomEnvironment();
+      // three r183 moved the room 3.5 m down; keep the IBL IWSDK apps have
+      // always had.
+      room.position.y = 0;
       const target = this.pmrem.fromScene(room);
       room.dispose?.();
       this.setEnvironment(target);

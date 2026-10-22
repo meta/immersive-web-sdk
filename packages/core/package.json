@@ -89,10 +89,10 @@
     "@pmndrs/pointer-events": "^6.6.22",
     "@pmndrs/uikit": "^1.0.74",
     "@preact/signals-core": "^1.11.0",
-    "@types/three": "^0.181.0",
+    "@types/three": "^0.185.0",
     "@types/webxr": "^0.5.0",
     "elics": "^3.4.1",
-    "three": "npm:super-three@0.181.0",
+    "three": "npm:super-three@0.185.0",
     "three-mesh-bvh": "^0.9.1"
   },
   "engines": {

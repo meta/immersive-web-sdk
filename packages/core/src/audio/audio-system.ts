@@ -355,9 +355,14 @@ export class AudioSystem extends createSystem(
     audio.play();
     AudioSource.data._isPlaying[index] = 1;
 
-    // Handle onEnded - use audio.source.onended (the only method that works reliably)
-    if (audio.source) {
-      audio.source.onended = () => {
+    // Handle onEnded - use audio.source.onended (the only method that works reliably).
+    // three types `source` as AudioNode; for buffer playback it is an
+    // AudioBufferSourceNode, which has onended.
+    const playbackSource = () =>
+      audio.source as AudioScheduledSourceNode | null;
+    const source = playbackSource();
+    if (source) {
+      source.onended = () => {
         this.onInstanceEnded(entity, instance);
       };
     } else {
@@ -367,8 +372,9 @@ export class AudioSystem extends createSystem(
       // reacquired for a different sound, clobbering that sound's onended.
       instance.onendedTimeout = setTimeout(() => {
         instance.onendedTimeout = undefined;
-        if (audio.source) {
-          audio.source.onended = () => {
+        const delayedSource = playbackSource();
+        if (delayedSource) {
+          delayedSource.onended = () => {
             this.onInstanceEnded(entity, instance);
           };
         }

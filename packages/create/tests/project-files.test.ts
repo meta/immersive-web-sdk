@@ -175,22 +175,22 @@ describe('common starter project files', () => {
     expect(packageJson.dependencies['@pmndrs/uikit']).toBe('^1.0.74');
     expect(packageJson.dependencies['@pmndrs/uikit-horizon']).toBe('^1.0.74');
     expect(packageJson.dependencies['@pmndrs/uikit-lucide']).toBe('^1.0.74');
-    expect(packageJson.dependencies.three).toBe('npm:super-three@0.181.0');
+    expect(packageJson.dependencies.three).toBe('npm:super-three@0.185.0');
     expect(
       packageJson.devDependencies['@iwsdk/example-assets'],
     ).toBeUndefined();
     expect(packageJson.devDependencies['@meta-quest/metavr']).toBe('^1.8.1');
     expect(packageJson.devDependencies['@meta-quest/hzdb']).toBeUndefined();
-    expect(packageJson.devDependencies['@types/three']).toBe('^0.181.0');
+    expect(packageJson.devDependencies['@types/three']).toBe('^0.185.0');
     expect(packageJson.overrides).toEqual({
       sharp: '0.35.4',
-      three: 'npm:super-three@0.181.0',
+      three: 'npm:super-three@0.185.0',
     });
     expect(pnpmWorkspace).toEqual({
       packages: ['.'],
       overrides: {
         sharp: '0.35.4',
-        three: 'npm:super-three@0.181.0',
+        three: 'npm:super-three@0.185.0',
       },
       onlyBuiltDependencies: ['esbuild', 'protobufjs', 'sharp'],
       ignoredBuiltDependencies: ['@meta-quest/metavr', 'onnxruntime-node'],

@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import { readFileSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
@@ -208,4 +209,41 @@ export function createDisabledBundledFontsModule(): string {
   }
 });
 ${exports.join('\n')}`;
+}
+
+const THREE_DECODER_LOADER =
+  /[\\/]examples[\\/]jsm[\\/]loaders[\\/](?:DRACOLoader|KTX2Loader)\.js$/;
+const THREE_LIBS_URL =
+  /new URL\(\s*(['"])(\.\.\/libs\/[^'"]+)\1\s*,\s*import\.meta\.url\s*\)/g;
+
+/**
+ * three r185's DRACOLoader and KTX2Loader default to the decoders next to the
+ * module (`new URL('../libs/…', import.meta.url)`), so Vite emits about 1.5 MB
+ * of decoder wasm/js into every production build. IWSDK points both loaders
+ * at the decoders on unpkg (core's asset/loaders/gltf-loader.ts), so point
+ * these defaults at the same place and nothing unused is bundled. Returns
+ * null for any other module.
+ */
+export function rewriteThreeDecoderDefaults(
+  code: string,
+  id: string,
+): string | null {
+  const file = id.split('?')[0];
+  if (!THREE_DECODER_LOADER.test(file) || !code.includes('import.meta.url')) {
+    return null;
+  }
+  const manifest = JSON.parse(
+    readFileSync(
+      path.resolve(path.dirname(file), '../../../package.json'),
+      'utf8',
+    ),
+  ) as { version: string };
+  const revision = manifest.version.split('.')[1];
+  const base = `https://unpkg.com/three@0.${revision}.0/examples/jsm/loaders/`;
+  const rewritten = code.replace(
+    THREE_LIBS_URL,
+    (_match, _quote, relative: string) =>
+      `new URL(${JSON.stringify(relative)}, ${JSON.stringify(base)})`,
+  );
+  return rewritten === code ? null : rewritten;
 }
