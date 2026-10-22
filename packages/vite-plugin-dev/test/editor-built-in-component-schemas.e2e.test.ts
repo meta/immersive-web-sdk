@@ -201,10 +201,22 @@ describe('editor built-in component schemas', () => {
     await componentRow(editor, 'DomeGradient')
       .locator('[data-component-field="intensity"]')
       .fill('1.5');
+    await componentRow(editor, 'DomeGradient')
+      .locator('[data-component-field="elevationDeg"]')
+      .fill('24');
+    await componentRow(editor, 'DomeGradient')
+      .locator('[data-component-field="azimuthDeg"]')
+      .fill('-31');
+    await componentRow(editor, 'DomeGradient')
+      .locator('[data-component-field="dither"]')
+      .setChecked(true);
     await focusComponentCommitTarget(editor);
     await expect
       .poll(() => componentValue(editor, 'DomeGradient'))
       .toMatchObject({
+        azimuthDeg: -31,
+        dither: true,
+        elevationDeg: 24,
         intensity: 1.5,
         sky: [28 / 255, 56 / 255, 84 / 255, 1],
       });
@@ -280,6 +292,9 @@ describe('editor built-in component schemas', () => {
           translate: false,
         }),
         'com.iwsdk.components.DomeGradient': expect.objectContaining({
+          azimuthDeg: -31,
+          dither: true,
+          elevationDeg: 24,
           intensity: 1.5,
         }),
         'com.iwsdk.components.IBLGradient': expect.objectContaining({

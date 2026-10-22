@@ -463,6 +463,28 @@ while IWSDK reports targets relative to `world.player`. The two agree in the
 emulator, but targeted sequences have not been verified on a headset; check one
 `press` there before relying on target names.
 
+## Runtime Render Stats
+
+`iwsdk scene render-stats` measures the live application runtime: renderer
+counters, bounds, scene assets, lights, materials and `sceneEnvironment`.
+`sceneEnvironment.background` reports what is behind the scene, or `null` when
+none of these applies:
+
+| `type`          | Fields                                                                                            |
+| --------------- | ------------------------------------------------------------------------------------------------- |
+| `dome-gradient` | `sky`, `equator`, `ground` (authored arrays), `intensity`, `elevationDeg`, `azimuthDeg`, `dither` |
+| `dome-texture`  | `src`, `intensity`, `blurriness`, `rotation`                                                      |
+| `gradient`      | `topColor`, `bottomColor`, `exponent`: a background texture with the older scene gradient marker  |
+| `color`         | `color`                                                                                           |
+| `transparent`   | none: no background and clear alpha 0, as in an AR session                                        |
+
+`sceneEnvironment.imageBasedLighting` is `{ type: 'ibl-gradient', sky, equator,
+ground, intensity }`, `{ type: 'ibl-texture', src, intensity, rotation }`,
+`{ type: 'room', intensity, sigma, texture }` for an environment texture with
+the older room IBL marker, or `null`. An `IBLTexture` with `src: 'room'`
+reports `ibl-texture`. A DomeGradient is hidden during AR passthrough, so an AR
+session reports `transparent` even when the level root has one.
+
 ## ECS Debugging
 
 - `ecs_pause`, `ecs_resume`, `ecs_step`
@@ -474,6 +496,10 @@ emulator, but targeted sequences have not been verified on a headset; check one
 ECS tools observe or control the live application runtime. Scene hierarchy and prefab
 resources remain authored in JSON files; ECS tools are for runtime behavior and state,
 not scene composition.
+
+`ecs_set_component` edits to `DomeGradient` and `IBLGradient` apply on the next
+frame. `DomeTexture` and `IBLTexture` apply an edit only once `_needsUpdate` is
+set to `true`, so include it in the same call.
 
 `ecs_snapshot` retains two labels by default. Pass `capacity` from 2 through 20
 to configure a larger rolling window for the current runtime. Its result lists

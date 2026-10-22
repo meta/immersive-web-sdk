@@ -11,3 +11,5 @@ export { DomeGradient } from './dome-gradient.js';
 export { IBLTexture } from './ibl-texture.js';
 export { IBLGradient } from './ibl-gradient.js';
 export { EnvironmentSystem } from './environment-system.js';
+/** @internal */
+export type { DomeGradientUniforms } from './gradient-environment.js';

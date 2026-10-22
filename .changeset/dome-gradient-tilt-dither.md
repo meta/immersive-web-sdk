@@ -1,0 +1,7 @@
+---
+'@iwsdk/core': minor
+'@iwsdk/create': patch
+'@iwsdk/cli': patch
+---
+
+`DomeGradient` gains `elevationDeg` and `azimuthDeg`, which tilt the sky pole away from straight up (azimuth uses a scene node's Y rotation convention, so 90 faces -X), and `dither`, which adds ±0.5/255 screen noise against banding. The defaults render exactly as before. `DomeGradient` and `IBLGradient` now apply edits on the next frame without `_needsUpdate` (setting it still forces a refresh; `DomeTexture` and `IBLTexture` still need it), their fields carry labels, help and limits, and `intensity: 0` now means off instead of 1 (negative values fail validation). `IBLGradient` applies `intensity` once, as `scene.environmentIntensity`; 1.0.x applied it twice, so square any 1.0.x value other than 1 to keep its look (`0.45` becomes `0.2025`). Switching between `DomeTexture` and `DomeGradient`, or between `IBLTexture` and `IBLGradient`, no longer leaves a stale dome, background, IBL rotation or intensity behind, and removing the IBL source resets `environmentIntensity`. `scene_get_render_stats` now reports gradient and texture skies (`dome-gradient`, `dome-texture`) and image-based lighting (`ibl-gradient`, `ibl-texture`) instead of `null`. Scenes that use the new fields need `@iwsdk/core` 1.1.0. The generated agent guidance and the CLI's `AGENTS.md` now ask for `_needsUpdate` only on `DomeTexture` and `IBLTexture`.

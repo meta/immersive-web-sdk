@@ -129,6 +129,23 @@ export interface RuntimeSceneEnvironmentState {
         topColor: string;
         type: 'gradient';
       }
+    | {
+        type: 'dome-gradient';
+        sky: number[];
+        equator: number[];
+        ground: number[];
+        intensity: number;
+        elevationDeg: number;
+        azimuthDeg: number;
+        dither: boolean;
+      }
+    | {
+        type: 'dome-texture';
+        src: string;
+        intensity: number;
+        blurriness: number;
+        rotation: number[];
+      }
     | { type: 'transparent' }
     | null;
   clearAlpha: number;
@@ -139,12 +156,27 @@ export interface RuntimeSceneEnvironmentState {
     | null;
   shadows: boolean;
   shadowMapType: NonNullable<SceneEnvironment['shadowMapType']> | 'unknown';
-  imageBasedLighting: {
-    intensity: number;
-    sigma: number;
-    texture: boolean;
-    type: 'room';
-  } | null;
+  imageBasedLighting:
+    | {
+        intensity: number;
+        sigma: number;
+        texture: boolean;
+        type: 'room';
+      }
+    | {
+        type: 'ibl-gradient';
+        sky: number[];
+        equator: number[];
+        ground: number[];
+        intensity: number;
+      }
+    | {
+        type: 'ibl-texture';
+        src: string;
+        intensity: number;
+        rotation: number[];
+      }
+    | null;
   toneMapping: NonNullable<SceneEnvironment['toneMapping']> | 'unknown';
 }
 
@@ -681,10 +713,23 @@ function inspectSceneEnvironment(world: World): RuntimeSceneEnvironmentState {
         type?: unknown;
       }
     | undefined;
+  const domeTexture = background?.userData?.iwsdkSceneDomeTexture as
+    | Record<string, unknown>
+    | undefined;
   const imageBasedLighting = environmentTexture?.userData
     ?.iwsdkSceneImageBasedLighting as
     | { intensity?: unknown; sigma?: unknown; type?: unknown }
     | undefined;
+  const iblGradient = environmentTexture?.userData?.iwsdkSceneIBLGradient as
+    | Record<string, unknown>
+    | undefined;
+  const iblTexture = environmentTexture?.userData?.iwsdkSceneIBLTexture as
+    | Record<string, unknown>
+    | undefined;
+  // EnvironmentSystem adds the gradient dome directly to world.scene.
+  const domeGradient = world.scene.children.find(
+    (child) => child.visible && child.userData?.iwsdkSceneDomeGradient != null,
+  )?.userData.iwsdkSceneDomeGradient as Record<string, unknown> | undefined;
   const fog = world.scene.fog as {
     color?: RuntimeColorLike;
     density?: number;
@@ -697,16 +742,35 @@ function inspectSceneEnvironment(world: World): RuntimeSceneEnvironmentState {
     background:
       background?.isColor === true
         ? { color: colorToHex(background) ?? '#000000', type: 'color' }
-        : background?.isTexture === true && gradient?.type === 'gradient'
+        : background?.isTexture === true && domeTexture != null
           ? {
-              bottomColor: normalizeHexColor(gradient.bottomColor),
-              exponent: finiteNumber(gradient.exponent, 1),
-              topColor: normalizeHexColor(gradient.topColor),
-              type: 'gradient',
+              blurriness: finiteNumber(domeTexture.blurriness, 0),
+              intensity: finiteNumber(domeTexture.intensity, 1),
+              rotation: numberArray(domeTexture.rotation),
+              src: String(domeTexture.src ?? ''),
+              type: 'dome-texture',
             }
-          : background == null && world.renderer.getClearAlpha() === 0
-            ? { type: 'transparent' }
-            : null,
+          : background?.isTexture === true && gradient?.type === 'gradient'
+            ? {
+                bottomColor: normalizeHexColor(gradient.bottomColor),
+                exponent: finiteNumber(gradient.exponent, 1),
+                topColor: normalizeHexColor(gradient.topColor),
+                type: 'gradient',
+              }
+            : domeGradient != null
+              ? {
+                  azimuthDeg: finiteNumber(domeGradient.azimuthDeg, 0),
+                  dither: domeGradient.dither === true,
+                  elevationDeg: finiteNumber(domeGradient.elevationDeg, 90),
+                  equator: numberArray(domeGradient.equator),
+                  ground: numberArray(domeGradient.ground),
+                  intensity: finiteNumber(domeGradient.intensity, 1),
+                  sky: numberArray(domeGradient.sky),
+                  type: 'dome-gradient',
+                }
+              : background == null && world.renderer.getClearAlpha() === 0
+                ? { type: 'transparent' }
+                : null,
     clearAlpha: world.renderer.getClearAlpha(),
     exposure: world.renderer.toneMappingExposure,
     imageBasedLighting:
@@ -717,7 +781,22 @@ function inspectSceneEnvironment(world: World): RuntimeSceneEnvironmentState {
             texture: environmentTexture?.isTexture === true,
             type: 'room',
           }
-        : null,
+        : iblGradient != null
+          ? {
+              equator: numberArray(iblGradient.equator),
+              ground: numberArray(iblGradient.ground),
+              intensity: finiteNumber(iblGradient.intensity, 1),
+              sky: numberArray(iblGradient.sky),
+              type: 'ibl-gradient',
+            }
+          : iblTexture != null
+            ? {
+                intensity: finiteNumber(iblTexture.intensity, 1),
+                rotation: numberArray(iblTexture.rotation),
+                src: String(iblTexture.src ?? ''),
+                type: 'ibl-texture',
+              }
+            : null,
     fog:
       fog?.isFog === true
         ? {
@@ -768,6 +847,12 @@ function normalizeHexColor(value: unknown): string {
 
 function finiteNumber(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function numberArray(value: unknown): number[] {
+  return Array.isArray(value)
+    ? value.map((entry) => finiteNumber(entry, 0))
+    : [];
 }
 
 function lightTypeName(type: string): string {

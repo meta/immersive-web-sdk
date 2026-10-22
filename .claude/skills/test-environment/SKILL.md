@@ -117,6 +117,9 @@ Assert: Both components are present with the values explicitly authored in
 | `equator` | `[0.6584, 0.7084, 0.7913, 1.0]` (gray-blue) |
 | `ground` | `[0.807, 0.7758, 0.7454, 1.0]` (warm beige) |
 | `intensity` | `1.0` |
+| `elevationDeg` | `90` (default: sky pole straight up) |
+| `azimuthDeg` | `0` (default) |
+| `dither` | `false` (default) |
 | `_needsUpdate` | `false` (already processed) |
 
 **IBLGradient defaults:**
@@ -155,14 +158,29 @@ Assert:
 npx @iwsdk/cli ecs components 2>/dev/null
 ```
 
-Assert these components exist with correct schemas:
+Assert these components exist with correct schemas. `ecs components` reports
+each field's `type` and `default` only:
 
-| Component      | Key Fields                                                                                                   |
-| -------------- | ------------------------------------------------------------------------------------------------------------ |
-| `DomeGradient` | `sky` (Color), `equator` (Color), `ground` (Color), `intensity` (Float32), `_needsUpdate` (Boolean)          |
-| `DomeTexture`  | `src` (FilePath), `blurriness` (Float32), `intensity` (Float32), `rotation` (Vec3), `_needsUpdate` (Boolean) |
-| `IBLGradient`  | `sky` (Color), `equator` (Color), `ground` (Color), `intensity` (Float32), `_needsUpdate` (Boolean)          |
-| `IBLTexture`   | `src` (FilePath, default: "room"), `intensity` (Float32), `rotation` (Vec3), `_needsUpdate` (Boolean)        |
+| Component      | Key Fields                                                                                                                                                                                                      |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DomeGradient` | `sky` (Color), `equator` (Color), `ground` (Color), `intensity` (Float32), `elevationDeg` (Float32, default 90), `azimuthDeg` (Float32, default 0), `dither` (Boolean, default false), `_needsUpdate` (Boolean) |
+| `DomeTexture`  | `src` (FilePath), `blurriness` (Float32), `intensity` (Float32), `rotation` (Vec3), `_needsUpdate` (Boolean)                                                                                                    |
+| `IBLGradient`  | `sky` (Color), `equator` (Color), `ground` (Color), `intensity` (Float32), `_needsUpdate` (Boolean)                                                                                                             |
+| `IBLTexture`   | `src` (FilePath, default: "room"), `intensity` (Float32), `rotation` (Vec3), `_needsUpdate` (Boolean)                                                                                                           |
+
+**Test 3.2: Field Limits in the Scene Capabilities**
+
+```bash
+npx @iwsdk/cli scene capabilities --input-json '{"full":true}' 2>/dev/null
+```
+
+Find each component in `result.componentSchemas` by `id` and read its
+`fields`. Assert:
+
+- `DomeGradient.intensity.min` is `0`
+- `DomeGradient.elevationDeg` has `min: -90`, `max: 90`
+- `DomeGradient.azimuthDeg` has `min: -180`, `max: 180`
+- `IBLGradient.intensity.min` is `0`
 
 ---
 
@@ -194,17 +212,37 @@ npx @iwsdk/cli ecs query --input-json '{"entityIndex":<root>,"components":["Dome
 
 Assert: `sky` = `[1.0, 0.0, 0.0, 1.0]`
 
-**Test 5.2: Modify IBLGradient Intensity**
+**Test 5.2: Tilt the DomeGradient Without `_needsUpdate`**
+
+```bash
+npx @iwsdk/cli ecs set-component --input-json '{"entityIndex":<root>,"componentId":"DomeGradient","field":"elevationDeg","value":"30"}' 2>/dev/null
+```
+
+Then: `sleep 1`
+
+```bash
+npx @iwsdk/cli scene render-stats 2>/dev/null
+```
+
+Assert: `result.sceneEnvironment.background` is
+`{ type: "dome-gradient", elevationDeg: 30, azimuthDeg: 0, dither: false, ... }`
+and its `sky` is `[1, 0, 0, 1]` from Test 5.1. Neither edit set
+`_needsUpdate`; DomeGradient and IBLGradient apply edits on the next frame.
+
+**Test 5.3: Modify IBLGradient Intensity**
 
 ```bash
 npx @iwsdk/cli ecs set-component --input-json '{"entityIndex":<root>,"componentId":"IBLGradient","field":"intensity","value":"2.0"}' 2>/dev/null
 ```
 
+Then: `sleep 1`
+
 ```bash
-npx @iwsdk/cli ecs set-component --input-json '{"entityIndex":<root>,"componentId":"IBLGradient","field":"_needsUpdate","value":true}' 2>/dev/null
+npx @iwsdk/cli scene render-stats 2>/dev/null
 ```
 
-Assert: ECS value updates.
+Assert: `result.sceneEnvironment.imageBasedLighting` is
+`{ type: "ibl-gradient", intensity: 2, ... }`.
 
 ---
 
@@ -258,9 +296,11 @@ Only give up after one retry attempt per suite. If the same suite fails twice, m
 
 ## Known Issues & Workarounds
 
-### Live gradient color changes don't update visuals
+### Texture components still need `_needsUpdate`
 
-Setting DomeGradient/IBLGradient color fields via `npx @iwsdk/cli ecs set-component` updates the ECS data but does NOT update the Three.js shader uniforms. Testing is limited to **data verification**.
+DomeGradient and IBLGradient apply `ecs set-component` edits on the next frame.
+DomeTexture and IBLTexture apply an edit only after `_needsUpdate` is set to
+`true`.
 
 ### \_needsUpdate consumed immediately
 

@@ -377,17 +377,20 @@ const root = world.activeLevel.value;
 root.addComponent(DomeGradient, { ... });
 ```
 
-### 19. Missing `_needsUpdate` on environment changes
+### 19. Missing `_needsUpdate` on environment texture changes
 
-Flag: Setting properties on `DomeGradient`/`DomeTexture`/`IBLGradient`/`IBLTexture` without setting `_needsUpdate: true`.
+Flag: Setting properties on `DomeTexture`/`IBLTexture` without setting `_needsUpdate: true`. `DomeGradient` and `IBLGradient` apply edits on the next frame, so do not flag them for a missing `_needsUpdate`.
 
 ```typescript
-// ❌ BAD - Changes are silently ignored
-root.setValue(DomeGradient, 'sky', [0.1, 0.2, 0.8, 1.0]);
+// ❌ BAD - DomeTexture changes are silently ignored
+root.setValue(DomeTexture, 'intensity', 0.6);
 
-// ✅ GOOD - Vector writes use getVectorView; _needsUpdate is scalar
+// ✅ GOOD - _needsUpdate is scalar
+root.setValue(DomeTexture, 'intensity', 0.6);
+root.setValue(DomeTexture, '_needsUpdate', true);
+
+// ✅ ALSO GOOD - gradient edits apply without the flag
 root.getVectorView(DomeGradient, 'sky').set([0.1, 0.2, 0.8, 1.0]);
-root.setValue(DomeGradient, '_needsUpdate', true);
 ```
 
 ### 20. Using `destroy()` instead of `dispose()` for GPU objects

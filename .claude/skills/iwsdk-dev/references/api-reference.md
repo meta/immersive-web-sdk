@@ -540,12 +540,15 @@ import {
   IBLTexture,
 } from '@iwsdk/core';
 
-// Gradient sky dome (RGBA colors - 4 components)
+// Gradient sky dome (RGBA display colors - 4 components)
 entity.addComponent(DomeGradient, {
   sky: [0.2423, 0.6172, 0.8308, 1.0], // RGBA
   equator: [0.6584, 0.7084, 0.7913, 1.0], // RGBA
   ground: [0.807, 0.7758, 0.7454, 1.0], // RGBA
-  intensity: 1.0,
+  intensity: 1.0, // 0 = black
+  elevationDeg: 90, // sky pole height: 90 = straight up, lower tilts it
+  azimuthDeg: 0, // sky pole heading, node Y-rotation convention (90 = -X)
+  dither: false, // true adds ±0.5/255 noise against banding
 });
 
 // HDR texture sky
@@ -558,7 +561,7 @@ entity.addComponent(IBLGradient, {
   sky: [0.6902, 0.749, 0.7843, 1.0], // RGBA
   equator: [0.6584, 0.7084, 0.7913, 1.0], // RGBA
   ground: [0.807, 0.7758, 0.7454, 1.0], // RGBA
-  intensity: 1.0,
+  intensity: 1.0, // applied once since 1.1.0 (square a 1.0.x value)
 });
 
 // IBL from texture
@@ -582,11 +585,14 @@ entity.addComponent(IBLTexture, {
    root.addComponent(DomeGradient, { sky: [0.24, 0.62, 0.83, 1.0], ... });
    ```
 
-2. **After changing environment properties, MUST set `_needsUpdate: true`** — changes are silently ignored without it:
+2. **After changing `DomeTexture` or `IBLTexture`, MUST set `_needsUpdate: true`** — their changes are silently ignored without it. `DomeGradient` and `IBLGradient` apply edits on the next frame; `_needsUpdate` is optional for them:
 
    ```typescript
-   root.getVectorView(DomeGradient, 'sky').set([0.1, 0.2, 0.8, 1.0]);
-   root.setValue(DomeGradient, '_needsUpdate', true); // Required! (scalar — setValue OK)
+   root.setValue(DomeTexture, 'intensity', 0.6);
+   root.setValue(DomeTexture, '_needsUpdate', true); // Required for textures!
+
+   root.getVectorView(DomeGradient, 'sky').set([0.1, 0.2, 0.8, 1.0]); // applies next frame
+   root.setValue(DomeGradient, 'elevationDeg', 30); // applies next frame
    ```
 
 3. **Background vs IBL are separate**: `DomeTexture`/`DomeGradient` controls the visible sky. `IBLTexture`/`IBLGradient` controls scene lighting (reflections, ambient). You can mix them:
@@ -1473,7 +1479,7 @@ These visuals are automatically created and managed by IWSDK systems:
 12. **DON'T** use `scene.add()` — use `createTransformEntity()` for proper ECS integration
 13. **DON'T** replace IWSDK pointer interaction with `new Raycaster()` — use `RayInteractable`; raw raycasters are valid for custom geometric queries, but the caller owns ECS entity mapping, target filtering, and pointer lifecycle
 14. **DON'T** add environment components (`DomeGradient`/`IBLTexture`/etc.) to arbitrary entities — must go on the level root (`world.activeLevel.value`)
-15. **DON'T** forget `_needsUpdate` after changing environment properties — changes are silently ignored without `entity.setValue(DomeGradient, '_needsUpdate', true)`
+15. **DON'T** forget `_needsUpdate` after changing `DomeTexture` or `IBLTexture` properties — their changes are silently ignored without `entity.setValue(DomeTexture, '_needsUpdate', true)`. `DomeGradient` and `IBLGradient` apply edits without it
 16. **DON'T** use `entity.destroy()` for objects with GPU resources — use `entity.dispose()` which also cleans up geometry/materials/textures
 17. **DON'T** pass numbers to `ScreenSpace` — all position/size values are CSS strings like `'400px'` or `'50vw'`
 

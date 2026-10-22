@@ -31,7 +31,11 @@ import { DomeGradient } from './dome-gradient.js';
 import { DomeTexture } from './dome-texture.js';
 import {
   GradientEnvironment,
+  createDomeGradientUniforms,
   createGradientMaterial,
+  domeGradientAxis,
+  type DomeGradientAxisWarning,
+  type DomeGradientUniforms,
 } from './gradient-environment.js';
 import { IBLGradient } from './ibl-gradient.js';
 import { IBLTexture } from './ibl-texture.js';
@@ -55,25 +59,71 @@ export function computeGradientHexes(
   return { skyHex, equatorHex, groundHex };
 }
 
+/**
+ * Last applied gradient values: the entity index plus every authored number,
+ * so edits apply without `_needsUpdate` and unchanged frames do no work.
+ */
+interface GradientSnapshot {
+  entityIndex: number;
+  values: number[];
+}
+
 interface EnvState {
   backgroundTexture?: Texture;
   environmentTarget?: WebGLRenderTarget;
   backgroundSource?: string;
   environmentSource?: string;
   gradientDome?: Mesh;
+  gradientDomeSnapshot?: GradientSnapshot;
   gradientEnvironmentScene?: GradientEnvironment;
   gradientEnvironmentMesh?: Mesh;
+  gradientEnvironmentSnapshot?: GradientSnapshot;
+  /** An IBL component wrote `scene.environmentIntensity`. */
+  environmentIntensityApplied?: boolean;
+}
+
+/** Write the first three channels of each stop into `out[0..8]`. */
+function writeGradientColors(
+  out: number[],
+  sky: ArrayLike<number>,
+  equator: ArrayLike<number>,
+  ground: ArrayLike<number>,
+): void {
+  for (let channel = 0; channel < 3; channel += 1) {
+    out[channel] = sky[channel];
+    out[3 + channel] = equator[channel];
+    out[6 + channel] = ground[channel];
+  }
+}
+
+/** Whether the first `count` snapshot values (default: all) still match. */
+function sameGradientSnapshot(
+  snapshot: GradientSnapshot | undefined,
+  entityIndex: number,
+  values: readonly number[],
+  count: number = values.length,
+): boolean {
+  if (snapshot == null || snapshot.entityIndex !== entityIndex) {
+    return false;
+  }
+  for (let index = 0; index < count; index += 1) {
+    if (!Object.is(snapshot.values[index], values[index])) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /**
  * Unified background and image‑based lighting system.
  *
  * @remarks
- * - {@link DomeTexture} writes an HDR/LDR equirectangular texture to `scene.background`; {@link DomeGradient} renders a procedural, clipping-proof sky mesh.
- * - IBL is driven by {@link IBLTexture} ("room" or HDR/LDR equirect via PMREM) or {@link IBLGradient} (PMREM of a gradient scene) and writes to `scene.environment`.
+ * - {@link DomeTexture} writes an HDR/LDR equirectangular texture to `scene.background`; {@link DomeGradient} renders a procedural, clipping-proof sky mesh. A DomeTexture wins over a DomeGradient.
+ * - IBL is driven by {@link IBLTexture} ("room" or HDR/LDR equirect via PMREM) or {@link IBLGradient} (PMREM of a gradient scene) and writes to `scene.environment`. An IBLTexture wins over an IBLGradient.
  * - Rotation and intensity hooks forward to `scene.backgroundRotation`, `scene.backgroundIntensity`, and `scene.environmentRotation`, `scene.environmentIntensity`.
+ * - DomeGradient and IBLGradient edits apply on the next frame; DomeTexture and IBLTexture edits apply when `_needsUpdate` is set.
  * - AR sessions always hide authored backgrounds for passthrough while retaining IBL.
- * - PMREM targets are regenerated only when sources change; the dome mesh and geometry are reused.
+ * - PMREM targets are regenerated only when sources or gradient colors change; the dome mesh and geometry are reused.
  *
  * @category Environment & Lighting
  * @example
@@ -100,12 +150,17 @@ export class EnvironmentSystem extends createSystem({
   private pmrem!: PMREMGenerator;
   private gradientGeometry?: SphereGeometry;
   private tmpColor: Color = new Color();
+  private domeUniforms!: DomeGradientUniforms;
+  private readonly domeAxisWarning: DomeGradientAxisWarning = { warned: false };
+  private readonly domeGradientValues: number[] = [];
+  private readonly iblGradientValues: number[] = [];
   private recenterYawOffset: number = 0;
   private resetListenerCleanup: (() => void) | null = null;
   private needsResetListener: boolean = false;
   private arEnvironment!: SceneAREnvironmentController;
 
   init(): void {
+    this.domeUniforms = createDomeGradientUniforms();
     this.pmrem = new PMREMGenerator(this.renderer);
     this.arEnvironment = new SceneAREnvironmentController(
       this.scene,
@@ -193,21 +248,20 @@ export class EnvironmentSystem extends createSystem({
   private async processBackground(entity: Entity): Promise<void> {
     try {
       if (entity.hasComponent(DomeTexture)) {
+        // A DomeTexture wins: never leave a gradient dome drawn over it.
+        this.clearGradientDome();
         const needs = entity.getValue(DomeTexture, '_needsUpdate');
         if (needs) {
           const changed = this.hasDomeTextureBackgroundChanged(entity);
-          if (changed) {
-            await this.updateDomeTextureBackground(entity);
+          if (changed && !(await this.updateDomeTextureBackground(entity))) {
+            return;
           }
           this.updateBackgroundProps(entity);
           entity.setValue(DomeTexture, '_needsUpdate', false);
         }
       } else if (entity.hasComponent(DomeGradient)) {
-        const needs = entity.getValue(DomeGradient, '_needsUpdate');
-        if (needs) {
-          await this.updateDomeGradient(entity, /*forIBL*/ false);
-          entity.setValue(DomeGradient, '_needsUpdate', false);
-        }
+        this.clearBackgroundTexture();
+        this.updateDomeGradient(entity);
       }
     } catch (e) {
       console.error('[EnvironmentSystem] Failed background update:', e);
@@ -223,11 +277,13 @@ export class EnvironmentSystem extends createSystem({
     return changed;
   }
 
-  private async updateDomeTextureBackground(entity: Entity): Promise<void> {
+  /** False when another background replaced this one while it loaded. */
+  private async updateDomeTextureBackground(entity: Entity): Promise<boolean> {
+    const source = this.state.backgroundSource;
     const src = entity.getValue(DomeTexture, 'src') || '';
     if (!src) {
       this.scene.background = null;
-      return;
+      return true;
     }
     const lower = src.toLowerCase();
     const isHDR = lower.endsWith('.hdr') || lower.endsWith('.exr');
@@ -235,12 +291,16 @@ export class EnvironmentSystem extends createSystem({
     const texture = isHDR
       ? await AssetManager.loadHDRTexture(url)
       : await AssetManager.loadTexture(url);
+    if (this.state.backgroundSource !== source) {
+      return false;
+    }
     this.state.backgroundTexture = texture;
     // For LDR equirect backgrounds, ensure world-locked mapping; HDR/EXR already mapped by loader
     if (!isHDR) {
       texture.mapping = EquirectangularReflectionMapping;
     }
     this.scene.background = texture;
+    return true;
   }
 
   private updateBackgroundProps(entity: Entity): void {
@@ -256,58 +316,101 @@ export class EnvironmentSystem extends createSystem({
         rot[2] || 0,
       );
     }
+    const texture = this.state.backgroundTexture;
+    if (texture != null) {
+      texture.userData.iwsdkSceneDomeTexture = {
+        blurriness,
+        intensity,
+        rotation: rot ? Array.from(rot) : [0, 0, 0],
+        src: entity.getValue(DomeTexture, 'src') || '',
+      };
+    }
   }
 
-  private async updateDomeGradient(
-    entity: Entity,
-    forIBL: boolean,
-  ): Promise<void> {
+  private updateDomeGradient(entity: Entity): void {
     const skyV = entity.getVectorView(DomeGradient, 'sky');
     const equatorV = entity.getVectorView(DomeGradient, 'equator');
     const groundV = entity.getVectorView(DomeGradient, 'ground');
-    const intensity = entity.getValue(DomeGradient, 'intensity') || 1.0;
-
-    const skyHex = this.tmpColor.setRGB(skyV[0], skyV[1], skyV[2]).getHex();
-    const equatorHex = this.tmpColor
-      .setRGB(equatorV[0], equatorV[1], equatorV[2])
-      .getHex();
-    const groundHex = this.tmpColor
-      .setRGB(groundV[0], groundV[1], groundV[2])
-      .getHex();
-
-    if (!forIBL) {
-      // Background gradient dome mesh
-      this.ensureGradientDome(skyHex, equatorHex, groundHex, intensity);
-      if (this.state.gradientDome) {
-        this.state.gradientDome.userData.iwsdkSceneDomeGradient = {
-          equator: Array.from(equatorV),
-          ground: Array.from(groundV),
-          intensity,
-          sky: Array.from(skyV),
-        };
-      }
+    const intensity = entity.getValue(DomeGradient, 'intensity') ?? 1;
+    const elevationDeg = entity.getValue(DomeGradient, 'elevationDeg') ?? 90;
+    const azimuthDeg = entity.getValue(DomeGradient, 'azimuthDeg') ?? 0;
+    const dither = entity.getValue(DomeGradient, 'dither') ? 1 : 0;
+    const values = this.domeGradientValues;
+    writeGradientColors(values, skyV, equatorV, groundV);
+    values[9] = intensity;
+    values[10] = elevationDeg;
+    values[11] = azimuthDeg;
+    values[12] = dither;
+    if (
+      !entity.getValue(DomeGradient, '_needsUpdate') &&
+      this.state.gradientDome != null &&
+      sameGradientSnapshot(
+        this.state.gradientDomeSnapshot,
+        entity.index,
+        values,
+      )
+    ) {
+      return;
     }
+
+    // Keep the hex round trip so existing scenes render the same pixels.
+    const { skyHex, equatorHex, groundHex } = computeGradientHexes(
+      this.tmpColor,
+      skyV,
+      equatorV,
+      groundV,
+    );
+    const dome = this.ensureGradientDome(
+      skyHex,
+      equatorHex,
+      groundHex,
+      intensity,
+    );
+    const axis = domeGradientAxis(
+      elevationDeg,
+      azimuthDeg,
+      this.domeUniforms.axis.value,
+      this.domeAxisWarning,
+    );
+    this.domeUniforms.dither.value = dither;
+    dome.userData.iwsdkSceneDomeGradient = {
+      azimuthDeg,
+      axis: axis.toArray(),
+      dither: dither === 1,
+      elevationDeg,
+      equator: Array.from(equatorV),
+      ground: Array.from(groundV),
+      intensity,
+      sky: Array.from(skyV),
+    };
+    this.state.gradientDomeSnapshot = {
+      entityIndex: entity.index,
+      values: values.slice(),
+    };
+    entity.setValue(DomeGradient, '_needsUpdate', false);
   }
 
   // IBL handling
   private async processIBL(entity: Entity): Promise<void> {
     try {
       if (entity.hasComponent(IBLTexture)) {
+        // An IBLTexture wins: drop the gradient scene and its snapshot so a
+        // later IBLGradient regenerates its PMREM target.
+        this.clearGradientEnvironment();
         const needs = entity.getValue(IBLTexture, '_needsUpdate');
         if (needs) {
           const changed = this.hasIBLTextureChanged(entity);
-          if (changed) {
-            await this.updateIBLTexture(entity);
+          if (changed && !(await this.updateIBLTexture(entity))) {
+            return;
           }
           this.updateIBLProps(entity);
           entity.setValue(IBLTexture, '_needsUpdate', false);
         }
       } else if (entity.hasComponent(IBLGradient)) {
-        const needs = entity.getValue(IBLGradient, '_needsUpdate');
-        if (needs) {
-          await this.updateIBLGradient(entity);
-          entity.setValue(IBLGradient, '_needsUpdate', false);
-        }
+        // Forget the texture source so a later IBLTexture with the same src
+        // reloads instead of keeping the gradient target.
+        this.state.environmentSource = undefined;
+        this.updateIBLGradient(entity);
       }
     } catch (e) {
       console.error('[EnvironmentSystem] Failed IBL update:', e);
@@ -323,11 +426,16 @@ export class EnvironmentSystem extends createSystem({
     return changed;
   }
 
-  private async updateIBLTexture(entity: Entity): Promise<void> {
+  /**
+   * False when another IBL source (an IBLGradient, a removal or a new `src`)
+   * replaced this one while it loaded.
+   */
+  private async updateIBLTexture(entity: Entity): Promise<boolean> {
+    const source = this.state.environmentSource;
     const src = (entity.getValue(IBLTexture, 'src') || '').trim();
     if (!src) {
       this.setEnvironment(null);
-      return;
+      return true;
     }
     if (src === 'room') {
       // Build RoomEnvironment scene and PMREM it
@@ -338,7 +446,7 @@ export class EnvironmentSystem extends createSystem({
       const target = this.pmrem.fromScene(room);
       room.dispose?.();
       this.setEnvironment(target);
-      return;
+      return true;
     }
     const lower2 = src.toLowerCase();
     const isHDR = lower2.endsWith('.hdr') || lower2.endsWith('.exr');
@@ -346,14 +454,19 @@ export class EnvironmentSystem extends createSystem({
     const tex = isHDR
       ? await AssetManager.loadHDRTexture(url)
       : await AssetManager.loadTexture(url);
+    if (this.state.environmentSource !== source) {
+      return false;
+    }
     const target = this.pmrem.fromEquirectangular(tex);
     this.setEnvironment(target);
+    return true;
   }
 
   private updateIBLProps(entity: Entity): void {
     const intensity = entity.getValue(IBLTexture, 'intensity') ?? 1;
     const rot = entity.getVectorView(IBLTexture, 'rotation');
     this.scene.environmentIntensity = intensity;
+    this.state.environmentIntensityApplied = true;
     if (rot) {
       this.scene.environmentRotation?.set(
         rot[0] || 0,
@@ -361,60 +474,100 @@ export class EnvironmentSystem extends createSystem({
         rot[2] || 0,
       );
     }
+    const target = this.state.environmentTarget;
+    if (target != null) {
+      target.texture.userData.iwsdkSceneIBLTexture = {
+        intensity,
+        rotation: rot ? Array.from(rot) : [0, 0, 0],
+        src: (entity.getValue(IBLTexture, 'src') || '').trim(),
+      };
+    }
   }
 
-  private async updateIBLGradient(entity: Entity): Promise<void> {
+  private updateIBLGradient(entity: Entity): void {
     const skyV = entity.getVectorView(IBLGradient, 'sky');
     const equatorV = entity.getVectorView(IBLGradient, 'equator');
     const groundV = entity.getVectorView(IBLGradient, 'ground');
-    const intensity = entity.getValue(IBLGradient, 'intensity') || 1.0;
-    // Reuse the shared scratch Color instead of allocating three new Color
-    // objects every frame (updateDomeGradient already uses this.tmpColor).
-    const { skyHex, equatorHex, groundHex } = computeGradientHexes(
-      this.tmpColor,
-      skyV,
-      equatorV,
-      groundV,
-    );
-
-    let gradientScene = this.state.gradientEnvironmentScene;
-    if (!gradientScene) {
-      gradientScene = new GradientEnvironment(
-        skyHex,
-        equatorHex,
-        groundHex,
-        intensity,
-      );
-      this.state.gradientEnvironmentScene = gradientScene;
-      // Cache mesh for uniform updates
-      this.state.gradientEnvironmentMesh = gradientScene.children.find(
-        (o): o is Mesh => o instanceof Mesh,
-      );
-    } else {
-      const mat = this.state.gradientEnvironmentMesh?.material as
-        | ShaderMaterial
-        | undefined;
-      if (mat) {
-        mat.uniforms.skyColor.value.setHex(skyHex).multiplyScalar(intensity);
-        mat.uniforms.equatorColor.value
-          .setHex(equatorHex)
-          .multiplyScalar(intensity);
-        mat.uniforms.groundColor.value
-          .setHex(groundHex)
-          .multiplyScalar(intensity);
-      }
+    const intensity = entity.getValue(IBLGradient, 'intensity') ?? 1;
+    const values = this.iblGradientValues;
+    writeGradientColors(values, skyV, equatorV, groundV);
+    values[9] = intensity;
+    const needsUpdate = entity.getValue(IBLGradient, '_needsUpdate');
+    const snapshot = this.state.gradientEnvironmentSnapshot;
+    const hasTarget =
+      this.state.gradientEnvironmentScene != null &&
+      this.state.environmentTarget != null;
+    if (
+      !needsUpdate &&
+      hasTarget &&
+      sameGradientSnapshot(snapshot, entity.index, values)
+    ) {
+      return;
     }
 
-    const target = this.pmrem.fromScene(gradientScene);
-    target.texture.userData.iwsdkSceneIBLGradient = {
-      equator: Array.from(equatorV),
-      ground: Array.from(groundV),
-      intensity,
-      sky: Array.from(skyV),
+    // Only a color change regenerates the PMREM target; an intensity-only
+    // change just sets environmentIntensity.
+    if (
+      needsUpdate ||
+      !hasTarget ||
+      !sameGradientSnapshot(snapshot, entity.index, values, 9)
+    ) {
+      // Reuse the shared scratch Color instead of allocating three new Color
+      // objects every frame (updateDomeGradient already uses this.tmpColor).
+      const { skyHex, equatorHex, groundHex } = computeGradientHexes(
+        this.tmpColor,
+        skyV,
+        equatorV,
+        groundV,
+      );
+
+      // The PMREM scene stays at unit intensity: intensity is applied once,
+      // through scene.environmentIntensity below.
+      let gradientScene = this.state.gradientEnvironmentScene;
+      if (!gradientScene) {
+        gradientScene = new GradientEnvironment(skyHex, equatorHex, groundHex);
+        this.state.gradientEnvironmentScene = gradientScene;
+        // Cache mesh for uniform updates
+        this.state.gradientEnvironmentMesh = gradientScene.children.find(
+          (o): o is Mesh => o instanceof Mesh,
+        );
+      } else {
+        const mat = this.state.gradientEnvironmentMesh?.material as
+          | ShaderMaterial
+          | undefined;
+        if (mat) {
+          mat.uniforms.skyColor.value.setHex(skyHex);
+          mat.uniforms.equatorColor.value.setHex(equatorHex);
+          mat.uniforms.groundColor.value.setHex(groundHex);
+        }
+      }
+
+      this.setEnvironment(this.pmrem.fromScene(gradientScene));
+    }
+    this.state.gradientEnvironmentSnapshot = {
+      entityIndex: entity.index,
+      values: values.slice(),
     };
-    this.setEnvironment(target);
-    // Apply IBL intensity for gradient as well
+
+    const target = this.state.environmentTarget;
+    if (target != null) {
+      target.texture.userData.iwsdkSceneIBLGradient = {
+        equator: Array.from(equatorV),
+        ground: Array.from(groundV),
+        intensity,
+        sky: Array.from(skyV),
+      };
+    }
     this.scene.environmentIntensity = intensity;
+    this.state.environmentIntensityApplied = true;
+    // IBLGradient has no rotation; drop any rotation an IBLTexture left.
+    this.scene.environmentRotation?.set(0, 0, 0);
+    entity.setValue(IBLGradient, '_needsUpdate', false);
+  }
+
+  /** @internal Live dome uniforms shared with DomeFade materials and the editor. */
+  getDomeGradientUniforms(): DomeGradientUniforms {
+    return this.domeUniforms;
   }
 
   private setEnvironment(target: WebGLRenderTarget | null): void {
@@ -514,6 +667,10 @@ export class EnvironmentSystem extends createSystem({
       authoredBackgrounds:
         this.state.gradientDome == null ? [] : [this.state.gradientDome],
     });
+    // After the AR controller ran: 0 with no dome, with a DomeTexture winning
+    // and during AR passthrough.
+    this.domeUniforms.active.value =
+      this.state.gradientDome?.visible === true ? 1 : 0;
   }
 
   // Gradient dome mesh utilities (background)
@@ -522,7 +679,7 @@ export class EnvironmentSystem extends createSystem({
     equatorHex: number,
     groundHex: number,
     intensity: number,
-  ): void {
+  ): Mesh {
     if (!this.gradientGeometry) {
       this.gradientGeometry = new SphereGeometry(1, 32, 15);
     }
@@ -533,6 +690,7 @@ export class EnvironmentSystem extends createSystem({
         groundHex,
         intensity,
         BackSide,
+        this.domeUniforms,
       );
       const dome = new Mesh(this.gradientGeometry, material);
       dome.renderOrder = -1e9;
@@ -540,15 +698,12 @@ export class EnvironmentSystem extends createSystem({
       this.scene.add(dome);
       this.state.gradientDome = dome;
     } else {
-      const mat = this.state.gradientDome.material as ShaderMaterial;
-      mat.uniforms.skyColor.value.setHex(skyHex).multiplyScalar(intensity);
-      mat.uniforms.equatorColor.value
-        .setHex(equatorHex)
-        .multiplyScalar(intensity);
-      mat.uniforms.groundColor.value
-        .setHex(groundHex)
-        .multiplyScalar(intensity);
+      const uniforms = this.domeUniforms;
+      uniforms.sky.value.setHex(skyHex).multiplyScalar(intensity);
+      uniforms.equator.value.setHex(equatorHex).multiplyScalar(intensity);
+      uniforms.ground.value.setHex(groundHex).multiplyScalar(intensity);
     }
+    return this.state.gradientDome;
   }
 
   private clearGradientDome(): void {
@@ -557,6 +712,8 @@ export class EnvironmentSystem extends createSystem({
       (this.state.gradientDome.material as ShaderMaterial).dispose();
       this.state.gradientDome = undefined;
     }
+    this.state.gradientDomeSnapshot = undefined;
+    this.domeUniforms.active.value = 0;
   }
 
   private clearGradientEnvironment(): void {
@@ -565,10 +722,10 @@ export class EnvironmentSystem extends createSystem({
       this.state.gradientEnvironmentScene = undefined;
     }
     this.state.gradientEnvironmentMesh = undefined;
+    this.state.gradientEnvironmentSnapshot = undefined;
   }
 
-  private clearBackgroundSource(): void {
-    this.clearGradientDome();
+  private clearBackgroundTexture(): void {
     if (
       this.state.backgroundTexture != null &&
       this.scene.background === this.state.backgroundTexture
@@ -579,6 +736,11 @@ export class EnvironmentSystem extends createSystem({
     this.state.backgroundSource = undefined;
   }
 
+  private clearBackgroundSource(): void {
+    this.clearGradientDome();
+    this.clearBackgroundTexture();
+  }
+
   private clearIBLSource(): void {
     const target = this.state.environmentTarget;
     if (target != null && this.scene.environment === target.texture) {
@@ -587,6 +749,10 @@ export class EnvironmentSystem extends createSystem({
     target?.dispose();
     this.state.environmentTarget = undefined;
     this.state.environmentSource = undefined;
+    if (this.state.environmentIntensityApplied) {
+      this.scene.environmentIntensity = 1;
+      this.state.environmentIntensityApplied = false;
+    }
     this.clearGradientEnvironment();
   }
 }

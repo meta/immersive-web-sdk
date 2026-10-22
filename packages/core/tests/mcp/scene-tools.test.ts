@@ -613,6 +613,138 @@ describe('getRenderStats', () => {
   });
 });
 
+describe('getRenderStats scene environment', () => {
+  function environmentStats(configure: (scene: Scene) => void, clearAlpha = 1) {
+    const scene = new Scene();
+    const root = new Group();
+    scene.add(root);
+    configure(scene);
+    const renderer = {
+      constructor: { name: 'TestRenderer' },
+      domElement: { height: 1, width: 1 },
+      getClearAlpha: () => clearAlpha,
+      getPixelRatio: () => 1,
+      info: {
+        memory: { geometries: 0, textures: 0 },
+        programs: [],
+        render: { calls: 0, lines: 0, points: 0, triangles: 0 },
+      },
+      shadowMap: { enabled: false, type: 1 },
+      toneMapping: 0,
+      toneMappingExposure: 1,
+    };
+    return getRenderStats({
+      getActiveRoot: () => root,
+      renderer,
+      scene,
+    } as any).sceneEnvironment;
+  }
+
+  const DOME_MARKER = {
+    azimuthDeg: -31,
+    axis: [0.47, 0.41, -0.78],
+    dither: true,
+    elevationDeg: 24,
+    equator: [0.808, 0.855, 0.91, 1],
+    ground: [0.902, 0.855, 0.82, 1],
+    intensity: 1,
+    sky: [0.843, 0.796, 0.882, 1],
+  };
+
+  function addDome(scene: Scene): Mesh {
+    const dome = new Mesh(new BoxGeometry(), new MeshStandardMaterial());
+    dome.userData.iwsdkSceneDomeGradient = DOME_MARKER;
+    scene.add(dome);
+    return dome;
+  }
+
+  it('reports a DomeGradient sky from the dome marker', () => {
+    expect(environmentStats((scene) => addDome(scene)).background).toEqual({
+      azimuthDeg: -31,
+      dither: true,
+      elevationDeg: 24,
+      equator: [0.808, 0.855, 0.91, 1],
+      ground: [0.902, 0.855, 0.82, 1],
+      intensity: 1,
+      sky: [0.843, 0.796, 0.882, 1],
+      type: 'dome-gradient',
+    });
+  });
+
+  it('reports a DomeTexture sky ahead of a leftover dome', () => {
+    expect(
+      environmentStats((scene) => {
+        const texture = new Texture();
+        texture.userData.iwsdkSceneDomeTexture = {
+          blurriness: 0.2,
+          intensity: 0.9,
+          rotation: [0, 1.5, 0],
+          src: '/envs/sky.hdr',
+        };
+        scene.background = texture;
+        addDome(scene);
+      }).background,
+    ).toEqual({
+      blurriness: 0.2,
+      intensity: 0.9,
+      rotation: [0, 1.5, 0],
+      src: '/envs/sky.hdr',
+      type: 'dome-texture',
+    });
+  });
+
+  it('still reports transparent for a hidden dome with clear alpha 0', () => {
+    expect(
+      environmentStats((scene) => {
+        addDome(scene).visible = false;
+      }, 0).background,
+    ).toEqual({ type: 'transparent' });
+    expect(
+      environmentStats((scene) => {
+        addDome(scene).visible = false;
+      }, 1).background,
+    ).toBeNull();
+  });
+
+  it('reports gradient and texture image-based lighting', () => {
+    expect(
+      environmentStats((scene) => {
+        const texture = new Texture();
+        texture.userData.iwsdkSceneIBLGradient = {
+          equator: [0.6584, 0.7084, 0.7913, 1],
+          ground: [0.807, 0.7758, 0.7454, 1],
+          intensity: 0.2025,
+          sky: [0.6902, 0.749, 0.7843, 1],
+        };
+        scene.environment = texture;
+      }).imageBasedLighting,
+    ).toEqual({
+      equator: [0.6584, 0.7084, 0.7913, 1],
+      ground: [0.807, 0.7758, 0.7454, 1],
+      intensity: 0.2025,
+      sky: [0.6902, 0.749, 0.7843, 1],
+      type: 'ibl-gradient',
+    });
+    expect(
+      environmentStats((scene) => {
+        const texture = new Texture();
+        texture.userData.iwsdkSceneIBLTexture = {
+          intensity: 1.2,
+          rotation: [0, 0.5, 0],
+          src: 'room',
+        };
+        scene.environment = texture;
+      }).imageBasedLighting,
+    ).toEqual({
+      intensity: 1.2,
+      rotation: [0, 0.5, 0],
+      src: 'room',
+      type: 'ibl-texture',
+    });
+    expect(environmentStats(() => {}).imageBasedLighting).toBeNull();
+  });
+});
+
 describe('getObjectTransform', () => {
   it('finds Object3D transforms by native scene node id', () => {
     const obj = createMockObject3D('scene-node-obj');

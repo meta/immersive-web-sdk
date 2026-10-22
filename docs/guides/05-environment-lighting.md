@@ -79,6 +79,12 @@ levelRoot.addComponent(IBLGradient, {
 });
 ```
 
+`IBLGradient` applies `intensity` once, as `scene.environmentIntensity`.
+IWSDK 1.0.x applied it twice (to the gradient colors and again to the
+environment intensity), so an old `intensity: 0.45` lit the scene like 0.2025.
+To keep a 1.0.x look, square the old value: `0.45` becomes `0.2025`. A value of
+1 looks the same in both versions, and `intensity: 0` turns the lighting off.
+
 ### How Environment Affects Materials
 
 Environment lighting dramatically improves how materials look by providing realistic reflections and ambient lighting. The materials you created in previous chapters will automatically look much better with proper environment setup.
@@ -142,6 +148,54 @@ levelRoot.addComponent(DomeGradient, {
   intensity: 1.0,
 });
 ```
+
+The dome blends three colors along a **sky pole**: `sky` at the pole,
+`equator` on the circle 90° away from it, and `ground` directly opposite.
+`intensity` multiplies all three; `0` renders black and values above 1 clip.
+
+**Tilting the sky.** By default the pole points straight up, which is a classic
+horizon sky. `elevationDeg` (-90 to 90) lowers the pole toward the horizon and
+`azimuthDeg` (-180 to 180) turns it, using the same convention as a scene
+node's Y rotation: `0` faces forward (-Z), `90` faces left (-X) and `-90` faces
+right (+X). Azimuth has no effect at elevation ±90. For example, a soft studio
+backdrop whose bright end sits up and ahead to the right:
+
+```json
+"DomeGradient": {
+  "sky": [0.843, 0.796, 0.882, 1],
+  "equator": [0.808, 0.855, 0.91, 1],
+  "ground": [0.902, 0.855, 0.82, 1],
+  "elevationDeg": 24,
+  "azimuthDeg": -31,
+  "dither": true
+}
+```
+
+Here the pole is 24° above the horizon and 31° to the right of forward, so the
+lavender `sky` color is brightest up and ahead right, and the warm `ground`
+color fills the view behind and below.
+
+**Dither.** Pale, low-contrast gradients can show 8-bit bands. `dither: true`
+adds ±0.5/255 of screen noise that hides them. It is off by default, so
+existing scenes render the same pixels.
+
+**Color meanings.** `DomeGradient` colors are display colors: they appear on
+screen exactly as authored and are never tone-mapped. `IBLGradient` colors are
+not display colors; they describe the light the environment casts, so the same
+numbers do not look the same in both components. Light component colors
+(`DirectionalLight`, `PointLight` and the rest) are sRGB.
+
+**Live edits.** `DomeGradient` and `IBLGradient` apply edits on the next frame,
+so `entity.setValue(DomeGradient, 'elevationDeg', 30)` or `ecs_set_component`
+works without `_needsUpdate`. Setting `_needsUpdate` still forces a refresh.
+`DomeTexture` and `IBLTexture` still need `_needsUpdate: true` after an edit.
+
+**AR.** In an AR session (`alpha-blend` or `additive`) IWSDK hides the dome so
+passthrough shows behind your content, and restores it when the session ends.
+`IBLGradient` lighting stays on in AR.
+
+`DomeGradient`'s new fields need `@iwsdk/core` 1.1.0. Scene validation rejects
+fields it does not know, so a scene that uses them fails to load on 1.0.x.
 
 ### HDR Image Backgrounds
 
