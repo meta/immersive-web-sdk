@@ -89,6 +89,7 @@ function createManagedBrowser() {
 }
 
 const cleanup: Array<() => Promise<void>> = [];
+let harnessCommandToken: string | undefined;
 
 async function createHarness(nativeXRControl = false) {
   const managed = createManagedBrowser();
@@ -120,6 +121,8 @@ async function createHarness(nativeXRControl = false) {
   await vi.waitFor(() => expect(managed.onClose).toHaveBeenCalled());
   const sessionId = mocks.registerRuntimeSession.mock.calls.at(-1)?.[0]
     ?.sessionId as string;
+  harnessCommandToken =
+    mocks.registerRuntimeSession.mock.calls.at(-1)?.[0]?.commandToken;
   const agent = connect();
   cleanup.push(() => server.close());
 
@@ -170,7 +173,17 @@ function hello(fields: Record<string, unknown>) {
   return page;
 }
 
-function sendJson(socket: EventEmitter, message: unknown) {
+/** Commands come from the CLI, which presents the session's credential. */
+function sendJson(socket: EventEmitter, message: Record<string, unknown>) {
+  sendRaw(
+    socket,
+    message.method == null
+      ? message
+      : { ...message, commandToken: harnessCommandToken },
+  );
+}
+
+function sendRaw(socket: EventEmitter, message: Record<string, unknown>) {
   socket.emit('message', Buffer.from(JSON.stringify(message)));
 }
 
@@ -234,6 +247,72 @@ describe('runtime target routing through the plugin server', () => {
       method: 'ecs_list_systems',
       target: { deviceClass: 'managed', role: 'app', browserEpoch: 1 },
     });
+  });
+
+  test('every command needs the session credential, which is never relayed', async () => {
+    const h = await createHarness();
+    const app = h.managedPage('app');
+    h.managedPage('editor');
+    expect(harnessCommandToken).toMatch(/^[\w-]{43}$/);
+
+    const refused = [
+      { id: 'missing', method: 'ecs_list_systems' },
+      { id: 'wrong', method: 'ecs_list_systems', commandToken: 'guess' },
+      { id: 'typed', method: 'ecs_list_systems', commandToken: 7 },
+      {
+        id: 'pair',
+        method: 'runtime_pair_headset',
+        params: { headsetId: 'quest' },
+      },
+      { id: 'status', method: 'runtime_get_status' },
+    ];
+    for (const [index, message] of refused.entries()) {
+      sendRaw(h.agent, message);
+      await vi.waitFor(() =>
+        expect(h.agent.send).toHaveBeenCalledTimes(index + 1),
+      );
+      expect(wire(h.agent, index)).toMatchObject({
+        id: message.id,
+        error: {
+          code: -32001,
+          cause: 'permission_denied',
+          data: { code: 'runtime_unauthorized', outcome: 'not_executed' },
+        },
+      });
+    }
+    // A browser bridge never holds the credential, so a page cannot command
+    // another page through the relay.
+    sendRaw(app, { id: 'from-page', method: 'ecs_list_systems' });
+    await vi.waitFor(() => expect(app.send).toHaveBeenCalledOnce());
+    expect(wire(app)).toMatchObject({
+      id: 'from-page',
+      error: { data: { code: 'runtime_unauthorized' } },
+    });
+
+    sendJson(h.agent, { id: 'routed', method: 'ecs_list_systems' });
+    await vi.waitFor(() => expect(app.send).toHaveBeenCalledTimes(2));
+    expect(wire(app, 1)).toMatchObject({ method: 'ecs_list_systems' });
+    expect(app.send.mock.calls[1]![0]).not.toContain('commandToken');
+    expect(app.send.mock.calls[1]![0]).not.toContain(harnessCommandToken);
+  });
+
+  test('a stale owner fence answers before authentication without naming the session', async () => {
+    const h = await createHarness();
+    sendRaw(h.agent, {
+      id: 'stale',
+      method: 'runtime_get_status',
+      expectedSessionId: 'previous-session',
+    });
+    await vi.waitFor(() => expect(h.agent.send).toHaveBeenCalledOnce());
+    expect(wire(h.agent)).toEqual({
+      id: 'stale',
+      error: {
+        code: -32004,
+        message: 'Runtime ownership changed. Rediscover the workspace session.',
+        data: { code: 'stale_runtime_owner', outcome: 'not_executed' },
+      },
+    });
+    expect(h.agent.send.mock.calls[0]![0]).not.toContain(h.sessionId);
   });
 
   test('losing either managed role reports disconnected without a relaunch', async () => {

@@ -5,10 +5,13 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { mkdir, readFile, rm } from 'fs/promises';
+import { mkdir, readFile, rm, stat } from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { IWSDK_RUNTIME_SESSION_PATH } from '@iwsdk/cli/contract';
+import {
+  IWSDK_RUNTIME_COMMAND_CREDENTIAL_PATH,
+  IWSDK_RUNTIME_SESSION_PATH,
+} from '@iwsdk/cli/contract';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { createUnavailableBrowserRpcError } from '../src/browser-rpc-errors.js';
 import {
@@ -16,6 +19,7 @@ import {
   RuntimeSessionOwnershipError,
   setRuntimeSessionBrowserState,
   unregisterRuntimeSession,
+  unregisterRuntimeSessionSync,
 } from '../src/runtime-session.js';
 
 let tempDir: string;
@@ -38,6 +42,7 @@ describe('runtime session writer', () => {
   test('writes and removes project-local runtime session files', async () => {
     const session = await registerRuntimeSession({
       sessionId: 'session-1',
+      commandToken: 'token-session-1',
       workspaceRoot,
       pid: process.pid,
       port: 5174,
@@ -57,9 +62,69 @@ describe('runtime session writer', () => {
     await expect(readFile(sessionFile, 'utf8')).rejects.toThrow();
   });
 
+  test('keeps the command credential in a private file beside the session', async () => {
+    await registerRuntimeSession({
+      sessionId: 'credential-session',
+      commandToken: 'secret-command-token',
+      workspaceRoot,
+      pid: process.pid,
+      port: 5174,
+      localUrl: 'https://localhost:5174',
+    });
+
+    const credentialFile = path.join(
+      workspaceRoot,
+      IWSDK_RUNTIME_COMMAND_CREDENTIAL_PATH,
+    );
+    expect(JSON.parse(await readFile(credentialFile, 'utf8'))).toEqual({
+      schemaVersion: 2,
+      sessionId: 'credential-session',
+      commandToken: 'secret-command-token',
+    });
+    if (process.platform !== 'win32') {
+      expect((await stat(credentialFile)).mode & 0o777).toBe(0o600);
+    }
+    // Status output prints the session record, so it never holds the secret.
+    expect(
+      await readFile(
+        path.join(workspaceRoot, IWSDK_RUNTIME_SESSION_PATH),
+        'utf8',
+      ),
+    ).not.toContain('secret-command-token');
+
+    await unregisterRuntimeSession(workspaceRoot, 'credential-session');
+    await expect(readFile(credentialFile, 'utf8')).rejects.toThrow();
+  });
+
+  test('exit-time cleanup removes only its own command credential', async () => {
+    const credentialFile = path.join(
+      workspaceRoot,
+      IWSDK_RUNTIME_COMMAND_CREDENTIAL_PATH,
+    );
+    await registerRuntimeSession({
+      sessionId: 'exiting-session',
+      commandToken: 'exiting-token',
+      workspaceRoot,
+      pid: process.pid,
+      port: 5174,
+      localUrl: 'https://localhost:5174',
+    });
+
+    unregisterRuntimeSessionSync(workspaceRoot, 'another-session');
+    expect(JSON.parse(await readFile(credentialFile, 'utf8'))).toMatchObject({
+      sessionId: 'exiting-session',
+    });
+    unregisterRuntimeSessionSync(workspaceRoot, 'exiting-session');
+    await expect(readFile(credentialFile, 'utf8')).rejects.toThrow();
+    await expect(
+      readFile(path.join(workspaceRoot, IWSDK_RUNTIME_SESSION_PATH), 'utf8'),
+    ).rejects.toThrow();
+  });
+
   test('updates browser readiness state incrementally', async () => {
     await registerRuntimeSession({
       sessionId: 'session-2',
+      commandToken: 'token-session-2',
       workspaceRoot,
       pid: process.pid,
       port: 5175,
@@ -99,6 +164,7 @@ describe('runtime session writer', () => {
   test('clears stale browser state when registration explicitly omits a launch', async () => {
     await registerRuntimeSession({
       sessionId: 'previous-session',
+      commandToken: 'token-previous-session',
       workspaceRoot,
       pid: 2_147_483_647,
       port: 5175,
@@ -114,6 +180,7 @@ describe('runtime session writer', () => {
 
     const restarted = await registerRuntimeSession({
       sessionId: 'workspace-open-false',
+      commandToken: 'token-workspace-open-false',
       workspaceRoot,
       pid: process.pid,
       port: 5176,
@@ -130,6 +197,7 @@ describe('runtime session writer', () => {
   test('serializes concurrent browser state writes so the latest update wins', async () => {
     await registerRuntimeSession({
       sessionId: 'session-3',
+      commandToken: 'token-session-3',
       workspaceRoot,
       pid: process.pid,
       port: 5176,
@@ -188,6 +256,7 @@ describe('runtime session writer', () => {
   test('rejects a second live owner for the same workspace', async () => {
     await registerRuntimeSession({
       sessionId: 'owner-session',
+      commandToken: 'token-owner-session',
       workspaceRoot,
       pid: process.ppid,
       port: 5176,
@@ -197,17 +266,28 @@ describe('runtime session writer', () => {
     await expect(
       registerRuntimeSession({
         sessionId: 'duplicate-session',
+        commandToken: 'token-duplicate-session',
         workspaceRoot,
         pid: process.pid,
         port: 5177,
         localUrl: 'https://localhost:5177',
       }),
     ).rejects.toBeInstanceOf(RuntimeSessionOwnershipError);
+    // The refused server never replaces the owner's credential.
+    expect(
+      JSON.parse(
+        await readFile(
+          path.join(workspaceRoot, IWSDK_RUNTIME_COMMAND_CREDENTIAL_PATH),
+          'utf8',
+        ),
+      ),
+    ).toMatchObject({ commandToken: 'token-owner-session' });
   });
 
   test('allows an in-process plugin restart to replace its stale session id', async () => {
     await registerRuntimeSession({
       sessionId: 'before-restart',
+      commandToken: 'token-before-restart',
       workspaceRoot,
       pid: process.pid,
       port: 5176,
@@ -216,6 +296,7 @@ describe('runtime session writer', () => {
 
     const restarted = await registerRuntimeSession({
       sessionId: 'after-restart',
+      commandToken: 'token-after-restart',
       workspaceRoot,
       pid: process.pid,
       port: 5177,
@@ -229,6 +310,7 @@ describe('runtime session writer', () => {
   test('prevents an old session from updating or deleting its replacement', async () => {
     await registerRuntimeSession({
       sessionId: 'old-session',
+      commandToken: 'token-old-session',
       workspaceRoot,
       pid: process.pid,
       port: 5176,
@@ -237,6 +319,7 @@ describe('runtime session writer', () => {
     await unregisterRuntimeSession(workspaceRoot, 'old-session');
     await registerRuntimeSession({
       sessionId: 'new-session',
+      commandToken: 'token-new-session',
       workspaceRoot,
       pid: process.pid,
       port: 5177,
@@ -262,6 +345,17 @@ describe('runtime session writer', () => {
     );
     expect(written.sessionId).toBe('new-session');
     expect(written.browser).toBeUndefined();
+    expect(
+      JSON.parse(
+        await readFile(
+          path.join(workspaceRoot, IWSDK_RUNTIME_COMMAND_CREDENTIAL_PATH),
+          'utf8',
+        ),
+      ),
+    ).toMatchObject({
+      sessionId: 'new-session',
+      commandToken: 'token-new-session',
+    });
   });
 });
 

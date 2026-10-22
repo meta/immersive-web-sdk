@@ -90,6 +90,7 @@ async function startRuntimeFixture(
     method: string;
     params?: unknown;
     target?: unknown;
+    commandToken?: unknown;
   }) => RuntimeResponse,
 ) {
   const server = new WebSocketServer({ port: 0 });
@@ -107,11 +108,13 @@ async function startRuntimeFixture(
         method: string;
         params?: unknown;
         target?: unknown;
+        commandToken?: unknown;
       };
       const response = handler({
         method: request.method,
         params: request.params,
         target: request.target,
+        commandToken: request.commandToken,
       });
       socket.send(
         JSON.stringify({
@@ -173,6 +176,36 @@ afterEach(async () => {
 });
 
 describe('mcp stdio interface shaping', () => {
+  test("presents the dev server's command credential on runtime commands", async () => {
+    const tokens: unknown[] = [];
+    const runtime = await startRuntimeFixture(appRoot, (request) => {
+      tokens.push(request.commandToken);
+      return { result: { sessionMode: 'immersive-vr', running: true } };
+    });
+    await writeFile(
+      path.join(appRoot, '.iwsdk', 'runtime', 'command-credential.json'),
+      JSON.stringify({
+        schemaVersion: 2,
+        sessionId: `session-${path.basename(appRoot)}`,
+        commandToken: 'stdio-command-token',
+      }),
+      'utf8',
+    );
+    const mcp = await connectMcpClient(appRoot);
+
+    try {
+      const result = await mcp.client.callTool({
+        name: 'xr_get_session_status',
+        arguments: {},
+      });
+      expect(result.isError).not.toBe(true);
+      expect(tokens).toEqual(['stdio-command-token']);
+    } finally {
+      await mcp.close();
+      await runtime.close();
+    }
+  });
+
   test('advertises and routes live UIKit inspection to the application page', async () => {
     let forwarded:
       | { method: string; params?: unknown; target?: unknown }

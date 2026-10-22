@@ -149,6 +149,7 @@ function launchTabAudioOptions():
 }
 
 const harnessCleanup: Array<() => Promise<void>> = [];
+let harnessCommandToken: string | undefined;
 
 async function createHarness(
   managedBrowser: ReturnType<typeof createManagedBrowser>['browser'],
@@ -192,6 +193,8 @@ async function createHarness(
   await vi.waitFor(() => expect(managedBrowser.onClose).toHaveBeenCalled());
   const sessionId = mocks.registerRuntimeSession.mock.calls.at(-1)?.[0]
     ?.sessionId as string;
+  harnessCommandToken =
+    mocks.registerRuntimeSession.mock.calls.at(-1)?.[0]?.commandToken;
 
   const socket = Object.assign(new EventEmitter(), {
     readyState: 1,
@@ -223,7 +226,17 @@ function connectBrowserPage(hello: Record<string, unknown>) {
   return page;
 }
 
-function sendJson(socket: EventEmitter, message: unknown) {
+/** Commands come from the CLI, which presents the session's credential. */
+function sendJson(socket: EventEmitter, message: Record<string, unknown>) {
+  sendRaw(
+    socket,
+    message.method == null
+      ? message
+      : { ...message, commandToken: harnessCommandToken },
+  );
+}
+
+function sendRaw(socket: EventEmitter, message: Record<string, unknown>) {
   socket.emit('message', Buffer.from(JSON.stringify(message)));
 }
 
@@ -245,12 +258,7 @@ describe('managed browser WebSocket routing', () => {
     const managed = createManagedBrowser();
     const { socket } = await createHarness(managed.browser);
 
-    socket.emit(
-      'message',
-      Buffer.from(
-        JSON.stringify({ id: 'snapshot', method: 'browser_snapshot' }),
-      ),
-    );
+    sendJson(socket, { id: 'snapshot', method: 'browser_snapshot' });
 
     await vi.waitFor(() => expect(socket.send).toHaveBeenCalledOnce());
     const response = JSON.parse(socket.send.mock.calls[0]![0]);
@@ -263,19 +271,34 @@ describe('managed browser WebSocket routing', () => {
     expect(managed.browser.snapshotApplication).toHaveBeenCalledOnce();
   });
 
+  test('refuses a host browser command without the session credential', async () => {
+    const managed = createManagedBrowser();
+    const { socket } = await createHarness(managed.browser);
+
+    sendRaw(socket, { id: 'snapshot', method: 'browser_snapshot' });
+
+    await vi.waitFor(() => expect(socket.send).toHaveBeenCalledOnce());
+    expect(responses(socket)[0]).toEqual({
+      id: 'snapshot',
+      error: {
+        code: -32001,
+        cause: 'permission_denied',
+        message: expect.stringContaining('credential is missing or invalid'),
+        data: { code: 'runtime_unauthorized', outcome: 'not_executed' },
+      },
+    });
+    expect(managed.browser.runCommandExclusive).not.toHaveBeenCalled();
+    expect(managed.browser.snapshotApplication).not.toHaveBeenCalled();
+  });
+
   test('relays reload_page to a physical app in native XR control mode', async () => {
     const managed = createManagedBrowser();
     const { socket } = await createHarness(managed.browser, true);
-    socket.emit(
-      'message',
-      Buffer.from(
-        JSON.stringify({
-          id: 'pair',
-          method: 'runtime_pair_headset',
-          params: { headsetId: 'quest-serial' },
-        }),
-      ),
-    );
+    sendJson(socket, {
+      id: 'pair',
+      method: 'runtime_pair_headset',
+      params: { headsetId: 'quest-serial' },
+    });
     await vi.waitFor(() => expect(socket.send).toHaveBeenCalledOnce());
     const token = new URL(
       JSON.parse(socket.send.mock.calls[0][0]).result.url,
@@ -305,21 +328,16 @@ describe('managed browser WebSocket routing', () => {
       ),
     );
 
-    socket.emit(
-      'message',
-      Buffer.from(
-        JSON.stringify({
-          id: 'reload',
-          method: 'reload_page',
-          target: {
-            deviceClass: 'physical',
-            headsetId: 'quest-serial',
-            pageId: 'quest-page',
-            tabGeneration: 1,
-          },
-        }),
-      ),
-    );
+    sendJson(socket, {
+      id: 'reload',
+      method: 'reload_page',
+      target: {
+        deviceClass: 'physical',
+        headsetId: 'quest-serial',
+        pageId: 'quest-page',
+        tabGeneration: 1,
+      },
+    });
 
     await vi.waitFor(() => expect(physicalSocket.send).toHaveBeenCalledOnce());
     expect(JSON.parse(physicalSocket.send.mock.calls[0]![0])).toMatchObject({
@@ -339,12 +357,7 @@ describe('managed browser WebSocket routing', () => {
     });
     const { socket } = await createHarness(managed.browser);
 
-    socket.emit(
-      'message',
-      Buffer.from(
-        JSON.stringify({ id: 'snapshot', method: 'browser_snapshot' }),
-      ),
-    );
+    sendJson(socket, { id: 'snapshot', method: 'browser_snapshot' });
 
     await vi.waitFor(() => expect(socket.send).toHaveBeenCalledOnce());
     const response = JSON.parse(socket.send.mock.calls[0]![0]);
@@ -358,16 +371,11 @@ describe('managed browser WebSocket routing', () => {
     const managed = createManagedBrowser();
     const { socket } = await createHarness(managed.browser);
 
-    socket.emit(
-      'message',
-      Buffer.from(
-        JSON.stringify({
-          id: 'snapshot',
-          method: 'browser_snapshot',
-          target: { pageId: 'old-page', role: 'app', tabGeneration: 2 },
-        }),
-      ),
-    );
+    sendJson(socket, {
+      id: 'snapshot',
+      method: 'browser_snapshot',
+      target: { pageId: 'old-page', role: 'app', tabGeneration: 2 },
+    });
 
     await vi.waitFor(() => expect(socket.send).toHaveBeenCalledOnce());
     const response = JSON.parse(socket.send.mock.calls[0]![0]);
@@ -392,12 +400,7 @@ describe('managed browser WebSocket routing', () => {
     );
     const { socket } = await createHarness(managed.browser);
 
-    socket.emit(
-      'message',
-      Buffer.from(
-        JSON.stringify({ id: 'snapshot', method: 'browser_snapshot' }),
-      ),
-    );
+    sendJson(socket, { id: 'snapshot', method: 'browser_snapshot' });
 
     await vi.waitFor(() => expect(socket.send).toHaveBeenCalledOnce());
     expect(JSON.parse(socket.send.mock.calls[0]![0])).toMatchObject({
@@ -420,12 +423,7 @@ describe('managed browser WebSocket routing', () => {
     );
     const { socket } = await createHarness(managed.browser);
 
-    socket.emit(
-      'message',
-      Buffer.from(
-        JSON.stringify({ id: 'snapshot', method: 'browser_snapshot' }),
-      ),
-    );
+    sendJson(socket, { id: 'snapshot', method: 'browser_snapshot' });
 
     await vi.waitFor(() => expect(socket.send).toHaveBeenCalledOnce());
     expect(JSON.parse(socket.send.mock.calls[0]![0])).toMatchObject({
@@ -471,10 +469,7 @@ describe('managed browser WebSocket routing', () => {
         ),
       );
 
-      socket.emit(
-        'message',
-        Buffer.from(JSON.stringify({ id: 'runtime-command', method })),
-      );
+      sendJson(socket, { id: 'runtime-command', method });
 
       await vi.waitFor(() => expect(bridge.send).toHaveBeenCalledOnce());
       expect(JSON.parse(bridge.send.mock.calls[0]![0])).toMatchObject({
@@ -556,12 +551,7 @@ describe('managed browser WebSocket routing', () => {
       ).toBe('failed'),
     );
 
-    socket.emit(
-      'message',
-      Buffer.from(
-        JSON.stringify({ id: 'snapshot', method: 'browser_snapshot' }),
-      ),
-    );
+    sendJson(socket, { id: 'snapshot', method: 'browser_snapshot' });
 
     await vi.waitFor(() => expect(socket.send).toHaveBeenCalledOnce());
     expect(JSON.parse(socket.send.mock.calls[0]![0])).toMatchObject({
@@ -578,16 +568,11 @@ describe('managed browser WebSocket routing', () => {
       const managed = createManagedBrowser();
       const { close, socket } = await createHarness(managed.browser);
 
-      socket.emit(
-        'message',
-        Buffer.from(
-          JSON.stringify({
-            id: 'bad-shutdown',
-            method: INTERNAL_RUNTIME_SHUTDOWN_METHOD,
-            params: { claimId: 'foreign-claim' },
-          }),
-        ),
-      );
+      sendJson(socket, {
+        id: 'bad-shutdown',
+        method: INTERNAL_RUNTIME_SHUTDOWN_METHOD,
+        params: { claimId: 'foreign-claim' },
+      });
       await vi.waitFor(() => expect(socket.send).toHaveBeenCalledOnce());
       expect(JSON.parse(socket.send.mock.calls[0]![0])).toMatchObject({
         id: 'bad-shutdown',
@@ -595,17 +580,26 @@ describe('managed browser WebSocket routing', () => {
       });
       expect(close).not.toHaveBeenCalled();
 
+      // The launch claim alone does not stand in for the session credential.
       socket.send.mockClear();
-      socket.emit(
-        'message',
-        Buffer.from(
-          JSON.stringify({
-            id: 'owned-shutdown',
-            method: INTERNAL_RUNTIME_SHUTDOWN_METHOD,
-            params: { claimId: 'owned-claim' },
-          }),
-        ),
-      );
+      sendRaw(socket, {
+        id: 'uncredentialed-shutdown',
+        method: INTERNAL_RUNTIME_SHUTDOWN_METHOD,
+        params: { claimId: 'owned-claim' },
+      });
+      await vi.waitFor(() => expect(socket.send).toHaveBeenCalledOnce());
+      expect(JSON.parse(socket.send.mock.calls[0]![0])).toMatchObject({
+        id: 'uncredentialed-shutdown',
+        error: { code: -32001, data: { code: 'runtime_unauthorized' } },
+      });
+      expect(close).not.toHaveBeenCalled();
+
+      socket.send.mockClear();
+      sendJson(socket, {
+        id: 'owned-shutdown',
+        method: INTERNAL_RUNTIME_SHUTDOWN_METHOD,
+        params: { claimId: 'owned-claim' },
+      });
       await vi.waitFor(() => expect(close).toHaveBeenCalledOnce());
       expect(JSON.parse(socket.send.mock.calls[0]![0])).toMatchObject({
         id: 'owned-shutdown',

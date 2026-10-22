@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { createHash, randomUUID } from 'crypto';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
 import {
   existsSync,
   lstatSync,
@@ -1015,6 +1015,10 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       let managedBrowser: ManagedBrowser | null = null;
       const httpServer = server.httpServer;
       const sessionId = randomUUID();
+      // Authorizes runtime commands for this server generation. It reaches
+      // only clients that can read .iwsdk/runtime, never a browser page.
+      const commandToken = randomBytes(32).toString('base64url');
+      const expectedCommandToken = Buffer.from(commandToken, 'utf8');
       const sessionStartTime = Date.now();
       if (loadedProject != null) {
         server.watcher.add(loadedProject.configPath);
@@ -1904,7 +1908,12 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           if (pluginOptions.verbose) {
             console.log(
               '[IWSDK-MCP] Message received:',
-              message.substring(0, 100),
+              message
+                .replace(
+                  /"commandToken":"[^"]*"/u,
+                  '"commandToken":"[redacted]"',
+                )
+                .substring(0, 100),
             );
           }
 
@@ -1927,6 +1936,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
               expectedSessionId?: string;
               browserEpoch?: number;
               headsetToken?: string;
+              commandToken?: unknown;
               target?: ManagedBrowserCommandTarget;
             };
 
@@ -1936,6 +1946,8 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
               parsed.expectedSessionId !== sessionId
             ) {
               intercepted = true;
+              // Not authenticated yet, so the reply omits the current
+              // sessionId: it is part of a managed bridge's identity.
               sendWsJson(
                 ws,
                 {
@@ -1947,13 +1959,49 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
                     data: {
                       code: 'stale_runtime_owner',
                       outcome: 'not_executed',
-                      sessionId,
                     },
                   },
                 },
                 'stale_owner',
               );
               return;
+            }
+            // Every command must carry this session's credential. Browser
+            // bridges never hold it: their hello, readiness and replies carry
+            // no method and keep their own identity, pairing and loopback
+            // rules. The credential is dropped before anything is relayed.
+            if (parsed.method != null) {
+              if (
+                !hasRuntimeCommandCredential(
+                  parsed.commandToken,
+                  expectedCommandToken,
+                )
+              ) {
+                intercepted = true;
+                traceRuntime('command_unauthorized', {
+                  connectionId,
+                  kind: getConnectionKind(ws),
+                });
+                sendWsJson(
+                  ws,
+                  {
+                    id: parsed.id,
+                    error: {
+                      code: -32001,
+                      cause: 'permission_denied',
+                      message:
+                        'Runtime command credential is missing or invalid. The iwsdk CLI and "iwsdk mcp stdio" send the one this dev server wrote to .iwsdk/runtime/command-credential.json: use them from the same IWSDK release as @iwsdk/vite-plugin-dev, or run "iwsdk dev restart" if that file is gone.',
+                      data: {
+                        code: 'runtime_unauthorized',
+                        outcome: 'not_executed',
+                      },
+                    },
+                  },
+                  'command_unauthorized',
+                );
+                return;
+              }
+              delete parsed.commandToken;
             }
             if (parsed.method === '__iwsdk_browser_lease_release') {
               intercepted = true;
@@ -3253,6 +3301,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         try {
           sessionRegistration = registerRuntimeSession({
             sessionId,
+            commandToken,
             ownerSessionId: owner?.identity.sessionId,
             workspaceRoot: config.root,
             pid: process.pid,
@@ -3831,6 +3880,18 @@ function hasManagedWorkspaceAccess(
   }
 }
 
+/** Compares a runtime command's credential in constant time. */
+function hasRuntimeCommandCredential(
+  presented: unknown,
+  expected: Buffer,
+): boolean {
+  if (typeof presented !== 'string') {
+    return false;
+  }
+  const actual = Buffer.from(presented, 'utf8');
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
 function getHeaderValue(
   value: string | string[] | number | undefined,
 ): string | undefined {
@@ -4318,7 +4379,11 @@ async function handleWorkspaceFilesRequest(
     );
     const publicRoot = path.resolve(workspaceRoot, 'public');
     const browseRoot = path.resolve(publicRoot, subfolder);
-    if (!isPathInside(publicRoot, browseRoot)) {
+    // The walk skips symbolic links; only the subfolder path can contain one.
+    if (
+      !isPathInside(publicRoot, browseRoot) ||
+      !isRealPathInside(publicRoot, browseRoot)
+    ) {
       throw new Error('File picker subfolder must stay inside public/.');
     }
     const files: Array<{ path: string; size: number }> = [];
@@ -4363,6 +4428,46 @@ function isPathInside(parentPath: string, candidatePath: string): boolean {
   return (
     relative === '' ||
     (!relative.startsWith('..') && !path.isAbsolute(relative))
+  );
+}
+
+/**
+ * Resolves symbolic links in the existing part of a path and appends the
+ * missing tail unchanged. Returns null when the path cannot be resolved, such
+ * as through a dangling link that a write would follow.
+ */
+function resolveRealPath(targetPath: string): string | null {
+  const missing: string[] = [];
+  let current = path.resolve(targetPath);
+  while (true) {
+    try {
+      return path.join(realpathSync.native(current), ...missing);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        return null;
+      }
+    }
+    try {
+      lstatSync(current);
+      return null;
+    } catch {}
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return null;
+    }
+    missing.unshift(path.basename(current));
+    current = parent;
+  }
+}
+
+/** Lexical checks cannot see symbolic links; this compares real paths. */
+function isRealPathInside(parentPath: string, candidatePath: string): boolean {
+  const realParent = resolveRealPath(parentPath);
+  const realCandidate = resolveRealPath(candidatePath);
+  return (
+    realParent != null &&
+    realCandidate != null &&
+    isPathInside(realParent, realCandidate)
   );
 }
 
@@ -8123,6 +8228,18 @@ function resolveManagedScenePath(
   if (!resolved.endsWith(SCENE_FILE_SUFFIX)) {
     throw new Error(`Scene path must end with ${SCENE_FILE_SUFFIX}`);
   }
+  // Every scene read and write goes through here, so a symbolic link at
+  // public/scenes or inside it can never reach outside the project.
+  if (!isRealPathInside(workspaceRoot, sceneRoot)) {
+    throw new Error(
+      'public/scenes/ must resolve inside the Vite workspace root, including through symbolic links',
+    );
+  }
+  if (!isRealPathInside(sceneRoot, resolved)) {
+    throw new Error(
+      'Scene path must stay inside public/scenes/, including through symbolic links',
+    );
+  }
 
   return resolved;
 }
@@ -8170,6 +8287,11 @@ async function composeWorkspaceSceneDocument(
           `Scene import "${src}" must end with ${SCENE_FILE_SUFFIX}`,
         );
       }
+      if (!isRealPathInside(sceneRoot, absolutePath)) {
+        throw new Error(
+          `Scene import "${src}" must resolve inside public/scenes/, including through symbolic links`,
+        );
+      }
       if (!existsSync(absolutePath)) {
         throw new Error(`Scene import file does not exist: ${src}`);
       }
@@ -8195,6 +8317,12 @@ function listSceneFiles(workspaceRoot: string) {
   const sceneRoot = path.resolve(workspaceRoot, SCENE_ROOT_RELATIVE_PATH);
   if (!existsSync(sceneRoot)) {
     return [];
+  }
+  // The walk below skips symbolic links; only the root itself can be one.
+  if (!isRealPathInside(workspaceRoot, sceneRoot)) {
+    throw new Error(
+      'public/scenes/ must resolve inside the Vite workspace root, including through symbolic links',
+    );
   }
 
   const files: Array<{

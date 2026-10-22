@@ -368,8 +368,10 @@ export function createRelayHandler(options?: RelayOptions): RelayHandler {
       endpoint: metadata,
       timer,
     });
+    // The caller's command credential is never forwarded to a page.
+    const { commandToken: _commandToken, ...request } = message;
     try {
-      destination.send(JSON.stringify({ ...message, id: wireId, target }));
+      destination.send(JSON.stringify({ ...request, id: wireId, target }));
     } catch {
       settleUnknown(wireId, DISPATCH_FAILED);
     }

@@ -59,6 +59,24 @@ service workers survive browser recovery; normal OS temporary-file cleanup may
 eventually remove them. A browser whose cleanup cannot be confirmed blocks
 replacement and reports that condition.
 
+The runtime's command WebSocket (`/__iwer_mcp`) accepts connections only from a
+loopback address with a local `Host` header, and a browser only from the dev
+server's own origin. Every command must also carry the dev-server session's
+command credential: a random secret the dev server writes to
+`.iwsdk/runtime/command-credential.json` (never served over HTTP) and deletes
+when it stops. On macOS and Linux the file has mode 0600; on Windows it takes
+the permissions of the project folder. The CLI and `iwsdk mcp stdio` read it for
+the session they resolved and send it with each command; the server drops it
+before relaying a command to a page. Commands without it fail with
+`runtime_unauthorized` and `outcome: "not_executed"`, so scripts running in a
+page (an app dependency, for example) and, on macOS and Linux, other local users
+cannot drive the runtime, editor or managed browser. Any process running as your
+own OS user can read the file, so the credential is no boundary against those.
+Browser bridges never hold the credential: the managed browser identifies itself
+with its injected session identity, and a headset with its pairing token. Use
+the CLI and dev server from the same IWSDK release; an older CLI sends no
+credential.
+
 Use `iwsdk runtime status` for the live lifecycle, `runtime targets` for connected
 pages and their supported methods, and `runtime wait --input-json
 '{"afterRevision":7,"timeoutMs":25000}'` to wait without causing recovery.

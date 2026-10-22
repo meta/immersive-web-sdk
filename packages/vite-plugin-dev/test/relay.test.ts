@@ -101,6 +101,17 @@ describe('single-destination runtime relay', () => {
     });
     expect(f.relay.pendingCount()).toBe(0);
   });
+  test('never forwards the caller command credential to a page', () => {
+    const f = fixture();
+    f.request(QUEST_TARGET, 'credentialed', 'ecs_pause', {
+      commandToken: 'session-secret',
+    });
+    expect(decode(f.quest)).toMatchObject({
+      method: 'ecs_pause',
+      target: QUEST_TARGET,
+    });
+    expect(f.quest.send.mock.calls[0][0]).not.toContain('session-secret');
+  });
   test('never falls back to a physical headset when managed app is absent', () => {
     const f = fixture();
     f.relay.unregisterClient(f.app);

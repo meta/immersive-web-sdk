@@ -202,6 +202,8 @@ describe('runtime reliability with real managed Chromium', () => {
         (await command('ui_inspect', { entityIndex: 0 }, target)).result,
       ).toEqual({ reloaded: true });
       expect(requests.at(-1)).toMatchObject({ method: 'ui_inspect' });
+      // The headset page only ever sees the command, never the credential.
+      expect(requests.at(-1)).not.toHaveProperty('commandToken');
       expect((await command('reload_page', {}, target)).result).toEqual({
         reloaded: true,
       });

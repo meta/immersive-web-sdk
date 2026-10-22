@@ -5,7 +5,16 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { mkdir, readFile, rm, writeFile } from 'fs/promises';
+import { createHash } from 'crypto';
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { Readable } from 'stream';
@@ -1555,6 +1564,241 @@ describe('native editor route middleware', () => {
     expect(JSON.parse(response.body)).toMatchObject({
       error: expect.stringContaining('inside public/scenes'),
     });
+  });
+});
+
+describe('scene routes resolve symbolic links', () => {
+  let outsideRoot: string;
+
+  beforeEach(async () => {
+    outsideRoot = await mkdtemp(
+      path.join(os.tmpdir(), 'iwsdk-editor-outside-'),
+    );
+  });
+
+  afterEach(async () => {
+    await rm(outsideRoot, { recursive: true, force: true });
+  });
+
+  test('refuses to read or overwrite a scene file linked outside the project', async () => {
+    const middleware = createEditorMiddleware(tempRoot);
+    const outsideScene = path.join(outsideRoot, 'secret.iwsdk.scene.json');
+    const original = JSON.stringify(sceneDocument('outside'));
+    await writeFile(outsideScene, original, 'utf8');
+    await mkdir(path.join(tempRoot, 'public', 'scenes'), { recursive: true });
+    await symlink(
+      outsideScene,
+      path.join(tempRoot, 'public', 'scenes', 'linked.iwsdk.scene.json'),
+    );
+    const url =
+      '/__iwsdk/editor/document?scene=public/scenes/linked.iwsdk.scene.json';
+
+    const read = await runMiddleware(
+      middleware,
+      'GET',
+      url,
+      '',
+      MANAGED_WORKSPACE_HEADERS,
+    );
+    expect(read.statusCode).toBe(400);
+    expect(JSON.parse(read.body).error).toContain('inside public/scenes');
+
+    const write = await runMiddleware(
+      middleware,
+      'PUT',
+      url,
+      JSON.stringify(sceneDocument('replaced')),
+      {
+        ...MANAGED_WORKSPACE_HEADERS,
+        'if-match': `sha256:${createHash('sha256').update(original).digest('hex')}`,
+      },
+    );
+    expect(write.statusCode).toBe(400);
+    expect(await readFile(outsideScene, 'utf8')).toBe(original);
+  });
+
+  test('refuses a public/scenes directory linked outside the project', async () => {
+    const middleware = createEditorMiddleware(tempRoot);
+    await writeFlattenableScene(
+      outsideRoot,
+      'room.composition.iwsdk.scene.json',
+    );
+    await mkdir(path.join(tempRoot, 'public'), { recursive: true });
+    await symlink(
+      outsideRoot,
+      path.join(tempRoot, 'public', 'scenes'),
+      'junction',
+    );
+
+    const document = await runMiddleware(
+      middleware,
+      'GET',
+      '/__iwsdk/editor/document?scene=public/scenes/room.composition.iwsdk.scene.json',
+      '',
+      MANAGED_WORKSPACE_HEADERS,
+    );
+    expect(document.statusCode).toBe(400);
+    expect(JSON.parse(document.body).error).toContain(
+      'public/scenes/ must resolve inside the Vite workspace root',
+    );
+
+    const listed = await runMiddleware(
+      middleware,
+      'GET',
+      '/__iwsdk/workspace/scenes',
+      '',
+      MANAGED_WORKSPACE_HEADERS,
+    );
+    expect(listed.statusCode).toBe(400);
+    expect(listed.body).not.toContain('room.composition');
+
+    const flattened = await runMiddleware(
+      middleware,
+      'POST',
+      '/__iwsdk/workspace/scenes',
+      JSON.stringify({
+        action: 'flatten',
+        path: 'public/scenes/room.composition.iwsdk.scene.json',
+      }),
+      MANAGED_WORKSPACE_HEADERS,
+    );
+    expect(flattened.statusCode).toBe(400);
+    expect((await readdir(outsideRoot)).sort()).toEqual([
+      'modules',
+      'room.composition.iwsdk.scene.json',
+    ]);
+  });
+
+  test('refuses flatten output through a directory link or a dangling link', async () => {
+    const middleware = createEditorMiddleware(tempRoot);
+    await writeFlattenableScene(tempRoot);
+    const sceneRoot = path.join(tempRoot, 'public', 'scenes');
+    await symlink(outsideRoot, path.join(sceneRoot, 'exported'), 'junction');
+    await symlink(
+      path.join(outsideRoot, 'missing.iwsdk.scene.json'),
+      path.join(sceneRoot, 'dangling.iwsdk.scene.json'),
+    );
+
+    for (const outputPath of [
+      'public/scenes/exported/room.iwsdk.scene.json',
+      'public/scenes/dangling.iwsdk.scene.json',
+    ]) {
+      const response = await runMiddleware(
+        middleware,
+        'POST',
+        '/__iwsdk/workspace/scenes',
+        JSON.stringify({
+          action: 'flatten',
+          outputPath,
+          overwrite: true,
+          path: 'public/scenes/room.composition.iwsdk.scene.json',
+        }),
+        MANAGED_WORKSPACE_HEADERS,
+      );
+      expect(response.statusCode, outputPath).toBe(400);
+      expect(JSON.parse(response.body).error).toContain('inside public/scenes');
+    }
+    expect(await readdir(outsideRoot)).toEqual([]);
+  });
+
+  test('refuses a scene import linked outside public/scenes', async () => {
+    const middleware = createEditorMiddleware(tempRoot);
+    const sceneRoot = path.join(tempRoot, 'public', 'scenes');
+    await mkdir(path.join(outsideRoot, 'modules'));
+    await writeFile(
+      path.join(outsideRoot, 'modules', 'chair.iwsdk.scene.json'),
+      JSON.stringify(sceneDocument('chair')),
+      'utf8',
+    );
+    await mkdir(sceneRoot, { recursive: true });
+    await symlink(
+      path.join(outsideRoot, 'modules'),
+      path.join(sceneRoot, 'modules'),
+      'junction',
+    );
+    await writeFile(
+      path.join(sceneRoot, 'room.composition.iwsdk.scene.json'),
+      JSON.stringify({
+        version: 'iwsdk.scene.v1',
+        units: 'meters',
+        imports: [
+          { id: 'reading-nook', src: './modules/chair.iwsdk.scene.json' },
+        ],
+        resources: {},
+        nodes: [],
+      }),
+      'utf8',
+    );
+
+    const response = await runMiddleware(
+      middleware,
+      'GET',
+      '/__iwsdk/editor/document?scene=public/scenes/room.composition.iwsdk.scene.json&mode=composed',
+      '',
+      MANAGED_WORKSPACE_HEADERS,
+    );
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body).error).toContain(
+      'Scene import "./modules/chair.iwsdk.scene.json" must resolve inside public/scenes/',
+    );
+  });
+
+  test('allows links that stay inside public/scenes, including from a linked project root', async () => {
+    const sceneRoot = path.join(tempRoot, 'public', 'scenes');
+    await mkdir(sceneRoot, { recursive: true });
+    await writeFile(
+      path.join(sceneRoot, 'scene.iwsdk.scene.json'),
+      JSON.stringify(sceneDocument('real')),
+      'utf8',
+    );
+    await symlink(
+      path.join(sceneRoot, 'scene.iwsdk.scene.json'),
+      path.join(sceneRoot, 'alias.iwsdk.scene.json'),
+    );
+    const aliasRoot = path.join(outsideRoot, 'project-alias');
+    await symlink(tempRoot, aliasRoot, 'junction');
+
+    for (const root of [tempRoot, aliasRoot]) {
+      const response = await runMiddleware(
+        createEditorMiddleware(root),
+        'GET',
+        '/__iwsdk/editor/document?scene=public/scenes/alias.iwsdk.scene.json',
+        '',
+        MANAGED_WORKSPACE_HEADERS,
+      );
+      expect(response.statusCode, root).toBe(200);
+      expect(JSON.parse(response.body).nodes).toEqual([{ id: 'real' }]);
+    }
+  });
+
+  test('the file picker refuses a subfolder linked outside public/', async () => {
+    const middleware = createEditorMiddleware(tempRoot);
+    await writeFile(path.join(outsideRoot, 'secret.mp3'), 'mp3', 'utf8');
+    await mkdir(path.join(tempRoot, 'public'), { recursive: true });
+    await symlink(
+      outsideRoot,
+      path.join(tempRoot, 'public', 'linked'),
+      'junction',
+    );
+
+    const linked = await runMiddleware(
+      middleware,
+      'GET',
+      '/__iwsdk/workspace/files?subfolder=linked',
+      '',
+      MANAGED_WORKSPACE_HEADERS,
+    );
+    expect(linked.statusCode).toBe(400);
+    expect(linked.body).not.toContain('secret.mp3');
+
+    const root = await runMiddleware(
+      middleware,
+      'GET',
+      '/__iwsdk/workspace/files',
+      '',
+      MANAGED_WORKSPACE_HEADERS,
+    );
+    expect(JSON.parse(root.body)).toEqual({ files: [] });
   });
 });
 

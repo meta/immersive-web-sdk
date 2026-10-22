@@ -14,6 +14,7 @@ import {
   type RuntimeIssueCause,
   type RuntimeSession,
 } from './runtime-contract.js';
+import { getRuntimeCommandToken } from './runtime-state.js';
 
 const FAST_WSS_FALLBACK_TIMEOUT_MS = 1500;
 const SCENE_OPEN_READY_POLL_INTERVAL_MS = 50;
@@ -41,6 +42,10 @@ export interface SendRuntimeCommandOptions {
   timeoutMs?: number;
   runtimeSession?: RuntimeSession | null;
 }
+
+type RuntimeCommandRequest = Omit<SendRuntimeCommandOptions, 'timeoutMs'> & {
+  commandToken?: string;
+};
 
 export class RuntimeCommandExecutionError extends Error {
   issueCause?: RuntimeIssueCause;
@@ -213,6 +218,7 @@ async function trySendRuntimeCommand(
   connectDeadline: number,
   browser: RuntimeBrowserState | undefined,
   expectedSessionId?: string,
+  commandToken?: string,
 ): Promise<RuntimeCommandResponse> {
   const inferCause = (message: string, explicitCause?: RuntimeIssueCause) =>
     target?.deviceClass === 'physical'
@@ -308,6 +314,7 @@ async function trySendRuntimeCommand(
         method,
         params: params ?? {},
         ...(target ? { target } : {}),
+        commandToken,
       });
       traceTransport('open', {
         method,
@@ -475,10 +482,11 @@ async function trySendRuntimeCommand(
 }
 
 async function sendRuntimeCommandBeforeDeadline(
-  options: Omit<SendRuntimeCommandOptions, 'timeoutMs'>,
+  options: RuntimeCommandRequest,
   deadline: number,
 ): Promise<RuntimeCommandResponse> {
-  const { method, params, port, runtimeSession, target } = options;
+  const { commandToken, method, params, port, runtimeSession, target } =
+    options;
   // Managed browser state describes the host browser only, never a headset.
   const browser =
     target?.deviceClass === 'physical' ? undefined : runtimeSession?.browser;
@@ -503,6 +511,7 @@ async function sendRuntimeCommandBeforeDeadline(
       connectDeadline,
       browser,
       runtimeSession?.sessionId,
+      commandToken,
     );
   } catch (error) {
     if (!(error instanceof RuntimeCommandTransportError)) {
@@ -541,6 +550,7 @@ async function sendRuntimeCommandBeforeDeadline(
       deadline,
       browser,
       runtimeSession?.sessionId,
+      commandToken,
     );
   }
 }
@@ -579,7 +589,7 @@ function sceneWillOpen(method: string): boolean {
 }
 
 async function captureSceneOpenSessionBaseline(
-  options: Omit<SendRuntimeCommandOptions, 'timeoutMs'>,
+  options: RuntimeCommandRequest,
   deadline: number,
 ): Promise<string | null> {
   if (!sceneWillOpen(options.method)) {
@@ -590,6 +600,7 @@ async function captureSceneOpenSessionBaseline(
     try {
       const stateResponse = await sendRuntimeCommandBeforeDeadline(
         {
+          commandToken: options.commandToken,
           method: 'scene_get_state',
           params: {},
           port: options.port,
@@ -654,7 +665,7 @@ function delayBeforeDeadline(deadline: number): Promise<void> {
 }
 
 async function confirmOpenedSceneReady(
-  options: Omit<SendRuntimeCommandOptions, 'timeoutMs'>,
+  options: RuntimeCommandRequest,
   response: RuntimeCommandResponse,
   deadline: number,
   previousSceneSessionId: string | null,
@@ -675,6 +686,7 @@ async function confirmOpenedSceneReady(
     try {
       const stateResponse = await sendRuntimeCommandBeforeDeadline(
         {
+          commandToken: options.commandToken,
           method: 'scene_get_state',
           params: {},
           port: options.port,
@@ -752,7 +764,16 @@ export async function sendRuntimeCommand({
   runtimeSession,
 }: SendRuntimeCommandOptions): Promise<RuntimeCommandResponse> {
   const deadline = Date.now() + Math.max(timeoutMs, 1);
-  const options = { method, params, port, runtimeSession, target };
+  const commandToken =
+    runtimeSession == null ? undefined : getRuntimeCommandToken(runtimeSession);
+  const options = {
+    commandToken,
+    method,
+    params,
+    port,
+    runtimeSession,
+    target,
+  };
   const previousSceneSessionId = await captureSceneOpenSessionBaseline(
     options,
     deadline,

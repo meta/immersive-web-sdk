@@ -316,6 +316,8 @@ export const IWSDK_RUNTIME_STATE_DIR = '.iwsdk/runtime';
 export const IWSDK_RUNTIME_LOGS_DIR = '.iwsdk/runtime/logs';
 export const IWSDK_RUNTIME_SESSION_PATH = '.iwsdk/runtime/session.json';
 export const IWSDK_RUNTIME_LAUNCH_PATH = '.iwsdk/runtime/launch.json';
+export const IWSDK_RUNTIME_COMMAND_CREDENTIAL_PATH =
+  '.iwsdk/runtime/command-credential.json';
 export const IWSDK_RUNTIME_STATE_SCHEMA_VERSION = 2;
 export const IWSDK_RUNTIME_BROWSER_READY_SCHEMA_VERSION = 2;
 export const INTERNAL_BROWSER_PROBE_METHOD = '__iwsdk_browser_probe';
@@ -428,6 +430,16 @@ export interface RuntimeSession {
   };
   registeredAt: string;
   updatedAt: string;
+}
+
+/**
+ * Authorizes runtime commands on `/__iwer_mcp` for one dev-server session. It
+ * is kept out of session.json, so status output never carries it.
+ */
+export interface RuntimeCommandCredential {
+  schemaVersion: number;
+  sessionId: string;
+  commandToken: string;
 }
 
 export interface LaunchMetadata {

@@ -8,6 +8,7 @@
 import { randomUUID } from 'crypto';
 import WebSocket from 'ws';
 import type { RuntimeSession } from './runtime-contract.js';
+import { getRuntimeCommandToken } from './runtime-state.js';
 
 /** Keep a command connection open for the complete secondary-CDP operation. */
 export async function acquireBrowserLease(
@@ -19,6 +20,7 @@ export async function acquireBrowserLease(
   lost: Promise<never>;
 }> {
   const id = randomUUID();
+  const commandToken = getRuntimeCommandToken(session);
   const protocol = session.localUrl.startsWith('https:') ? 'wss' : 'ws';
   const ws = new WebSocket(
     `${protocol}://127.0.0.1:${session.port}/__iwer_mcp`,
@@ -40,7 +42,13 @@ export async function acquireBrowserLease(
     closed = true;
     released = true;
     if (granted && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ id, method: '__iwsdk_browser_lease_release' }));
+      ws.send(
+        JSON.stringify({
+          id,
+          method: '__iwsdk_browser_lease_release',
+          commandToken,
+        }),
+      );
     }
     ws.close();
   };
@@ -88,6 +96,7 @@ export async function acquireBrowserLease(
               targetId: session.browserAutomation?.targetId,
               timeoutMs,
             },
+            commandToken,
           }),
         ),
       );

@@ -7,9 +7,11 @@
 
 import { readFileSync, rmSync } from 'fs';
 import {
+  IWSDK_RUNTIME_COMMAND_CREDENTIAL_PATH,
   IWSDK_RUNTIME_SESSION_PATH,
   IWSDK_RUNTIME_STATE_SCHEMA_VERSION,
   type RuntimeBrowserState,
+  type RuntimeCommandCredential,
   type RuntimeSession,
 } from '@iwsdk/cli/contract';
 import {
@@ -35,6 +37,8 @@ interface RegisterRuntimeSessionInput {
   browser?: RuntimeBrowserState;
   browserAutomation?: RuntimeSession['browserAutomation'];
   ownerSessionId?: string;
+  /** Authorizes runtime commands; written apart from the session record. */
+  commandToken: string;
 }
 
 export class RuntimeSessionOwnershipError extends Error {
@@ -66,6 +70,13 @@ function traceRuntimeSession(
 
 function getRuntimeSessionFilePath(workspaceRoot: string): string {
   return getRuntimeFilePath(workspaceRoot, IWSDK_RUNTIME_SESSION_PATH);
+}
+
+function getRuntimeCommandCredentialFilePath(workspaceRoot: string): string {
+  return getRuntimeFilePath(
+    workspaceRoot,
+    IWSDK_RUNTIME_COMMAND_CREDENTIAL_PATH,
+  );
 }
 
 async function enqueueSessionMutation<T>(
@@ -115,6 +126,17 @@ export async function registerRuntimeSession(
       ) {
         throw new RuntimeSessionOwnershipError(existing);
       }
+      // Under the session lock and before the session is published, so a
+      // client that discovers this session always finds its credential.
+      // writeRuntimeJson creates the file with mode 0600.
+      await writeRuntimeJson(
+        getRuntimeCommandCredentialFilePath(workspaceRoot),
+        {
+          schemaVersion: IWSDK_RUNTIME_STATE_SCHEMA_VERSION,
+          sessionId: input.sessionId,
+          commandToken: input.commandToken,
+        } satisfies RuntimeCommandCredential,
+      );
       const now = new Date().toISOString();
       const hasBrowserInput = Object.prototype.hasOwnProperty.call(
         input,
@@ -212,6 +234,15 @@ export async function unregisterRuntimeSession(
   await enqueueSessionMutation(
     workspaceRoot,
     async (normalizedWorkspaceRoot) => {
+      // Each record is removed only while it still names this session.
+      const credentialPath = getRuntimeCommandCredentialFilePath(
+        normalizedWorkspaceRoot,
+      );
+      const credential =
+        await readRuntimeJson<RuntimeCommandCredential>(credentialPath);
+      if (credential?.sessionId === sessionId) {
+        await removeRuntimeFile(credentialPath);
+      }
       const filePath = getRuntimeSessionFilePath(normalizedWorkspaceRoot);
       const existing = await readRuntimeSession(filePath);
       if (existing?.sessionId !== sessionId) {
@@ -238,12 +269,17 @@ export function unregisterRuntimeSessionSync(
     return;
   }
   try {
-    let existing: RuntimeSession | null = null;
-    try {
-      existing = JSON.parse(readFileSync(filePath, 'utf8')) as RuntimeSession;
-    } catch {}
-    if (existing?.sessionId === sessionId) {
-      rmSync(filePath, { force: true });
+    for (const recordPath of [
+      getRuntimeCommandCredentialFilePath(normalizedWorkspaceRoot),
+      filePath,
+    ]) {
+      let existing: { sessionId?: unknown } | null = null;
+      try {
+        existing = JSON.parse(readFileSync(recordPath, 'utf8'));
+      } catch {}
+      if (existing?.sessionId === sessionId) {
+        rmSync(recordPath, { force: true });
+      }
     }
   } finally {
     release();

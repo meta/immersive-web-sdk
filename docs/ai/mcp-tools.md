@@ -27,7 +27,9 @@ intentionally not part of MCP.
 ### `scene_open`
 
 Open an existing scene file in the managed editor. The file must already exist under
-`public/scenes/` and end in `.iwsdk.scene.json`.
+`public/scenes/` and end in `.iwsdk.scene.json`. Symbolic links are resolved first:
+a link may point to another file under `public/scenes/`, but not outside it, and
+`public/scenes/` itself must resolve inside the project.
 
 | Parameter | Type     | Required | Description                        |
 | --------- | -------- | -------- | ---------------------------------- |
@@ -58,9 +60,9 @@ diagnostics and no screenshot.
 ### `scene_flatten_file`
 
 Validate and recursively compose an import-bearing authoring scene into one
-import-free runtime document. The operation refuses output outside
-`public/scenes/`, semantic drift, and replacement of an existing destination unless
-`overwrite` is true.
+import-free runtime document. The operation refuses sources, imports and output
+outside `public/scenes/` (after resolving symbolic links), semantic drift, and
+replacement of an existing destination unless `overwrite` is true.
 
 | Parameter    | Type      | Required | Description                                                       |
 | ------------ | --------- | -------- | ----------------------------------------------------------------- |

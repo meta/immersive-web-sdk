@@ -7,7 +7,7 @@
 
 import { execFile, spawn } from 'child_process';
 import { once } from 'events';
-import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'fs/promises';
 import { createServer as createNetServer } from 'net';
 import os from 'os';
 import path from 'path';
@@ -272,6 +272,7 @@ describe('real Vite lifecycle without a target', () => {
     await writeFile(path.join(profile, 'Cookies'), 'private-cookie-secret');
     for (const pathname of [
       '/.iwsdk/runtime/session.json',
+      '/.iwsdk/runtime/command-credential.json',
       '/.iwsdk/runtime/owner.json',
       '/.iwsdk/runtime/chromium/Default/Cookies',
       '/%2eiwsdk/runtime/session.json',
@@ -345,6 +346,85 @@ describe('real Vite lifecycle without a target', () => {
       });
     },
   );
+  test('control commands need the session credential from .iwsdk/runtime', async () => {
+    const { root, server } = await setup();
+    const session = (await getRuntimeSession(root))!;
+    const credentialPath = path.join(
+      root,
+      '.iwsdk/runtime/command-credential.json',
+    );
+    const credential = JSON.parse(await readFile(credentialPath, 'utf8'));
+    expect(credential).toEqual({
+      schemaVersion: 2,
+      sessionId: session.sessionId,
+      commandToken: expect.stringMatching(/^[\w-]{43}$/),
+    });
+    if (process.platform !== 'win32') {
+      expect((await stat(credentialPath)).mode & 0o777).toBe(0o600);
+    }
+    expect(JSON.stringify(session)).not.toContain(credential.commandToken);
+
+    const socket = new WebSocket(`ws://127.0.0.1:${session.port}/__iwer_mcp`);
+    await once(socket, 'open');
+    const reply = (message: Record<string, unknown>) =>
+      new Promise<any>((resolve) => {
+        socket.once('message', (raw) => resolve(JSON.parse(raw.toString())));
+        socket.send(JSON.stringify(message));
+      });
+    try {
+      expect(
+        await reply({ id: 'anonymous', method: 'runtime_get_status' }),
+      ).toMatchObject({
+        id: 'anonymous',
+        error: {
+          code: -32001,
+          data: { code: 'runtime_unauthorized', outcome: 'not_executed' },
+        },
+      });
+      expect(
+        await reply({
+          id: 'forged',
+          method: 'runtime_pair_headset',
+          params: { headsetId: 'quest' },
+          commandToken: 'x'.repeat(43),
+        }),
+      ).toMatchObject({ id: 'forged', error: { code: -32001 } });
+      // A stale CLI still gets the recoverable ownership error first.
+      expect(
+        await reply({
+          id: 'stale',
+          method: 'runtime_get_status',
+          expectedSessionId: 'previous-session',
+        }),
+      ).toMatchObject({
+        id: 'stale',
+        error: { code: -32004, data: { code: 'stale_runtime_owner' } },
+      });
+      expect(
+        await reply({
+          id: 'credentialed',
+          method: 'runtime_get_status',
+          commandToken: credential.commandToken,
+        }),
+      ).toMatchObject({
+        id: 'credentialed',
+        result: { serverReady: true, sessionId: session.sessionId },
+      });
+    } finally {
+      socket.terminate();
+    }
+    // The CLI transport reads the credential for the session it resolved.
+    await expect(
+      sendRuntimeCommand({
+        port: session.port,
+        method: 'runtime_get_status',
+        runtimeSession: session,
+      }),
+    ).resolves.toMatchObject({ result: { sessionId: session.sessionId } });
+
+    await server.close();
+    await expect(readFile(credentialPath, 'utf8')).rejects.toThrow();
+  });
   test('serves normally with no browser and pure observation never launches it', async () => {
     const { root, server } = await setup();
     const session = (await getRuntimeSession(root))!;

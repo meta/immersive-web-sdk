@@ -10,11 +10,13 @@ import { mkdir } from 'fs/promises';
 import path from 'path';
 import {
   isRuntimeBrowserCommandReady,
+  IWSDK_RUNTIME_COMMAND_CREDENTIAL_PATH,
   IWSDK_RUNTIME_LAUNCH_PATH,
   IWSDK_RUNTIME_LOGS_DIR,
   IWSDK_RUNTIME_SESSION_PATH,
   IWSDK_RUNTIME_STATE_SCHEMA_VERSION,
   type LaunchMetadata,
+  type RuntimeCommandCredential,
   type RuntimeSession,
   type WorkspaceRuntimeState,
 } from './runtime-contract.js';
@@ -108,6 +110,42 @@ export function getRuntimeSessionFilePath(workspaceRoot: string): string {
 
 export function getRuntimeLaunchFilePath(workspaceRoot: string): string {
   return getRuntimeFilePath(workspaceRoot, IWSDK_RUNTIME_LAUNCH_PATH);
+}
+
+export function getRuntimeCommandCredentialFilePath(
+  workspaceRoot: string,
+): string {
+  return getRuntimeFilePath(
+    workspaceRoot,
+    IWSDK_RUNTIME_COMMAND_CREDENTIAL_PATH,
+  );
+}
+
+/**
+ * Reads the command credential the dev server wrote for this session. A
+ * credential left by another session is never sent. Without one (an older dev
+ * server writes none), commands go out without a credential. The read is
+ * synchronous so a command starts connecting without an extra turn.
+ */
+export function getRuntimeCommandToken(
+  session: Pick<RuntimeSession, 'sessionId' | 'workspaceRoot'>,
+): string | undefined {
+  let credential: Partial<RuntimeCommandCredential> | null;
+  try {
+    credential = JSON.parse(
+      readFileSync(
+        getRuntimeCommandCredentialFilePath(session.workspaceRoot),
+        'utf8',
+      ),
+    );
+  } catch {
+    return undefined;
+  }
+  return credential?.sessionId === session.sessionId &&
+    typeof credential.commandToken === 'string' &&
+    credential.commandToken.length > 0
+    ? credential.commandToken
+    : undefined;
 }
 
 export function getRuntimeLogsDir(workspaceRoot: string): string {

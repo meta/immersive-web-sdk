@@ -48,7 +48,10 @@ When the server starts, several things happen automatically:
 
 1. A visible Playwright workspace opens at the clean application URL
 2. Runtime and editor views share that one managed browser session
-3. The MCP WebSocket endpoint is registered at `/__iwer_mcp`
+3. The MCP WebSocket endpoint is registered at `/__iwer_mcp`. It accepts only local
+   connections, and each command must carry the session credential the dev server
+   writes to `.iwsdk/runtime/command-credential.json`; the CLI and `iwsdk mcp stdio`
+   send it for you
 
 If you need the resolved runtime URL, want to inspect adapter state explicitly, or need to confirm that the managed browser bridge is actually ready to accept commands, run `npx @iwsdk/cli dev status`. The `dev up` result also reports `browserCommandReady` and may return while a lifecycle-managed browser is still launching. The `state.browserCommandReady` field and `state.session.browser.commandReady` value are the source of truth for browser readiness.
 

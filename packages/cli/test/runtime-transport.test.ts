@@ -5,11 +5,16 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises';
 import net from 'net';
+import os from 'os';
+import path from 'path';
 import { describe, expect, test } from 'vitest';
 import { WebSocketServer } from 'ws';
+import { acquireBrowserLease } from '../src/browser-lease.js';
 import {
   getDefaultRuntimeCommandTimeoutMs,
+  IWSDK_RUNTIME_COMMAND_CREDENTIAL_PATH,
   type RuntimeSession,
 } from '../src/runtime-contract.js';
 import { sendRuntimeCommand } from '../src/runtime-transport.js';
@@ -63,6 +68,130 @@ describe('runtime command transport', () => {
         ws.terminate();
       }
       await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  test("presents the dev server's command credential only for its own session", async () => {
+    const workspaceRoot = await mkdtemp(
+      path.join(os.tmpdir(), 'iwsdk-transport-credential-'),
+    );
+    const server = new WebSocketServer({ port: 0 });
+    await new Promise<void>((resolve) => server.once('listening', resolve));
+    const address = server.address();
+    const port = typeof address === 'object' ? address.port : 0;
+    const received: Array<Record<string, unknown>> = [];
+    server.on('connection', (socket) =>
+      socket.on('message', (data) => {
+        const request = JSON.parse(data.toString());
+        received.push(request);
+        socket.send(JSON.stringify({ id: request.id, result: { ok: true } }));
+      }),
+    );
+    const session = { ...createTestRuntimeSession(port), workspaceRoot };
+    const credentialPath = path.join(
+      workspaceRoot,
+      IWSDK_RUNTIME_COMMAND_CREDENTIAL_PATH,
+    );
+    const send = () =>
+      sendRuntimeCommand({
+        port,
+        method: 'runtime_get_status',
+        runtimeSession: session,
+      });
+    try {
+      // An older dev server writes no credential.
+      await send();
+      await mkdir(path.dirname(credentialPath), { recursive: true });
+      await writeFile(
+        credentialPath,
+        JSON.stringify({
+          schemaVersion: 2,
+          sessionId: 'previous-session',
+          commandToken: 'previous-token',
+        }),
+      );
+      await send();
+      await writeFile(
+        credentialPath,
+        JSON.stringify({
+          schemaVersion: 2,
+          sessionId: session.sessionId,
+          commandToken: 'session-token',
+        }),
+      );
+      await send();
+      expect(received.map((request) => request.commandToken)).toEqual([
+        undefined,
+        undefined,
+        'session-token',
+      ]);
+      expect(received[2]).toMatchObject({
+        expectedSessionId: session.sessionId,
+        method: 'runtime_get_status',
+      });
+    } finally {
+      for (const ws of server.clients) {
+        ws.terminate();
+      }
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  test('the browser lease presents the credential when acquired and released', async () => {
+    const workspaceRoot = await mkdtemp(
+      path.join(os.tmpdir(), 'iwsdk-lease-credential-'),
+    );
+    const server = new WebSocketServer({ port: 0 });
+    await new Promise<void>((resolve) => server.once('listening', resolve));
+    const address = server.address();
+    const port = typeof address === 'object' ? address.port : 0;
+    const received: Array<Record<string, unknown>> = [];
+    server.on('connection', (socket) =>
+      socket.on('message', (data) => {
+        const request = JSON.parse(data.toString());
+        received.push(request);
+        if (request.method === '__iwsdk_browser_lease') {
+          socket.send(
+            JSON.stringify({ id: request.id, result: { leased: true } }),
+          );
+        }
+      }),
+    );
+    const session = { ...createTestRuntimeSession(port), workspaceRoot };
+    const credentialPath = path.join(
+      workspaceRoot,
+      IWSDK_RUNTIME_COMMAND_CREDENTIAL_PATH,
+    );
+    await mkdir(path.dirname(credentialPath), { recursive: true });
+    await writeFile(
+      credentialPath,
+      JSON.stringify({
+        schemaVersion: 2,
+        sessionId: session.sessionId,
+        commandToken: 'lease-token',
+      }),
+    );
+    try {
+      const lease = await acquireBrowserLease(session, 5000);
+      lease.release();
+      await expect.poll(() => received.length).toBe(2);
+      expect(received).toEqual([
+        expect.objectContaining({
+          method: '__iwsdk_browser_lease',
+          commandToken: 'lease-token',
+        }),
+        expect.objectContaining({
+          method: '__iwsdk_browser_lease_release',
+          commandToken: 'lease-token',
+        }),
+      ]);
+    } finally {
+      for (const ws of server.clients) {
+        ws.terminate();
+      }
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await rm(workspaceRoot, { recursive: true, force: true });
     }
   });
 

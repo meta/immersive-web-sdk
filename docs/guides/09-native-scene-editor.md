@@ -11,7 +11,8 @@ components, screenshots, and human fine adjustment.
 ## Runtime Loading
 
 Keep scene files under `public/scenes/` and select the root in
-`iwsdk.config.json`:
+`iwsdk.config.json`. The managed editor reads and writes only files whose real path,
+after resolving symbolic links, stays under `public/scenes/` inside the project:
 
 ```json
 {
