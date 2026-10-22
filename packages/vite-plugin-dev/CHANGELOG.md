@@ -1,5 +1,13 @@
 # @iwsdk/vite-plugin-dev
 
+## 1.1.0-rc.1
+
+### Patch Changes
+
+- Updated dependencies [abbd7d0]
+  - @iwsdk/core@1.1.0-rc.1
+  - @iwsdk/scene-composition@1.1.0-rc.1
+
 ## 1.1.0-rc.0
 
 ### Minor Changes

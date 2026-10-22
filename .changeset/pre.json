@@ -13,5 +13,9 @@
     "@iwsdk/vite-plugin-dev": "1.0.1",
     "@iwsdk/xr-input": "1.0.1"
   },
-  "changesets": ["iwer-builtin-rooms", "super-three-185"]
+  "changesets": [
+    "iwer-builtin-rooms",
+    "super-three-185",
+    "super-three-multiview-shaders"
+  ]
 }

@@ -1,5 +1,14 @@
 # @iwsdk/core
 
+## 1.1.0-rc.1
+
+### Patch Changes
+
+- abbd7d0: Fix rendering in XR on Meta Quest with `super-three@0.185.0`: in multiview mode every shader failed to compile ("array size must be a constant integer expression"), so nothing rendered. r185's `transformNormalByInverseViewMatrix` / `transformDirectionByInverseViewMatrix` shader helpers take a parameter named `viewMatrix`, which super-three's multiview mode `#define`s to an array element; IWSDK now renames that parameter in `ShaderChunk.common`.
+  - @iwsdk/locomotor@1.1.0-rc.1
+  - @iwsdk/scene-composition@1.1.0-rc.1
+  - @iwsdk/xr-input@1.1.0-rc.1
+
 ## 1.1.0-rc.0
 
 ### Minor Changes

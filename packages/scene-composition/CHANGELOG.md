@@ -1,5 +1,7 @@
 # @iwsdk/scene-composition
 
+## 1.1.0-rc.1
+
 ## 1.1.0-rc.0
 
 ## 1.0.1
