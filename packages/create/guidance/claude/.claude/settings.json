@@ -9,6 +9,7 @@
       "Skill(iwsdk-compose-scene)",
       "Skill(iwsdk-debug)",
       "Skill(iwsdk-depth-occlusion)",
+      "Skill(iwsdk-glasses-test)",
       "Skill(iwsdk-grab)",
       "Skill(iwsdk-hosting)",
       "Skill(iwsdk-native-xr-test)",

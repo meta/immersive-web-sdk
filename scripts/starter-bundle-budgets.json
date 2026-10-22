@@ -1,0 +1,17 @@
+{
+  "vr": {
+    "distBytes": 4051000,
+    "jsGzipBytes": 1369000,
+    "lucideIcons": 8
+  },
+  "ar": {
+    "distBytes": 4049000,
+    "jsGzipBytes": 1369000,
+    "lucideIcons": 8
+  },
+  "browser": {
+    "distBytes": 4051000,
+    "jsGzipBytes": 1369000,
+    "lucideIcons": 8
+  }
+}

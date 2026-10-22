@@ -17,7 +17,9 @@ distance grabs share aiming but not input duration or movement behavior.
    `requireElementById`; use a project test hook only when no addressable runtime
    target exists.
 3. Aim the requested controller with `xr look-at`. Do not translate the
-   controller toward a ray target.
+   controller toward a ray target. The transform of an open shape (a ring, a
+   knot) can sit in empty space: aim at its surface, such as the rim at
+   transform + (0, radius, 0), and confirm `Hovered` before pressing.
 
 ## Select exactly one branch
 

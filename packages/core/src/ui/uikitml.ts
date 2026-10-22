@@ -55,7 +55,18 @@ export function configureUIKitRenderer(renderer: WebGLRenderer): void {
 function formatParseError(error: UIKitMLError): string {
   const position = error.range?.start;
   const location = position ? ` at ${position.line}:${position.column}` : '';
-  return `${error.message}${location}`;
+  // @iwsdk/vite-plugin-dev sets this marker when a production build keeps
+  // only the Lucide icons used by the project's static UIKitML files.
+  const trimmedIcon =
+    error.code === 'unknown-component' &&
+    (globalThis as { __IWSDK_LUCIDE_ICONS_TRIMMED__?: boolean })
+      .__IWSDK_LUCIDE_ICONS_TRIMMED__ === true
+      ? (/<([^>\s]+)>/.exec(error.message)?.[1] ?? 'Name')
+      : null;
+  if (!trimmedIcon) {
+    return `${error.message}${location}`;
+  }
+  return `${error.message.replace(/\.$/u, '')}${location}. If <${trimmedIcon}> is a Lucide icon, it was excluded from this production build; add it to iwsdkDev({ bundle: { icons: ['${trimmedIcon}'] } }) when UIKitML is loaded dynamically.`;
 }
 
 function resolveFontFaceURLs(ast: UIKitMLAst, sourceURL?: string): void {

@@ -114,9 +114,17 @@ interaction correctness.
 
 For a physical headset smoke test, run `npx @iwsdk/cli dev status`, open a URL from
 `data.runtimeUrls.network` on a headset connected to the same Wi-Fi network,
-and accept the expected local certificate warning. See
+and accept the expected local certificate warning. To run or automate the app
+on a Quest connected over USB, invoke `iwsdk-native-xr-test` instead. See
 [Testing Your Experience](https://iwsdk.dev/guides/02-testing-experience.html)
 for the complete workflow.
+
+**Meta VR Glasses are not a Quest.** Their view is much narrower (37° left and
+right, 25° up, 43° down) and their main input is gaze plus a pinch. Before
+claiming an app works on the glasses, or when it uses gaze or eye tracking,
+invoke `iwsdk-glasses-test`: it sets the `metaVRGlasses` emulator device, checks
+that content fits that view, and drives gaze and pinch from the CLI. A Quest
+screenshot or the editor view cannot show that fit.
 
 ## MCP and CLI are one surface, not two
 
@@ -170,6 +178,10 @@ The selected playbook routes work to the narrowest owning specialist:
 UI authoring, physics, depth occlusion, grab and ray interaction testing, ECS
 frame-stepping, and debugging have their own project skills. Use them only when
 the selected `iwsdk-dev` playbook calls for the matching specialty.
+Two device-testing skills are invoked directly: `iwsdk-native-xr-test` whenever
+the user wants to run, automate, or debug the app on a connected Quest, and
+`iwsdk-glasses-test` whenever the user targets Meta VR Glasses or asks for gaze
+input.
 
 The failure worth guarding against is improvising a domain that already has a
 skill because the naive approach looks tractable. Before hand-authoring scene

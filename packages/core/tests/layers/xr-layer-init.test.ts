@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { createQuadLayerInit } from '../../src/layers/xr-layer-init.js';
 
 describe('createQuadLayerInit', () => {
-  it('preserves the component dimensions as full layer dimensions', () => {
+  it('passes the component dimensions as XRQuadLayer half-extents', () => {
     const transform = {} as XRRigidTransform;
     const space = {} as XRSpace;
 
@@ -24,8 +24,8 @@ describe('createQuadLayerInit', () => {
       }),
     ).toEqual({
       transform,
-      width: 1.4,
-      height: 0.8,
+      width: 0.7,
+      height: 0.4,
       space,
       viewPixelWidth: 1400,
       viewPixelHeight: 800,

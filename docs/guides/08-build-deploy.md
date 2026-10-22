@@ -57,6 +57,21 @@ Use `fonts: 'all'` only when font selection is fully dynamic. A production
 attempt to load an excluded family fails with a message naming this escape
 hatch instead of silently downloading every packaged atlas.
 
+Lucide icons follow the same rule. The default UIKitML kit can name any of
+about 1,600 Lucide icon components, but a production build keeps only the icons
+used in static UIKitML, plus the few that Horizon components use internally.
+List the icons that only remote or generated UIKitML uses:
+
+```typescript
+iwsdkDev({
+  bundle: { icons: ['Settings', 'CircleHelp'] },
+});
+```
+
+Use `icons: 'all'` only when icon selection is fully dynamic; it adds several
+megabytes to the bundle. If UIKitML in a production build names an icon that
+was left out, parsing fails with an error that points to this option.
+
 ## Asset Optimization
 
 Vite copies files from `public/` without rewriting them. Optimize large models and

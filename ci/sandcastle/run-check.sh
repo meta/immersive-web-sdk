@@ -205,6 +205,9 @@ case "${1:-}" in
     pnpm engines:audit
     pnpm three:check
     ;;
+  bundle-size)
+    node scripts/check-starter-bundle-size.mjs
+    ;;
   unit)
     unit_status=0
     pnpm --filter './packages/**' --filter '!@iwsdk/vite-plugin-dev' \
@@ -216,7 +219,7 @@ case "${1:-}" in
     exit "$unit_status"
     ;;
   *)
-    echo "Usage: $0 {all|preflight|install|lint|format|build|typecheck|unit}" >&2
+    echo "Usage: $0 {all|preflight|install|lint|format|build|typecheck|bundle-size|unit}" >&2
     exit 2
     ;;
 esac

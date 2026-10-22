@@ -212,6 +212,13 @@ describe('XRLayerSystem native transform synchronization', () => {
     expect((system as any).sessionUsesLayers).toBe(true);
     expect((system as any).sessionLayerInitializationPending).toBe(false);
     expect(binding.createQuadLayer).toHaveBeenCalledTimes(1);
+    // XRQuadLayer width/height are half-extents: the 1 m quad is 0.5 x 0.5.
+    const quadInit = binding.createQuadLayer.mock.calls[0][0] as {
+      height: number;
+      width: number;
+    };
+    expect(quadInit.width).toBe(0.5);
+    expect(quadInit.height).toBe(0.5);
     expect(session.updateRenderState).toHaveBeenLastCalledWith({
       layers: [projectionLayer, nativeLayer],
     });
@@ -223,6 +230,9 @@ describe('XRLayerSystem native transform synchronization', () => {
     (system as any).renderLayers();
 
     expect(mesh.material).not.toBe(fallbackMaterial);
+    // The layer is composited over the projection layer, so the mesh must not
+    // punch a hole there: it would show through transparent layer texels.
+    expect((mesh.material as MeshBasicMaterial).visible).toBe(false);
     expect((nativeLayer as any).blendTextureSourceAlpha).toBe(true);
     expect(binding.getSubImage).toHaveBeenCalledTimes(1);
     expect(renderCallback).toHaveBeenCalledTimes(3);
@@ -323,8 +333,8 @@ describe('XRLayerSystem native transform synchronization', () => {
     expect((system as any).syncLayerTransform(nativeLayer, mesh, entity)).toBe(
       true,
     );
-    expect(nativeLayer.width).toBe(2);
-    expect(nativeLayer.height).toBe(3);
+    expect(nativeLayer.width).toBe(1);
+    expect(nativeLayer.height).toBe(1.5);
     expect(mesh.geometry).not.toBe(oldGeometry);
     mesh.geometry.computeBoundingBox();
     expect(mesh.geometry.boundingBox?.getSize(new Vector3()).toArray()).toEqual(
@@ -822,6 +832,17 @@ describe('XRLayerSystem native transform synchronization', () => {
     );
   });
 
+  it('keeps multisampled layer targets valid when XR supplies their textures', () => {
+    const { system } = createHarness();
+
+    for (const stencil of [false, true]) {
+      const renderTarget = (system as any).createRenderTarget(64, 32, stencil);
+      expect(renderTarget.samples).toBe(4);
+      expect(renderTarget.resolveDepthBuffer).toBe(false);
+      renderTarget.dispose();
+    }
+  });
+
   it('destroys active native and fallback resources with the system', () => {
     const { entity, fallbackMaterial, mesh, nativeLayer, system } =
       createHarness();
@@ -922,5 +943,57 @@ describe('XRLayerSystem native transform synchronization', () => {
     expect(punchDispose).toHaveBeenCalledTimes(1);
     expect(renderTargetDispose).toHaveBeenCalledTimes(1);
     expect(entity.hasComponent(XRLayerState)).toBe(false);
+  });
+
+  it('orients fallback content the way the compositor presents it', () => {
+    const entityWorld = new World();
+    entityWorld.registerComponent(XRQuadLayer);
+    entityWorld.registerComponent(XRCylinderLayer);
+    entityWorld.registerComponent(XRLayerState);
+    const xr = {
+      addEventListener: vi.fn(),
+      getBinding: vi.fn(() => null),
+      getFrame: vi.fn(() => null),
+      getReferenceSpace: vi.fn(() => null),
+      getSession: vi.fn(() => null),
+      removeEventListener: vi.fn(),
+      enabled: false,
+    };
+    Object.assign(entityWorld, {
+      camera: new PerspectiveCamera(),
+      input: {},
+      player: new Object3D(),
+      playerEntity: {},
+      playerHeadEntity: {},
+      renderer: { xr },
+      scene: new Scene(),
+      session: undefined,
+      visibilityState: signal('non-immersive'),
+    });
+    (entityWorld as any).registerSystem(XRLayerSystem);
+    const system = (entityWorld as any).getSystem(
+      XRLayerSystem,
+    ) as XRLayerSystem;
+
+    const quad = entityWorld.createEntity() as Entity;
+    quad.object3D = new Object3D();
+    quad.addComponent(XRQuadLayer, { renderCallback: vi.fn() });
+    const cylinder = entityWorld.createEntity() as Entity;
+    cylinder.object3D = new Object3D();
+    cylinder.addComponent(XRCylinderLayer, { renderCallback: vi.fn() });
+    const fallbackMap = (entity: Entity) =>
+      (XRLayerState.data.fallbackMaterial[entity.index] as MeshBasicMaterial)
+        .map!;
+
+    // Layer content uses WebGL's bottom-left origin, as the compositor does.
+    expect(fallbackMap(quad).offset.toArray()).toEqual([0, 0]);
+    expect(fallbackMap(quad).repeat.toArray()).toEqual([1, 1]);
+    // Seen from inside, CylinderGeometry's u runs right to left.
+    expect(fallbackMap(cylinder).offset.toArray()).toEqual([1, 0]);
+    expect(fallbackMap(cylinder).repeat.toArray()).toEqual([-1, 1]);
+
+    quad.destroy();
+    cylinder.destroy();
+    system.destroy();
   });
 });

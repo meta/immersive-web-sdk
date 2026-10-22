@@ -572,6 +572,7 @@ describe('common starter project files', () => {
     expect(paths).toContain('.claude/skills/iwsdk-debug/SKILL.md');
     expect(paths).toContain('.claude/skills/iwsdk-dev/SKILL.md');
     expect(paths).toContain('.claude/skills/iwsdk-native-xr-test/SKILL.md');
+    expect(paths).toContain('.claude/skills/iwsdk-glasses-test/SKILL.md');
     expect(paths).toContain('.claude/skills/iwsdk-build-model/SKILL.md');
     expect(paths).toContain(
       '.claude/skills/iwsdk-build-model/assets/hardsurface.ts.template',
@@ -583,6 +584,7 @@ describe('common starter project files', () => {
     expect(paths).toContain('.agents/skills/iwsdk-debug/SKILL.md');
     expect(paths).toContain('.agents/skills/iwsdk-dev/SKILL.md');
     expect(paths).toContain('.agents/skills/iwsdk-native-xr-test/SKILL.md');
+    expect(paths).toContain('.agents/skills/iwsdk-glasses-test/SKILL.md');
     expect(paths).toContain('.agents/skills/iwsdk-dev/references/planner.md');
     expect(paths).toContain('.agents/skills/iwsdk-dev/references/iterate.md');
     expect(paths).toContain('.agents/skills/iwsdk-build-model/SKILL.md');
@@ -684,6 +686,35 @@ describe('common starter project files', () => {
     expect(files.some((file) => file.path.includes('iwsdk-migrate-0-5'))).toBe(
       false,
     );
+  });
+
+  it('teaches Meta VR Glasses testing and routes agents to it', async () => {
+    const files = await buildStarterProjectFiles({
+      appName: 'glasses-app',
+      configuration: getRecommendedConfiguration('vr'),
+      language: 'ts',
+      packageSource: npmSource,
+      templateRoot: TEMPLATE_ROOT,
+    });
+    const skill = textFile(files, '.claude/skills/iwsdk-glasses-test/SKILL.md');
+    expect(textFile(files, '.agents/skills/iwsdk-glasses-test/SKILL.md')).toBe(
+      skill,
+    );
+    const prose = skill.replace(/\s+/gu, ' ');
+    for (const guidance of [
+      '"device": "metaVRGlasses"',
+      '37° left and right, 25° up, 43° down',
+      'Keep `gazeTracking` optional (`true`).',
+      '"device":"gaze"',
+      '"device":"gaze","connected":false',
+      'xr get-device-state',
+      '[iwsdk][gaze]',
+      '"targetDevicePreview": { "gazeSimulation": "head" }',
+      'iwsdk-native-xr-test',
+    ]) {
+      expect(prose).toContain(guidance);
+    }
+    expect(textFile(files, 'AGENTS.md')).toContain('`iwsdk-glasses-test`');
   });
 
   it('teaches explicit physical headset targeting in the native XR skill', async () => {

@@ -47,6 +47,55 @@ function createAudioSystem() {
   return new AudioSystem(world as any, {} as any, 0);
 }
 
+describe('AudioSystem XR session transitions', () => {
+  it('keeps audio playable in 2D after an XR session ends', () => {
+    const system = createAudioSystem();
+    const context = {
+      state: 'running',
+      resume: vi.fn(),
+      suspend: vi.fn(),
+    };
+    const audio = { isPlaying: true, pause: vi.fn(), play: vi.fn() };
+    const instance: any = { audio, startTime: 0 };
+    (system as any).listener = { context };
+    (system as any).activeInstances = new Map([[0, [instance]]]);
+
+    (system as any).onXRSessionEnd();
+
+    expect(context.suspend).not.toHaveBeenCalled();
+    expect(audio.pause).toHaveBeenCalledTimes(1);
+    expect(instance.pausedBySessionEnd).toBe(true);
+
+    (system as any).onXRSessionStart();
+
+    expect(audio.play).toHaveBeenCalledTimes(1);
+    expect(instance.pausedBySessionEnd).toBe(false);
+  });
+
+  it('re-attaches the end handler to audio resumed by the next session', () => {
+    const system = createAudioSystem();
+    const entity = { index: 7 };
+    // three's play() creates a new source node; pause() discarded the old one.
+    const audio: any = {
+      isPlaying: false,
+      source: null,
+      play: vi.fn(() => {
+        audio.source = {};
+      }),
+    };
+    const instance: any = { audio, startTime: 0, pausedBySessionEnd: true };
+    const onInstanceEnded = vi.fn();
+    (system as any).onInstanceEnded = onInstanceEnded;
+    (system as any).listener = { context: { state: 'running' } };
+    (system as any).activeInstances = new Map([[entity, [instance]]]);
+
+    (system as any).onXRSessionStart();
+    audio.source.onended();
+
+    expect(onInstanceEnded).toHaveBeenCalledWith(entity, instance);
+  });
+});
+
 describe('AudioSystem.clearInstanceTimeout', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());

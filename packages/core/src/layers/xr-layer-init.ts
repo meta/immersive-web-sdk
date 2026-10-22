@@ -14,6 +14,21 @@ interface QuadLayerInitInput {
   pixelHeight: number;
 }
 
+/**
+ * Convert a quad's full size in meters to the values an XRQuadLayer takes.
+ *
+ * Quest Browser, and the WebXR Layers polyfill that IWER installs, size a quad
+ * layer from its center: `width` and `height` are half-extents, so a 1 m x 1 m
+ * quad needs `{ width: 0.5, height: 0.5 }`. Passing the full size draws the
+ * layer at twice the size of its fallback mesh.
+ */
+export function toNativeQuadLayerSize(
+  width: number,
+  height: number,
+): { width: number; height: number } {
+  return { width: width / 2, height: height / 2 };
+}
+
 export function createQuadLayerInit({
   transform,
   width,
@@ -24,8 +39,7 @@ export function createQuadLayerInit({
 }: QuadLayerInitInput): XRQuadLayerInit & { clearOnAccess: false } {
   return {
     transform,
-    width,
-    height,
+    ...toNativeQuadLayerSize(width, height),
     space,
     viewPixelWidth: pixelWidth,
     viewPixelHeight: pixelHeight,

@@ -26,6 +26,11 @@ Expand shorthands (`padding: 12 18` → four properties), use unitless
 line-height multipliers, and prefer uniform `border-color`/`border-width` over
 directional variants. Parser errors include source locations.
 
+**Production builds drop unused Lucide icons.** They keep only icons named in
+`public/**/*.uikitml`. Icons named only by UIKitML built at runtime or loaded
+from elsewhere must be listed in `iwsdkDev({ bundle: { icons: [...] } })`, or
+they fail after `npm run build`.
+
 ## Runtime API
 
 Resolve the placed panel by **scene node id**, then elements by their `id`

@@ -200,6 +200,14 @@ export interface ProductionBundleOptions {
    * Static public UIKitML font usage is detected automatically.
    */
   fonts?: 'all' | UIKitMLBundledFontName[];
+
+  /**
+   * Additional Lucide icon components (for example `'Settings'`) to retain
+   * for UI loaded outside the static public directory. Use `'all'` for fully
+   * dynamic icon selection. Static public UIKitML icon usage is detected
+   * automatically; every other icon is left out of production builds.
+   */
+  icons?: 'all' | string[];
 }
 
 /**

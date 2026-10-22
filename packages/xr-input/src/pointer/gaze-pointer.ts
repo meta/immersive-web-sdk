@@ -174,6 +174,20 @@ function isIntentionalHeadDirectedPreview(): boolean {
 }
 
 /**
+ * The development emulator (desktop IWER or a native override) supplies gaze
+ * that only moves when aimed, so it starts out matching the head and must not
+ * be reported as real eye data or as a head-locked runtime.
+ */
+function isEmulatedGaze(): boolean {
+  const profile = (
+    globalThis as typeof globalThis & {
+      __IWSDK_EMULATION_PROFILE?: { active?: boolean };
+    }
+  ).__IWSDK_EMULATION_PROFILE;
+  return profile?.active === true;
+}
+
+/**
  * One-shot console diagnostics for the gaze pipeline.
  *
  * Eye tracking fails silently in several distinct ways — feature not granted,
@@ -328,6 +342,8 @@ class GazeDiagnostics {
       this.sourcePresent = present;
       this.poseValid = null;
       if (present) {
+        // A later disconnect is "showed up then left", never "never appeared".
+        this.loggedMissingSource = true;
         console.info('[iwsdk][gaze] gaze XRInputSource appeared.', {
           profiles: Array.from(gazeSource!.profiles),
           handedness: gazeSource!.handedness,
@@ -366,7 +382,9 @@ class GazeDiagnostics {
     this.poseValid = posed;
     if (posed) {
       console.info(
-        '[iwsdk][gaze] eye pose is valid — real gaze data is flowing.',
+        isEmulatedGaze()
+          ? '[iwsdk][gaze] emulated gaze pose is valid (synthetic, not eye tracking).'
+          : '[iwsdk][gaze] eye pose is valid — real gaze data is flowing.',
       );
     } else {
       console.warn(
@@ -435,6 +453,13 @@ class GazeDiagnostics {
         console.info(
           '[iwsdk][gaze] target-device preview is intentionally ' +
             'providing head-directed synthetic gaze.',
+        );
+        return;
+      }
+      if (isEmulatedGaze()) {
+        console.info(
+          '[iwsdk][gaze] emulated gaze still points where the head does; ' +
+            'aim it (for example with xr look-at on "gaze") to test targeting.',
         );
         return;
       }

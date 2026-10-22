@@ -82,7 +82,9 @@ import {
   BUNDLED_FONT_MODULES,
   createDisabledBundledFontsModule,
   resolveBundledFontNames,
+  resolveBundledLucideIcons,
   rewriteThreeDecoderDefaults,
+  rewriteUIKitMLLucideKit,
 } from './bundle-feature-gates.js';
 import {
   createEditorRuntimeModuleSource,
@@ -751,6 +753,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
   let loadedProject: LoadedIwsdkProject | null = null;
   let bundlePhysics = true;
   let bundledFonts: ReadonlySet<string> | null = null;
+  let bundledIcons: ReadonlySet<string> | 'all' = 'all';
   let injectionBundle: InjectionBundleResult | null = null;
   let config: ResolvedConfig;
   const hotClientRoles = new WeakMap<
@@ -798,6 +801,10 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           bundledFonts = await resolveBundledFontNames(
             publicDirectory,
             options.bundle?.fonts,
+          );
+          bundledIcons = await resolveBundledLucideIcons(
+            publicDirectory,
+            options.bundle?.icons,
           );
         }
       }
@@ -3495,7 +3502,8 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
 
     transform(code, id) {
       return config.command === 'build'
-        ? rewriteThreeDecoderDefaults(code, id)
+        ? (rewriteThreeDecoderDefaults(code, id) ??
+            rewriteUIKitMLLucideKit(code, id, bundledIcons))
         : null;
     },
 

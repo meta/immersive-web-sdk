@@ -54,6 +54,13 @@ JSON representation.
 - Prefer supported explicit properties over CSS shorthand.
 - Reuse the configured Horizon kit and bundled Lucide icons instead of
   registering replacements in application code.
+- Production builds keep only the Lucide icons named in static
+  `public/**/*.uikitml` files. UIKitML built or fetched at runtime (a string in
+  `src/`, a file outside `public/`, a remote URL) works in `npm run dev` but
+  fails after `npm run build` with `Unknown component <Settings>` and a hint.
+  List those icons by component name in `vite.config.ts`:
+  `iwsdkDev({ bundle: { icons: ['Settings'] } })` (`'all'` keeps all ~1,600,
+  about 4 MB more). Check dynamic UIKitML in a production build.
 - In the stock Horizon kit, `<Panel>` renders an opaque surface that follows
   the color scheme: dark at runtime when `spatialUI.preferredColorScheme` is
   `dark` (the scaffold default), white in editor previews. Give text a dark

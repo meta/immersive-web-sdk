@@ -906,6 +906,11 @@ describe('GazePointer diagnostics', () => {
         __IWSDK_TARGET_DEVICE_PREVIEW__?: unknown;
       }
     ).__IWSDK_TARGET_DEVICE_PREVIEW__;
+    delete (
+      globalThis as typeof globalThis & {
+        __IWSDK_EMULATION_PROFILE?: unknown;
+      }
+    ).__IWSDK_EMULATION_PROFILE;
     vi.restoreAllMocks();
   });
 
@@ -999,6 +1004,53 @@ describe('GazePointer diagnostics', () => {
       warnings().filter((m) =>
         m.includes('XRTargetRaySpace onto the head pose'),
       ),
+    ).toHaveLength(0);
+  });
+
+  it('does not report emulated gaze as eye data or a head-locked runtime', () => {
+    (
+      globalThis as typeof globalThis & {
+        __IWSDK_EMULATION_PROFILE?: unknown;
+      }
+    ).__IWSDK_EMULATION_PROFILE = {
+      active: true,
+      device: 'metaVRGlasses',
+      runtime: 'IWER',
+    };
+
+    run(
+      createSession({ inputSources: [gazeInputSource()] }),
+      240,
+      () => new Quaternion(),
+    );
+
+    expect(
+      infos().filter((m) => m.includes('emulated gaze pose is valid')),
+    ).toHaveLength(1);
+    expect(infos().filter((m) => m.includes('real gaze data'))).toHaveLength(0);
+    expect(
+      infos().filter((m) => m.includes('emulated gaze still points')),
+    ).toHaveLength(1);
+    expect(
+      warnings().filter((m) =>
+        m.includes('XRTargetRaySpace onto the head pose'),
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('does not report a disconnected gaze source as one that never appeared', () => {
+    const gaze = gazeInputSource();
+    const inputSources = [gaze];
+    const session = createSession({ inputSources });
+    run(session, 30, () => new Quaternion());
+    inputSources.length = 0;
+    run(session, 240, () => null);
+
+    expect(
+      warnings().filter((m) => m.includes('XRInputSource disappeared')),
+    ).toHaveLength(1);
+    expect(
+      warnings().filter((m) => m.includes('targetRayMode === "gaze"')),
     ).toHaveLength(0);
   });
 

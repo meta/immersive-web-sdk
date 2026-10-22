@@ -97,6 +97,15 @@ describe('runtime UIKitML loading', () => {
     expect(() => parseUIKitMLSource('<Unknown />')).toThrow(
       /Unknown component <Unknown>.*0:1/,
     );
+    expect(() => parseUIKitMLSource('<Unknown />')).not.toThrow(/Lucide/);
+  });
+
+  it('explains unknown components when production trimmed Lucide icons', () => {
+    vi.stubGlobal('__IWSDK_LUCIDE_ICONS_TRIMMED__', true);
+
+    expect(() => parseUIKitMLSource('<Unknown />')).toThrow(
+      /^Unknown component <Unknown> at 0:1\. If <Unknown> is a Lucide icon, it was excluded from this production build; add it to iwsdkDev\(\{ bundle: \{ icons: \['Unknown'\] \} \}\)/,
+    );
   });
 
   it('rejects an HTML fallback response with the requested UIKitML URL', async () => {

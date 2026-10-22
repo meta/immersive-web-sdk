@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
+  lucideComponentSet,
   parse,
   resolveKitComponentSets,
   type UIKitMLAst,
@@ -196,6 +197,107 @@ export async function resolveBundledFontNames(
     }
   }
   return result;
+}
+
+const LUCIDE_ICON_NAMES: ReadonlySet<string> = new Set(
+  Object.keys(lucideComponentSet),
+);
+
+function collectNodeIcons(node: UIKitMLNode, result: Set<string>): void {
+  if (node.kind !== 'element') {
+    return;
+  }
+  if (node.origin?.kit === 'lucide') {
+    result.add(node.origin.name);
+  }
+  for (const child of node.children) {
+    collectNodeIcons(child, result);
+  }
+}
+
+/**
+ * Lucide icons to keep in a production build: those used by static public
+ * UIKitML plus `bundle.icons`, or `'all'` when that set cannot be known.
+ */
+export async function resolveBundledLucideIcons(
+  publicDirectory: string | undefined,
+  configured: ProductionBundleOptions['icons'],
+): Promise<ReadonlySet<string> | 'all'> {
+  if (configured === 'all') {
+    return 'all';
+  }
+  const result = new Set<string>();
+  for (const icon of configured ?? []) {
+    if (!LUCIDE_ICON_NAMES.has(icon)) {
+      // Icons are UIKitML component names: 'Settings', not 'settings'.
+      const normalized = icon.replace(/[-_\s]/g, '').toLowerCase();
+      const suggestion = [...LUCIDE_ICON_NAMES].find(
+        (name) => name.toLowerCase() === normalized,
+      );
+      throw new Error(
+        `iwsdkDev().bundle.icons contains unknown Lucide icon "${icon}"` +
+          (suggestion ? `; did you mean "${suggestion}"?` : ''),
+      );
+    }
+    result.add(icon);
+  }
+  if (!publicDirectory) {
+    return result;
+  }
+
+  for (const file of await collectUIKitMLFiles(publicDirectory)) {
+    const parsed = parse(await readFile(file, 'utf8'), {
+      componentSets: resolveKitComponentSets('horizon'),
+    });
+    if (!parsed.success) {
+      // As with fonts, keep every icon when this size pass cannot analyze a
+      // document; UIKitML validation reports the actual syntax failure.
+      return 'all';
+    }
+    collectNodeIcons(parsed.ast.root, result);
+  }
+  return result;
+}
+
+const UIKITML_KITS_MODULE = /[\\/]@drawcall[\\/]uikitml[\\/]dist[\\/]kits\.js$/;
+const LUCIDE_NAMESPACE_IMPORT =
+  /import \* as Lucide from (['"])@pmndrs\/uikit-lucide\1;/;
+
+/**
+ * UIKitML's kits module builds its Lucide component set by iterating
+ * `import * as Lucide`, which keeps all ~1,600 icons in every production
+ * bundle. Replace that namespace with just the retained icons. Returns null
+ * for any other module.
+ */
+export function rewriteUIKitMLLucideKit(
+  code: string,
+  id: string,
+  icons: ReadonlySet<string> | 'all',
+): string | null {
+  if (icons === 'all' || !UIKITML_KITS_MODULE.test(id.split('?')[0])) {
+    return null;
+  }
+  if (!LUCIDE_NAMESPACE_IMPORT.test(code)) {
+    throw new Error(
+      '[IWSDK] @drawcall/uikitml no longer imports Lucide as a namespace; ' +
+        "update rewriteUIKitMLLucideKit or set iwsdkDev({ bundle: { icons: 'all' } }).",
+    );
+  }
+  const names = [...icons].sort();
+  const imports = names.map(
+    (name, index) =>
+      `import { ${name} as __iwsdkLucide${index} } from "@pmndrs/uikit-lucide/dist/${name}.js";`,
+  );
+  const members = names.map((name, index) => `${name}: __iwsdkLucide${index}`);
+  // The marker lets @iwsdk/core explain an unknown icon in dynamically loaded
+  // UIKitML instead of reporting a bare unknown-component error.
+  return code.replace(
+    LUCIDE_NAMESPACE_IMPORT,
+    () =>
+      `${imports.join('\n')}
+const Lucide = { ${members.join(', ')} };
+globalThis.__IWSDK_LUCIDE_ICONS_TRIMMED__ = true;`,
+  );
 }
 
 export function createDisabledBundledFontsModule(): string {

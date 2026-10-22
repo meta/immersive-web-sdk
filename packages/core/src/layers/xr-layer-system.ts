@@ -8,10 +8,8 @@
 import { Entity } from '../ecs/entity.js';
 import { createSystem } from '../ecs/system.js';
 import {
-  AddEquation,
   BackSide,
   Color,
-  CustomBlending,
   CylinderGeometry,
   DepthFormat,
   DepthStencilFormat,
@@ -25,15 +23,15 @@ import {
   Quaternion,
   RGBAFormat,
   SRGBColorSpace,
+  Texture,
   UnsignedByteType,
   UnsignedInt248Type,
   UnsignedIntType,
   Vector3,
   WebGLRenderTarget,
-  ZeroFactor,
 } from '../runtime/index.js';
 import { XRCylinderLayer } from './xr-cylinder-layer.js';
-import { createQuadLayerInit } from './xr-layer-init.js';
+import { createQuadLayerInit, toNativeQuadLayerSize } from './xr-layer-init.js';
 import { XRLayerState } from './xr-layer-state.js';
 import {
   isValidCylinderLayerAngle,
@@ -104,6 +102,17 @@ function sameVector(first: Vector3, second: Vector3): boolean {
 }
 
 /**
+ * Show layer content on the fallback mesh the way the compositor presents it.
+ * Content is rendered with WebGL's bottom-left origin, which the compositor
+ * also uses, so a plane samples it unflipped. A cylinder is seen from inside,
+ * where CylinderGeometry's u runs right to left: mirror u only.
+ */
+function orientFallbackMap(map: Texture, isQuad: boolean): void {
+  map.offset.set(isQuad ? 0 : 1, 0);
+  map.repeat.set(isQuad ? 1 : -1, 1);
+}
+
+/**
  * XRLayerSystem manages WebXR quad and cylinder composition layers.
  *
  * For each entity with an {@link XRQuadLayer} or {@link XRCylinderLayer}
@@ -111,9 +120,9 @@ function sameVector(first: Vector3, second: Vector3): boolean {
  * - Creates a mesh (plane or cylinder) as a child of the entity's object3D
  * - Renders layer content via the component's `renderCallback` while its
  *   render surface is visible and active
- * - In XR sessions with layer support, creates native XR composition layers
- *   and switches the mesh to a punch-through material that makes the
- *   projection layer transparent where the content layer appears
+ * - In XR sessions with layer support, creates native XR composition layers,
+ *   which the compositor draws over the projection layer, and stops drawing
+ *   the mesh so the scene stays visible through transparent layer content
  * - Falls back to rendering the content onto a textured mesh outside XR
  *
  * @category Layers
@@ -213,8 +222,7 @@ export class XRLayerSystem extends createSystem({
       transparent: true,
     });
     fallbackMaterial.map = renderTarget.texture;
-    fallbackMaterial.map.offset.y = 1;
-    fallbackMaterial.map.repeat.y = -1;
+    orientFallbackMap(fallbackMaterial.map, isQuad);
 
     const mesh = new Mesh(geometry, fallbackMaterial);
     entity.object3D?.add(mesh);
@@ -437,8 +445,8 @@ export class XRLayerSystem extends createSystem({
 
   /**
    * Switch from the internal fallback texture only after the compositor layer
-   * is active. This avoids punching a transparent hole while
-   * updateRenderState() is still pending.
+   * is active, so the content never disappears while updateRenderState() is
+   * still pending.
    */
   private useNativeSurface(entity: Entity, mesh: Mesh): void {
     const fallbackMaterial = XRLayerState.data.fallbackMaterial[
@@ -448,13 +456,13 @@ export class XRLayerSystem extends createSystem({
       return;
     }
 
+    // The compositor draws content layers over the projection layer
+    // (renderState.layers is [projection, ...content]). Keep the mesh for
+    // visibility and raycasts but stop drawing it: a punch-through hole in the
+    // projection layer shows through every transparent texel of the layer as
+    // a black box, and hides the scene behind the layer.
     const side = XRLayerState.data.isQuad[entity.index] ? FrontSide : BackSide;
-    const punchMaterial = new MeshBasicMaterial({ color: 0xffffff, side });
-    punchMaterial.blending = CustomBlending;
-    punchMaterial.blendEquation = AddEquation;
-    punchMaterial.blendSrc = ZeroFactor;
-    punchMaterial.blendDst = ZeroFactor;
-    mesh.material = punchMaterial;
+    mesh.material = new MeshBasicMaterial({ side, visible: false });
 
     const xrLayer = XRLayerState.data.xrLayer[entity.index] as any;
     xrLayer.blendTextureSourceAlpha = true;
@@ -488,8 +496,10 @@ export class XRLayerSystem extends createSystem({
     );
     entity.setValue(XRLayerState, 'renderTarget', newRenderTarget);
     fallbackMaterial.map = newRenderTarget.texture;
-    fallbackMaterial.map.offset.y = 1;
-    fallbackMaterial.map.repeat.y = -1;
+    orientFallbackMap(
+      fallbackMaterial.map,
+      !!XRLayerState.data.isQuad[entity.index],
+    );
     mesh.material = fallbackMaterial;
   }
 
@@ -782,8 +792,12 @@ export class XRLayerSystem extends createSystem({
         this.requestNativeLayerRemoval(entity);
         return false;
       }
-      xrLayer.width = dimensions.width;
-      xrLayer.height = dimensions.height;
+      const nativeSize = toNativeQuadLayerSize(
+        dimensions.width,
+        dimensions.height,
+      );
+      xrLayer.width = nativeSize.width;
+      xrLayer.height = nativeSize.height;
     } else {
       const dimensions = hasSupportedTransform
         ? resolveCylinderLayerDimensions(
@@ -1046,6 +1060,11 @@ export class XRLayerSystem extends createSystem({
       ),
       samples: 4,
       stencilBuffer: stencil,
+      // The compositor never reads layer depth. With the default (true),
+      // setRenderTargetTextures disables multisampled-render-to-texture on a
+      // target initialised with it, and setRenderTarget then binds a missing
+      // multisampled framebuffer: Quest Browser throws on the first XR frame.
+      resolveDepthBuffer: false,
     });
   }
 }

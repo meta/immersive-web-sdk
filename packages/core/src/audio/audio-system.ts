@@ -22,8 +22,8 @@ import { AudioSource, InstanceStealPolicy, PlaybackMode } from './audio.js';
  * Runtime audio manager that loads sources, pools players, and applies XR-aware behavior.
  *
  * @remarks
- * - Creates an `AudioListener` on the player head and resumes/suspends the
- *   audio context when XR sessions start/end.
+ * - Creates an `AudioListener` on the player head, resumes the audio context
+ *   when an XR session starts, and pauses playing audio while out of XR.
  * - Pools `Audio`/`PositionalAudio` instances per entity to minimize allocations
  *   and implements play/overlap/fade-restart behaviors.
  * - Optionally culls distant positional audio by a distance multiplier.
@@ -70,11 +70,13 @@ export class AudioSystem extends createSystem(
     }
 
     // Resume audio that was paused by session end
-    for (const [, instances] of this.activeInstances) {
+    for (const [entity, instances] of this.activeInstances) {
       instances.forEach((instance) => {
         if (instance.pausedBySessionEnd) {
           instance.audio.play();
           instance.pausedBySessionEnd = false;
+          // three's pause() dropped the old source and its onended handler.
+          this.attachOnEnded(entity, instance);
         }
       });
     }
@@ -90,12 +92,9 @@ export class AudioSystem extends createSystem(
         }
       });
     }
-
-    // Suspend audio context to save resources
-    const context = this.listener.context;
-    if (context.state === 'running') {
-      context.suspend();
-    }
+    // Keep the audio context running: the page goes on in 2D, and only
+    // session start resumes a suspended context, so suspending it here
+    // silenced every sound until the next XR session.
   };
 
   update(_delta: number, _time: number): void {
@@ -354,7 +353,14 @@ export class AudioSystem extends createSystem(
     // Start playback
     audio.play();
     AudioSource.data._isPlaying[index] = 1;
+    this.attachOnEnded(entity, instance);
+  }
 
+  private attachOnEnded(
+    entity: Entity,
+    instance: AudioInstance<AmbientAudio> | AudioInstance<PositionalAudio>,
+  ): void {
+    const { audio } = instance;
     // Handle onEnded - use audio.source.onended (the only method that works reliably).
     // three types `source` as AudioNode; for buffer playback it is an
     // AudioBufferSourceNode, which has onended.

@@ -71,6 +71,8 @@ temp/
 # Example/package .claude dirs are local-only — don't track
 examples/**/.claude/
 packages/**/.claude/
+# ...except the canonical guidance @iwsdk/create scaffolds into new apps
+!packages/create/guidance/claude/.claude/
 .codex/
 .cursor/
 .mcp.json

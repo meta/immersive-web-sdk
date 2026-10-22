@@ -18,3 +18,7 @@ packages/xr-input/src/gamepad/generated-profiles.ts
 docs/test-evidence/native-scene-starters/current/generated-*/proof.json
 docs/test-evidence/project-manifest-baseline/create-flow/generated-*/proof.json
 package-lock.json
+
+# scaffolded agent guidance: hand-formatted, and was outside Prettier while it
+# matched the .gitignore rule for package .claude dirs
+packages/create/guidance/claude/.claude/

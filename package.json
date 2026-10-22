@@ -22,6 +22,7 @@
     "lint": "eslint . && node scripts/check-cli-command-safety.mjs && node scripts/check-package-script-portability.mjs",
     "lint:fix": "eslint . --fix",
     "typecheck:examples": "corepack pnpm@10.18.3 run build:tgz:dev && bash ./scripts/typecheck-examples.sh",
+    "test:starter-bundle-size": "corepack pnpm@10.18.3 run build:tgz:dev && node scripts/check-starter-bundle-size.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint-staged": "lint-staged",

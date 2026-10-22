@@ -51,6 +51,15 @@ def quality_job(rev: str) -> dict[str, object]:
                     "required": True,
                     "timeout": 14400,
                 },
+                {
+                    # Starters are expected to grow, so an exceeded size budget
+                    # is a yellow warning on the diff rather than a failure. It
+                    # reuses the tarballs the quality step built.
+                    "name": "Check starter bundle sizes (warning only)",
+                    "shell": f"{runner} bundle-size",
+                    "required": False,
+                    "timeout": 3600,
+                },
             ],
         },
     }

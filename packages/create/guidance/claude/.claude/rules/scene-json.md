@@ -67,5 +67,5 @@ view near `[0, 1.6, 0]`) before accepting XR framing.
 open document. A result is usable only when `valid: true` **and** a PNG comes
 back. Render each changed module before the root.
 
-For composing a scene rather than editing one, use the `iwsdk-scene-composer`
+For composing a scene rather than editing one, use the `iwsdk-compose-scene`
 skill — it owns the intake, review and stop-rule procedure this file does not.
