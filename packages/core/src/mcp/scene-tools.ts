@@ -16,6 +16,10 @@ import type {
   Sha256,
 } from '@iwsdk/scene-composition';
 import type { World } from '../ecs/world.js';
+import type {
+  DomeFadeInactiveReason,
+  DomeFadeMarker,
+} from '../environment/dome-fade-binding.js';
 import {
   ACESFilmicToneMapping,
   BasicShadowMap,
@@ -178,6 +182,18 @@ export interface RuntimeSceneEnvironmentState {
       }
     | null;
   toneMapping: NonNullable<SceneEnvironment['toneMapping']> | 'unknown';
+  /** DomeFade state per faded node, sorted by node id. */
+  domeFades: RuntimeSceneDomeFadeState[];
+}
+
+export interface RuntimeSceneDomeFadeState {
+  nodeId: string | null;
+  start: number;
+  end: number;
+  meshCount: number;
+  skippedMaterials: number;
+  active: boolean;
+  inactiveReason: DomeFadeInactiveReason | null;
 }
 
 export interface RuntimeSceneLightState {
@@ -259,6 +275,7 @@ export function getRenderStats(world: World): RuntimeRenderStats {
   const sceneAssets: RuntimeSceneAssetState[] = [];
   const sceneLights: RuntimeSceneLightState[] = [];
   const sceneMaterials: RuntimeSceneMaterialState[] = [];
+  const domeFades: RuntimeSceneDomeFadeState[] = [];
   let meshCount = 0;
   let shadowCasters = 0;
   world.scene.traverse((object) => {
@@ -278,6 +295,21 @@ export function getRenderStats(world: World): RuntimeRenderStats {
     const lightState = inspectSceneLight(object);
     if (lightState != null) {
       sceneLights.push(lightState);
+    }
+    const domeFade = object.userData?.iwsdkDomeFade as
+      | DomeFadeMarker
+      | undefined;
+    if (domeFade != null) {
+      const nodeId = object.userData.iwsdkSceneNodeId;
+      domeFades.push({
+        active: domeFade.active === true,
+        end: finiteNumber(domeFade.end, 0),
+        inactiveReason: domeFade.inactiveReason ?? null,
+        meshCount: finiteNumber(domeFade.meshCount, 0),
+        nodeId: typeof nodeId === 'string' ? nodeId : null,
+        skippedMaterials: finiteNumber(domeFade.skippedMaterials, 0),
+        start: finiteNumber(domeFade.start, 0),
+      });
     }
     const renderable = object as Object3D & {
       castShadow?: boolean;
@@ -344,7 +376,10 @@ export function getRenderStats(world: World): RuntimeRenderStats {
       toneMapping: world.renderer.toneMapping,
     },
     sceneAssets: sceneAssets.sort(compareRuntimeState),
-    sceneEnvironment: inspectSceneEnvironment(world),
+    sceneEnvironment: inspectSceneEnvironment(
+      world,
+      domeFades.sort(compareDomeFadeState),
+    ),
     sceneLights: sceneLights.sort(compareRuntimeState),
     sceneMaterials: sceneMaterials.sort(compareRuntimeState),
   };
@@ -693,7 +728,17 @@ function inspectSceneShadow(
   };
 }
 
-function inspectSceneEnvironment(world: World): RuntimeSceneEnvironmentState {
+function compareDomeFadeState(
+  a: RuntimeSceneDomeFadeState,
+  b: RuntimeSceneDomeFadeState,
+): number {
+  return (a.nodeId ?? '').localeCompare(b.nodeId ?? '');
+}
+
+function inspectSceneEnvironment(
+  world: World,
+  domeFades: RuntimeSceneDomeFadeState[] = [],
+): RuntimeSceneEnvironmentState {
   const background = world.scene.background as
     | (RuntimeColorLike & {
         isColor?: boolean;
@@ -815,6 +860,7 @@ function inspectSceneEnvironment(world: World): RuntimeSceneEnvironmentState {
     shadows: world.renderer.shadowMap.enabled,
     shadowMapType: shadowMapTypeName(world.renderer.shadowMap.type),
     toneMapping: toneMappingName(world.renderer.toneMapping),
+    domeFades,
   };
 }
 

@@ -8,6 +8,7 @@
 import { AudioSource } from '../audio/audio.js';
 import { CameraSource } from '../camera/camera-source.js';
 import { DepthOccludable } from '../depth/depth-occludable.js';
+import { DomeFade } from '../environment/dome-fade.js';
 import { DomeGradient } from '../environment/dome-gradient.js';
 import { DomeTexture } from '../environment/dome-texture.js';
 import { IBLGradient } from '../environment/ibl-gradient.js';
@@ -59,6 +60,7 @@ export const IWSDK_BUILTIN_COMPONENTS = defineComponents([
   DepthOccludable,
   DistanceGrabbable,
   DirectionalLightComponent,
+  DomeFade,
   DomeGradient,
   DomeTexture,
   EnvironmentRaycastTarget,

@@ -706,6 +706,71 @@ describe('getRenderStats scene environment', () => {
     ).toBeNull();
   });
 
+  it('reports DomeFade markers sorted by node id', () => {
+    const environment = environmentStats((scene) => {
+      const terrain = new Group();
+      terrain.userData.iwsdkSceneNodeId = 'terrain';
+      terrain.userData.iwsdkDomeFade = {
+        active: false,
+        end: 30,
+        inactiveReason: 'no-meshes',
+        meshCount: 0,
+        skippedMaterials: 2,
+        start: 20,
+      };
+      const floor = new Group();
+      floor.userData.iwsdkSceneNodeId = 'floor';
+      floor.userData.iwsdkDomeFade = {
+        active: true,
+        end: 10,
+        inactiveReason: null,
+        meshCount: 1,
+        skippedMaterials: 0,
+        start: 4,
+      };
+      const unnamed = new Group();
+      unnamed.userData.iwsdkDomeFade = {
+        active: false,
+        end: 2,
+        inactiveReason: 'no-dome-gradient',
+        meshCount: 3,
+        skippedMaterials: 0,
+        start: 1,
+      };
+      scene.add(terrain, floor, unnamed);
+    });
+    expect(environment.domeFades).toEqual([
+      {
+        active: false,
+        end: 2,
+        inactiveReason: 'no-dome-gradient',
+        meshCount: 3,
+        nodeId: null,
+        skippedMaterials: 0,
+        start: 1,
+      },
+      {
+        active: true,
+        end: 10,
+        inactiveReason: null,
+        meshCount: 1,
+        nodeId: 'floor',
+        skippedMaterials: 0,
+        start: 4,
+      },
+      {
+        active: false,
+        end: 30,
+        inactiveReason: 'no-meshes',
+        meshCount: 0,
+        nodeId: 'terrain',
+        skippedMaterials: 2,
+        start: 20,
+      },
+    ]);
+    expect(environmentStats(() => {}).domeFades).toEqual([]);
+  });
+
   it('reports gradient and texture image-based lighting', () => {
     expect(
       environmentStats((scene) => {

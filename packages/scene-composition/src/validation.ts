@@ -2043,6 +2043,18 @@ function validateComponents(
         );
       }
     }
+    if (componentId === 'DomeFade') {
+      const start = value.start ?? schema.fields.start?.default;
+      const end = value.end ?? schema.fields.end?.default;
+      if (isFiniteNumber(start) && isFiniteNumber(end) && start >= end) {
+        addIssue(
+          issues,
+          componentPath,
+          'fade start must be less than fade end',
+          'range',
+        );
+      }
+    }
   }
 }
 

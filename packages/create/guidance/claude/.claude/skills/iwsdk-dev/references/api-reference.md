@@ -604,6 +604,18 @@ entity.addComponent(IBLTexture, {
 
 4. **In AR sessions**, backgrounds (dome) are automatically hidden but IBL remains active for realistic lighting on virtual objects.
 
+5. **`DomeFade` is a node component** that fades that node's own meshes into the root `DomeGradient` with horizontal distance from the node origin, so a floor has no visible edge. It does nothing without a `DomeGradient`, and its meshes hide with the dome in AR:
+
+   ```json
+   {
+     "id": "floor",
+     "content": { "type": "asset", "asset": "floor" },
+     "components": {
+       "com.iwsdk.components.DomeFade": { "start": 4, "end": 10 }
+     }
+   }
+   ```
+
 ### 14. Asset Loading
 
 ```typescript
@@ -1303,30 +1315,31 @@ Before writing custom code, check if IWSDK already provides the functionality. R
 
 ### Reinvention Risk Table
 
-| What you might build from scratch      | What IWSDK already provides                                                  |
-| -------------------------------------- | ---------------------------------------------------------------------------- |
-| GLTF loading with GLTFLoader           | `AssetManager.loadGLTF()` or a `defineAssets()` project catalog              |
-| Ray/line mesh for controller pointing  | `RayPointer` — cylinder + gradient shader + cursor circle (auto)             |
-| Hover/click interaction with Raycaster | `RayInteractable` + `Hovered` + `Pressed` components                         |
-| Custom skybox sphere                   | `DomeGradient` or `DomeTexture` component                                    |
-| PBR environment lighting               | `IBLGradient` or `IBLTexture` component                                      |
-| Teleport arc + landing marker          | `LocomotionSystem` — full visuals included                                   |
-| Comfort vignette for motion            | `LocomotionSystem` — `comfortAssist` config                                  |
-| Controller 3D models                   | Auto-loaded from WebXR Input Profiles                                        |
-| Hand tracking meshes                   | `AnimatedHand` with skeletal mesh + outline                                  |
-| Object grab + manipulation             | `OneHandGrabbable` / `TwoHandsGrabbable` / `DistanceGrabbable`               |
-| Hit-test against real world            | `EnvironmentRaycastTarget` component                                         |
-| Spatial audio                          | `AudioSource` component with pooling                                         |
-| Camera feed texture                    | `CameraSource` component                                                     |
-| Depth occlusion shader                 | `DepthOccludable` component                                                  |
-| HUD / screen-space UI                  | `ScreenSpace` component with CSS units                                       |
-| Follow-head billboard                  | `Follower` component                                                         |
-| Scene cleanup on level change          | `LevelSystem` + `LevelTag` (automatic)                                       |
-| Gamepad button debouncing              | `StatefulGamepad` — `getButtonDown()` / `getButtonUp()`                      |
-| Manual GPU cleanup with traverse       | `entity.dispose()` — destroys entity + cleans up geometry/materials/textures |
-| Manual world-space positioning         | `setWorldPosition()` / `setWorldQuaternion()` utilities                      |
-| Manual XR hit-test setup               | `EnvironmentRaycastTarget` component + `EnvironmentRaycastSystem`            |
-| Manual camera video feed               | `CameraSource` component + `CameraUtils` static class                        |
+| What you might build from scratch                                  | What IWSDK already provides                                                  |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| GLTF loading with GLTFLoader                                       | `AssetManager.loadGLTF()` or a `defineAssets()` project catalog              |
+| Ray/line mesh for controller pointing                              | `RayPointer` — cylinder + gradient shader + cursor circle (auto)             |
+| Hover/click interaction with Raycaster                             | `RayInteractable` + `Hovered` + `Pressed` components                         |
+| Custom skybox sphere                                               | `DomeGradient` or `DomeTexture` component                                    |
+| Floor fading into the sky (`onBeforeCompile` with copied sky GLSL) | `DomeFade` on the floor node                                                 |
+| PBR environment lighting                                           | `IBLGradient` or `IBLTexture` component                                      |
+| Teleport arc + landing marker                                      | `LocomotionSystem` — full visuals included                                   |
+| Comfort vignette for motion                                        | `LocomotionSystem` — `comfortAssist` config                                  |
+| Controller 3D models                                               | Auto-loaded from WebXR Input Profiles                                        |
+| Hand tracking meshes                                               | `AnimatedHand` with skeletal mesh + outline                                  |
+| Object grab + manipulation                                         | `OneHandGrabbable` / `TwoHandsGrabbable` / `DistanceGrabbable`               |
+| Hit-test against real world                                        | `EnvironmentRaycastTarget` component                                         |
+| Spatial audio                                                      | `AudioSource` component with pooling                                         |
+| Camera feed texture                                                | `CameraSource` component                                                     |
+| Depth occlusion shader                                             | `DepthOccludable` component                                                  |
+| HUD / screen-space UI                                              | `ScreenSpace` component with CSS units                                       |
+| Follow-head billboard                                              | `Follower` component                                                         |
+| Scene cleanup on level change                                      | `LevelSystem` + `LevelTag` (automatic)                                       |
+| Gamepad button debouncing                                          | `StatefulGamepad` — `getButtonDown()` / `getButtonUp()`                      |
+| Manual GPU cleanup with traverse                                   | `entity.dispose()` — destroys entity + cleans up geometry/materials/textures |
+| Manual world-space positioning                                     | `setWorldPosition()` / `setWorldQuaternion()` utilities                      |
+| Manual XR hit-test setup                                           | `EnvironmentRaycastTarget` component + `EnvironmentRaycastSystem`            |
+| Manual camera video feed                                           | `CameraSource` component + `CameraUtils` static class                        |
 
 ### Asset Loading (AssetManager)
 

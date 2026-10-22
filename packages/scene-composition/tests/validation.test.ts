@@ -119,3 +119,63 @@ describe('scene asset catalog validation', () => {
     );
   });
 });
+
+describe('DomeFade range validation', () => {
+  const componentCatalog = createSceneComponentCatalog([
+    {
+      id: 'DomeFade',
+      source: 'iwsdk',
+      fields: {
+        start: { type: 'Float32', default: 4, min: 0 },
+        end: { type: 'Float32', default: 10, min: 0 },
+      },
+    },
+  ]);
+
+  function validateFade(value: Record<string, unknown>) {
+    const scene: SceneDocument = {
+      version: CURRENT_SCENE_VERSION,
+      units: 'meters',
+      resources: {},
+      nodes: [
+        {
+          id: 'floor',
+          content: { type: 'group' },
+          components: { 'com.iwsdk.components.DomeFade': value },
+        },
+      ],
+    };
+    return validateSceneDocument(scene, { componentCatalog });
+  }
+
+  it('accepts a fade that ends after it starts', () => {
+    expect(validateFade({ start: 2, end: 8 }).issues).toEqual([]);
+    expect(validateFade({}).issues).toEqual([]);
+  });
+
+  it('rejects a fade whose start is not before its end', () => {
+    for (const value of [
+      { start: 10, end: 5 },
+      { start: 6, end: 6 },
+      { start: 12 },
+      { end: 3 },
+    ]) {
+      expect(validateFade(value).issues).toEqual([
+        expect.objectContaining({
+          code: 'range',
+          message: 'fade start must be less than fade end',
+          path: '$.nodes[0].components["com.iwsdk.components.DomeFade"]',
+        }),
+      ]);
+    }
+  });
+
+  it('rejects a negative start through the schema minimum', () => {
+    expect(validateFade({ start: -1, end: 8 }).issues).toEqual([
+      expect.objectContaining({
+        code: 'type',
+        path: '$.nodes[0].components["com.iwsdk.components.DomeFade"].start',
+      }),
+    ]);
+  });
+});

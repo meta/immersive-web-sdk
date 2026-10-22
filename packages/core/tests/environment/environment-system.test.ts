@@ -9,12 +9,13 @@ import { signal } from '@preact/signals-core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AssetManager } from '../../src/asset/index.js';
 import type { Entity } from '../../src/ecs/entity.js';
-import { World } from '../../src/ecs/world.js';
+import { VisibilityState, World } from '../../src/ecs/world.js';
 import {
   computeGradientHexes,
   EnvironmentSystem,
 } from '../../src/environment/environment-system.js';
 import {
+  DomeFade,
   DomeGradient,
   DomeTexture,
   IBLGradient,
@@ -22,9 +23,13 @@ import {
 } from '../../src/environment/index.js';
 import { LevelRoot } from '../../src/level/level-root.js';
 import {
+  BoxGeometry,
   Color,
   EventDispatcher,
+  Group,
+  type Material,
   Mesh,
+  MeshStandardMaterial,
   PerspectiveCamera,
   PMREMGenerator,
   Scene,
@@ -86,6 +91,7 @@ function createEnvironmentWorld() {
     .registerComponent(LevelRoot)
     .registerComponent(DomeGradient)
     .registerComponent(DomeTexture)
+    .registerComponent(DomeFade)
     .registerComponent(IBLGradient)
     .registerComponent(IBLTexture);
   world.sceneEntity = world.createTransformEntity(world.scene);
@@ -536,5 +542,181 @@ describe('EnvironmentSystem IBLGradient', () => {
     world.scene.environmentIntensity = 3;
     update();
     expect(world.scene.environmentIntensity).toBe(3);
+  });
+});
+
+/** A floor node entity with one mesh, plus a child node with its own mesh. */
+function addFloor(world: World, root: Entity) {
+  const floorMaterial = new MeshStandardMaterial({ color: 0xeae6df });
+  const floorMesh = new Mesh(new BoxGeometry(), floorMaterial);
+  floorMesh.userData.iwsdkSceneNodeId = 'floor';
+  const floorObject = new Group();
+  floorObject.userData.iwsdkSceneNodeId = 'floor';
+  floorObject.add(floorMesh);
+  const floor = world.createTransformEntity(floorObject, { parent: root });
+
+  const rugMaterial = new MeshStandardMaterial({ color: 0x884422 });
+  const rugMesh = new Mesh(new BoxGeometry(), rugMaterial);
+  rugMesh.userData.iwsdkSceneNodeId = 'rug';
+  const rug = world.createTransformEntity(rugMesh, { parent: floor });
+  return { floor, floorMaterial, floorMesh, rug, rugMaterial, rugMesh };
+}
+
+describe('EnvironmentSystem DomeFade', () => {
+  it('patches the node on qualify and restores it on removal', () => {
+    const { root, system, update, world } = createEnvironmentWorld();
+    root.addComponent(DomeGradient);
+    const { floor, floorMaterial, floorMesh, rugMaterial, rugMesh } = addFloor(
+      world,
+      root,
+    );
+    floor.addComponent(DomeFade, { end: 12, start: 3 });
+    expect(floorMesh.material).not.toBe(floorMaterial);
+    expect(rugMesh.material).toBe(rugMaterial);
+    update();
+
+    const clone = floorMesh.material as Material;
+    expect(clone.userData.iwsdkDomeFadeClone).toBe(true);
+    expect(floor.object3D!.userData.iwsdkDomeFade).toEqual({
+      active: true,
+      end: 12,
+      inactiveReason: null,
+      meshCount: 1,
+      skippedMaterials: 0,
+      start: 3,
+    });
+    expect(system.getDomeGradientUniforms().active.value).toBe(1);
+
+    floor.setValue(DomeFade, 'start', 5);
+    update();
+    expect(floorMesh.material).toBe(clone);
+    expect(floor.object3D!.userData.iwsdkDomeFade.start).toBe(5);
+
+    const disposed = vi.fn();
+    clone.addEventListener('dispose', disposed);
+    floor.removeComponent(DomeFade);
+    expect(floorMesh.material).toBe(floorMaterial);
+    expect(disposed).toHaveBeenCalledTimes(1);
+    expect(floor.object3D!.userData.iwsdkDomeFade).toBeUndefined();
+  });
+
+  it('reports why a fade is inactive and warns once', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { root, update, world } = createEnvironmentWorld();
+    const { floor, floorMesh } = addFloor(world, root);
+    floor.addComponent(DomeFade);
+    update();
+    const marker = () => floor.object3D!.userData.iwsdkDomeFade;
+    expect(marker()).toMatchObject({
+      active: false,
+      inactiveReason: 'no-dome-gradient',
+      meshCount: 1,
+    });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain('node "floor"');
+
+    root.addComponent(DomeGradient);
+    update();
+    expect(marker()).toMatchObject({ active: true, inactiveReason: null });
+
+    root.addComponent(DomeTexture, { src: 'sky.png' });
+    update();
+    await flush();
+    expect(marker()).toMatchObject({
+      active: false,
+      inactiveReason: 'dome-texture-active',
+    });
+    root.removeComponent(DomeTexture);
+    update();
+    expect(marker()).toMatchObject({ active: true, inactiveReason: null });
+
+    floorMesh.material = new ShaderMaterial();
+    update();
+    expect(marker()).toMatchObject({
+      active: false,
+      inactiveReason: 'no-meshes',
+      meshCount: 0,
+      skippedMaterials: 1,
+    });
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not warn from a visibility change before the first update', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { root, update, world } = createEnvironmentWorld();
+    root.addComponent(DomeGradient);
+    const { floor } = addFloor(world, root);
+    floor.addComponent(DomeFade);
+    // Runs updateSceneARMode() before any background pass made the dome.
+    world.visibilityState.value = VisibilityState.Visible;
+    update();
+    expect(floor.object3D!.userData.iwsdkDomeFade).toMatchObject({
+      active: true,
+      inactiveReason: null,
+    });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('hides only the patched meshes during AR and restores them after', () => {
+    const { root, setSession, update, world } = createEnvironmentWorld();
+    root.addComponent(DomeGradient);
+    const { floor, floorMesh, rugMesh } = addFloor(world, root);
+    floor.addComponent(DomeFade);
+    update();
+    const dome = findDome(world)!;
+
+    setSession({ environmentBlendMode: 'alpha-blend' } as XRSession);
+    update();
+    expect(dome.visible).toBe(false);
+    expect(floorMesh.visible).toBe(false);
+    expect(floor.object3D!.visible).toBe(true);
+    expect(rugMesh.visible).toBe(true);
+    expect(floor.object3D!.userData.iwsdkDomeFade).toMatchObject({
+      active: false,
+      inactiveReason: 'ar-session',
+    });
+
+    setSession(null);
+    update();
+    expect(dome.visible).toBe(true);
+    expect(floorMesh.visible).toBe(true);
+    expect(floor.object3D!.userData.iwsdkDomeFade).toMatchObject({
+      active: true,
+      inactiveReason: null,
+    });
+  });
+
+  it('leaves the meshes of a DomeFade without a DomeGradient visible in AR', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { root, setSession, update, world } = createEnvironmentWorld();
+    const { floor, floorMesh } = addFloor(world, root);
+    floor.addComponent(DomeFade);
+    update();
+
+    setSession({ environmentBlendMode: 'alpha-blend' } as XRSession);
+    update();
+    expect(floorMesh.visible).toBe(true);
+    expect(floor.object3D!.userData.iwsdkDomeFade).toMatchObject({
+      active: false,
+      inactiveReason: 'ar-session',
+    });
+  });
+
+  it('leaves no clones behind when the level is torn down', () => {
+    const { root, system, update, world } = createEnvironmentWorld();
+    root.addComponent(DomeGradient);
+    const { floor, floorMaterial, floorMesh, rug } = addFloor(world, root);
+    floor.addComponent(DomeFade);
+    update();
+    const clone = floorMesh.material as Material;
+    const disposed = vi.fn();
+    clone.addEventListener('dispose', disposed);
+
+    rug.destroy();
+    floor.destroy();
+    expect(floorMesh.material).toBe(floorMaterial);
+    expect(disposed).toHaveBeenCalledTimes(1);
+    update();
+    expect((system as any).domeFadeBindings.size).toBe(0);
   });
 });

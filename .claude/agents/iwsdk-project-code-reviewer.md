@@ -410,6 +410,42 @@ entity.destroy();
 entity.dispose();
 ```
 
+### 21. Hand-built sky or sky fade
+
+Flag: a `ShaderMaterial` sky sphere, `BackSide` sky meshes, or an `onBeforeCompile` that pastes sky gradient GLSL into a floor material. Point to the built-ins: `DomeGradient` on the level root (with `elevationDeg`/`azimuthDeg` to tilt it and `dither` against banding) plus `DomeFade` on the floor node.
+
+```typescript
+// ❌ BAD - a second sky that the environment system, editor and AR policy know nothing about
+const sky = new Mesh(
+  new SphereGeometry(60),
+  new ShaderMaterial({ side: BackSide, fragmentShader: SKY_GLSL }),
+);
+floorMaterial.onBeforeCompile = (shader) => {
+  /* paste SKY_GLSL, mix by distance */
+};
+```
+
+```jsonc
+// ✅ GOOD - scene JSON: the root sky plus a fade on the floor node
+{
+  "components": {
+    "com.iwsdk.components.DomeGradient": {
+      "elevationDeg": 24,
+      "azimuthDeg": -31,
+      "dither": true,
+    },
+  },
+  "nodes": [
+    {
+      "id": "floor",
+      "components": {
+        "com.iwsdk.components.DomeFade": { "start": 4, "end": 10 },
+      },
+    },
+  ],
+}
+```
+
 ---
 
 ## Confidence-Based Reporting

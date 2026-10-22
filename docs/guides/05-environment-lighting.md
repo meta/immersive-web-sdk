@@ -197,6 +197,46 @@ passthrough shows behind your content, and restores it when the session ends.
 `DomeGradient`'s new fields need `@iwsdk/core` 1.1.0. Scene validation rejects
 fields it does not know, so a scene that uses them fails to load on 1.0.x.
 
+### Fade a Floor into the Sky
+
+A floor that ends at a hard edge in front of the sky breaks the illusion of an
+endless stage. Add `DomeFade` to the floor node, not the level root, and its
+meshes blend into the `DomeGradient` sky behind them with horizontal distance
+from the node's origin:
+
+```json
+{
+  "id": "floor",
+  "content": { "type": "asset", "asset": "floor" },
+  "components": {
+    "DomeFade": { "start": 4, "end": 10 }
+  }
+}
+```
+
+Up to `start` meters from the node's origin the floor looks as authored; at
+`end` meters and beyond it shows only the sky (`start` must be less than
+`end`). Each faded pixel samples the live sky in the direction from the camera,
+so the floor and the sky agree from every position, follow edits to the
+`DomeGradient` (including its tilt), and share its `dither`.
+
+- **Needs a DomeGradient.** Without a visible `DomeGradient` on the level root,
+  or while a `DomeTexture` is the background, the floor renders as authored and
+  keeps its edge. Render stats (`iwsdk scene render-stats`) report each fade's
+  `inactiveReason` in `sceneEnvironment.domeFades`.
+- **AR.** The faded meshes hide with the sky during AR passthrough. Child nodes
+  of the floor, and anything else on it, stay visible. Without a
+  `DomeGradient`, DomeFade leaves the meshes visible in AR too.
+- **Materials.** `MeshBasicMaterial`, `MeshLambertMaterial`,
+  `MeshPhongMaterial`, `MeshStandardMaterial`, `MeshPhysicalMaterial` and
+  `MeshToonMaterial` fade. Other materials (shader, shadow, points and line
+  materials) are left as they are and counted as `skippedMaterials`. IWSDK
+  fades a per-node copy of each material, so other objects that share it are
+  not affected.
+- **Cost.** DomeFade checks the node's own meshes once per frame and fades
+  only that node's content, not child nodes. Use it on floors and terrain
+  rather than on large subtrees; render stats report its `meshCount`.
+
 ### HDR Image Backgrounds
 
 For photorealistic environments:

@@ -485,6 +485,11 @@ the older room IBL marker, or `null`. An `IBLTexture` with `src: 'room'`
 reports `ibl-texture`. A DomeGradient is hidden during AR passthrough, so an AR
 session reports `transparent` even when the level root has one.
 
+`sceneEnvironment.domeFades` lists every node with a `DomeFade`, sorted by
+`nodeId`: `start`, `end`, `meshCount`, `skippedMaterials`, `active` and
+`inactiveReason` (`no-dome-gradient`, `dome-texture-active`, `ar-session`,
+`no-meshes` or `null` while it fades).
+
 ## ECS Debugging
 
 - `ecs_pause`, `ecs_resume`, `ecs_step`

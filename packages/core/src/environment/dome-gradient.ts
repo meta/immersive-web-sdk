@@ -77,7 +77,7 @@ export const DomeGradient = createComponent(
     dither: {
       type: Types.Boolean,
       default: false,
-      help: 'Adds ±0.5/255 screen noise so pale, low-contrast gradients do not band.',
+      help: 'Adds ±0.5/255 screen noise so pale, low-contrast gradients do not band. DomeFade surfaces dither with it.',
       label: 'Dither',
     },
     /** Optional since 1.1.0: edits apply automatically. Setting it forces a refresh. */

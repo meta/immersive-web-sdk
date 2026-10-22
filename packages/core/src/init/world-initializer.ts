@@ -25,6 +25,7 @@ import { World, VisibilityState } from '../ecs/world.js';
 import {
   DomeTexture,
   DomeGradient,
+  DomeFade,
   IBLTexture,
   IBLGradient,
   EnvironmentSystem,
@@ -662,6 +663,7 @@ function registerCoreSystems(world: World) {
     // New split components
     .registerComponent(DomeTexture)
     .registerComponent(DomeGradient)
+    .registerComponent(DomeFade)
     .registerComponent(IBLTexture)
     .registerComponent(IBLGradient)
     .registerComponent(AmbientLightComponent)

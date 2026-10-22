@@ -38,6 +38,7 @@ describe('editor built-in component schemas', () => {
           'AmbientLight',
           'DirectionalLight',
           'DistanceGrabbable',
+          'DomeFade',
           'DomeGradient',
           'HemisphereLight',
           'IBLGradient',
@@ -221,6 +222,21 @@ describe('editor built-in component schemas', () => {
         sky: [28 / 255, 56 / 255, 84 / 255, 1],
       });
 
+    await addComponent(editor, 'DomeFade');
+    await expect
+      .poll(() => componentValue(editor, 'DomeFade'))
+      .toEqual({ end: 10, start: 4 });
+    await componentRow(editor, 'DomeFade')
+      .locator('[data-component-field="start"]')
+      .fill('2.5');
+    await componentRow(editor, 'DomeFade')
+      .locator('[data-component-field="end"]')
+      .fill('8');
+    await focusComponentCommitTarget(editor);
+    await expect
+      .poll(() => componentValue(editor, 'DomeFade'))
+      .toEqual({ end: 8, start: 2.5 });
+
     await addComponent(editor, 'IBLGradient');
     await fillColorField(editor, 'IBLGradient', 'ground', '#664d33');
     await focusComponentCommitTarget(editor);
@@ -291,6 +307,7 @@ describe('editor built-in component schemas', () => {
         'com.iwsdk.components.DistanceGrabbable': expect.objectContaining({
           translate: false,
         }),
+        'com.iwsdk.components.DomeFade': { end: 8, start: 2.5 },
         'com.iwsdk.components.DomeGradient': expect.objectContaining({
           azimuthDeg: -31,
           dither: true,

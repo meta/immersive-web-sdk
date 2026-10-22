@@ -10,6 +10,7 @@ import { AudioSystem } from '../../src/audio/audio-system.js';
 import { AudioSource } from '../../src/audio/audio.js';
 import { EnvironmentSystem } from '../../src/environment/environment-system.js';
 import {
+  DomeFade,
   DomeGradient,
   DomeTexture,
   IBLGradient,
@@ -73,6 +74,7 @@ describe('module load order — System.queries must capture defined components',
       'iblGradients',
       [IBLGradient, LevelRoot],
     ],
+    ['EnvironmentSystem', EnvironmentSystem, 'domeFades', [DomeFade]],
     ['LevelSystem', LevelSystem, 'levelEntities', [LevelTag]],
     ['TransformSystem', TransformSystem, 'transform', [Transform]],
     [

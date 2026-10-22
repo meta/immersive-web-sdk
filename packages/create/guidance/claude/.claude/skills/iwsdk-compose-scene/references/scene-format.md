@@ -50,6 +50,9 @@ runtime projection strips `authoring` and hashes canonical JSON for runtime iden
 
 - `components` apply to the actual IWSDK level-root entity. `DomeGradient` and
   `IBLGradient` are normal removable components, not editor-only environment fields.
+- `DomeFade` is a node component, not a root one: put
+  `"com.iwsdk.components.DomeFade": { "start": 4, "end": 10 }` on a floor or
+  terrain node to fade that node's own meshes into the root `DomeGradient` sky.
 - `LevelRoot`, `LevelTag`, and `Transform` are runtime-owned and must not appear in
   `components`.
 - `resources` contains only reusable scene prefabs.

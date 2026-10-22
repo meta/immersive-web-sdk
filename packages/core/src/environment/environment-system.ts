@@ -26,7 +26,15 @@ import {
   SphereGeometry,
   Texture,
   EquirectangularReflectionMapping,
+  type Object3D,
 } from '../runtime/index.js';
+import {
+  DomeFadeBinding,
+  type DomeFadeInactiveReason,
+  type DomeFadeMarker,
+  type DomeFadeSpec,
+} from './dome-fade-binding.js';
+import { DomeFade } from './dome-fade.js';
 import { DomeGradient } from './dome-gradient.js';
 import { DomeTexture } from './dome-texture.js';
 import {
@@ -66,6 +74,23 @@ export function computeGradientHexes(
 interface GradientSnapshot {
   entityIndex: number;
   values: number[];
+}
+
+const DOME_FADE_INACTIVE_MESSAGES: Record<
+  Exclude<DomeFadeInactiveReason, 'ar-session'>,
+  string
+> = {
+  'dome-texture-active':
+    'a DomeTexture is the background; DomeFade only fades into a DomeGradient.',
+  'no-dome-gradient': 'the level root has no DomeGradient.',
+  'no-meshes': 'the node has no meshes with a supported material.',
+};
+
+function readDomeFadeSpec(entity: Entity): DomeFadeSpec {
+  return {
+    end: Number(entity.getValue(DomeFade, 'end')),
+    start: Number(entity.getValue(DomeFade, 'start')),
+  };
 }
 
 interface EnvState {
@@ -122,7 +147,8 @@ function sameGradientSnapshot(
  * - IBL is driven by {@link IBLTexture} ("room" or HDR/LDR equirect via PMREM) or {@link IBLGradient} (PMREM of a gradient scene) and writes to `scene.environment`. An IBLTexture wins over an IBLGradient.
  * - Rotation and intensity hooks forward to `scene.backgroundRotation`, `scene.backgroundIntensity`, and `scene.environmentRotation`, `scene.environmentIntensity`.
  * - DomeGradient and IBLGradient edits apply on the next frame; DomeTexture and IBLTexture edits apply when `_needsUpdate` is set.
- * - AR sessions always hide authored backgrounds for passthrough while retaining IBL.
+ * - {@link DomeFade} fades a node's meshes into the live DomeGradient sky, sharing the dome's uniforms.
+ * - AR sessions always hide authored backgrounds (the dome, and with it DomeFade meshes) for passthrough while retaining IBL.
  * - PMREM targets are regenerated only when sources or gradient colors change; the dome mesh and geometry are reused.
  *
  * @category Environment & Lighting
@@ -145,6 +171,7 @@ export class EnvironmentSystem extends createSystem({
   domeGradients: { required: [DomeGradient, LevelRoot] },
   iblTextures: { required: [IBLTexture, LevelRoot] },
   iblGradients: { required: [IBLGradient, LevelRoot] },
+  domeFades: { required: [DomeFade] },
 }) {
   private state: EnvState = {};
   private pmrem!: PMREMGenerator;
@@ -158,6 +185,10 @@ export class EnvironmentSystem extends createSystem({
   private resetListenerCleanup: (() => void) | null = null;
   private needsResetListener: boolean = false;
   private arEnvironment!: SceneAREnvironmentController;
+  private arSuppressed = false;
+  private readonly domeFadeBindings = new Map<Entity, DomeFadeBinding>();
+  private readonly domeFadeWarned = new WeakSet<DomeFadeBinding>();
+  private readonly authoredBackgrounds: Object3D[] = [];
 
   init(): void {
     this.domeUniforms = createDomeGradientUniforms();
@@ -171,11 +202,27 @@ export class EnvironmentSystem extends createSystem({
       this.pmrem.dispose();
       this.state.environmentTarget?.dispose();
       this.state.environmentTarget = undefined;
+      for (const binding of this.domeFadeBindings.values()) {
+        binding.dispose();
+      }
+      this.domeFadeBindings.clear();
       this.clearGradientDome();
       this.clearGradientEnvironment();
       this.gradientGeometry?.dispose();
       this.gradientGeometry = undefined;
     });
+
+    // DomeFade bindings, replaying entities that already qualify.
+    this.cleanupFuncs.push(
+      this.queries.domeFades.subscribe(
+        'qualify',
+        (entity) => this.attachDomeFade(entity as Entity),
+        true,
+      ),
+      this.queries.domeFades.subscribe('disqualify', (entity) =>
+        this.detachDomeFade(entity as Entity),
+      ),
+    );
 
     // XR background toggle
     this.cleanupFuncs.push(
@@ -241,7 +288,41 @@ export class EnvironmentSystem extends createSystem({
       this.clearIBLSource();
     }
 
+    for (const [entity, binding] of this.domeFadeBindings) {
+      binding.update(readDomeFadeSpec(entity));
+      binding.refresh();
+      binding.syncTransform();
+    }
+
     this.updateSceneARMode();
+    // Only after a background pass: updateSceneARMode() also runs from the
+    // visibility subscription in init() and on session start.
+    this.warnInactiveDomeFades();
+  }
+
+  private attachDomeFade(entity: Entity): void {
+    if (this.domeFadeBindings.has(entity)) {
+      return;
+    }
+    if (entity.object3D == null) {
+      console.warn(
+        `[EnvironmentSystem] DomeFade on entity ${entity.index} has no object3D; it is ignored.`,
+      );
+      return;
+    }
+    this.domeFadeBindings.set(
+      entity,
+      new DomeFadeBinding(
+        entity.object3D,
+        this.domeUniforms,
+        readDomeFadeSpec(entity),
+      ),
+    );
+  }
+
+  private detachDomeFade(entity: Entity): void {
+    this.domeFadeBindings.get(entity)?.dispose();
+    this.domeFadeBindings.delete(entity);
   }
 
   // Background handling
@@ -662,15 +743,63 @@ export class EnvironmentSystem extends createSystem({
           ? this.world.session
           : managerSession
         : sessionOverride;
-    this.arEnvironment.update({
+    // Only the meshes DomeFade patched are hidden with the dome, never the
+    // child nodes under a faded node. Without a dome DomeFade does nothing,
+    // so its meshes stay visible.
+    const authoredBackgrounds = this.authoredBackgrounds;
+    authoredBackgrounds.length = 0;
+    if (this.state.gradientDome != null) {
+      authoredBackgrounds.push(this.state.gradientDome);
+      for (const binding of this.domeFadeBindings.values()) {
+        for (const mesh of binding.meshes) {
+          authoredBackgrounds.push(mesh);
+        }
+      }
+    }
+    this.arSuppressed = this.arEnvironment.update({
       session,
-      authoredBackgrounds:
-        this.state.gradientDome == null ? [] : [this.state.gradientDome],
-    });
+      authoredBackgrounds,
+    }).isAR;
     // After the AR controller ran: 0 with no dome, with a DomeTexture winning
     // and during AR passthrough.
     this.domeUniforms.active.value =
       this.state.gradientDome?.visible === true ? 1 : 0;
+    this.updateDomeFadeMarkers();
+  }
+
+  private updateDomeFadeMarkers(): void {
+    for (const binding of this.domeFadeBindings.values()) {
+      const reason: DomeFadeInactiveReason | null = this.arSuppressed
+        ? 'ar-session'
+        : this.queries.domeTextures.entities.size > 0
+          ? 'dome-texture-active'
+          : this.state.gradientDome == null
+            ? 'no-dome-gradient'
+            : binding.meshCount === 0
+              ? 'no-meshes'
+              : null;
+      binding.writeMarker(reason == null, reason);
+    }
+  }
+
+  private warnInactiveDomeFades(): void {
+    for (const binding of this.domeFadeBindings.values()) {
+      const reason = (
+        binding.root.userData.iwsdkDomeFade as DomeFadeMarker | undefined
+      )?.inactiveReason;
+      if (
+        reason == null ||
+        reason === 'ar-session' ||
+        this.domeFadeWarned.has(binding)
+      ) {
+        continue;
+      }
+      this.domeFadeWarned.add(binding);
+      const nodeId = binding.root.userData.iwsdkSceneNodeId;
+      console.warn(
+        `[EnvironmentSystem] DomeFade on ${typeof nodeId === 'string' ? `node "${nodeId}"` : `"${binding.root.name || binding.root.uuid}"`} does nothing: ${DOME_FADE_INACTIVE_MESSAGES[reason]}`,
+      );
+    }
   }
 
   // Gradient dome mesh utilities (background)

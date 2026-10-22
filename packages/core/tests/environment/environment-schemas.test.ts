@@ -128,4 +128,59 @@ describe('environment component schemas', () => {
       ['$.components["com.iwsdk.components.IBLGradient"].intensity', 'type'],
     ]);
   });
+
+  it('exposes DomeFade as a node component with limits', () => {
+    expect(catalog.DomeFade.fields).toEqual({
+      end: expect.objectContaining({
+        default: 10,
+        label: 'Fade end (m)',
+        min: 0,
+        step: 0.5,
+        type: 'Float32',
+      }),
+      start: expect.objectContaining({
+        default: 4,
+        label: 'Fade start (m)',
+        min: 0,
+        step: 0.5,
+        type: 'Float32',
+      }),
+    });
+    expect(catalog.DomeFade.fields.start.help).toEqual(expect.any(String));
+    expect(catalog.DomeFade.description).toContain('DomeGradient');
+  });
+
+  it('validates DomeFade ranges in scene JSON', () => {
+    const validateFade = (value: Record<string, unknown>) =>
+      validateSceneDocument(
+        {
+          nodes: [
+            {
+              components: { 'com.iwsdk.components.DomeFade': value },
+              content: { type: 'group' },
+              id: 'floor',
+            },
+          ],
+          resources: {},
+          units: 'meters',
+          version: CURRENT_SCENE_VERSION,
+        },
+        { componentCatalog: catalog },
+      ).issues.map((issue) => [issue.path, issue.code, issue.message]);
+    expect(validateFade({ end: 10, start: 4 })).toEqual([]);
+    expect(validateFade({ start: 12 })).toEqual([
+      [
+        '$.nodes[0].components["com.iwsdk.components.DomeFade"]',
+        'range',
+        'fade start must be less than fade end',
+      ],
+    ]);
+    expect(validateFade({ end: 8, start: -1 })).toEqual([
+      [
+        '$.nodes[0].components["com.iwsdk.components.DomeFade"].start',
+        'type',
+        'value does not match Float32',
+      ],
+    ]);
+  });
 });

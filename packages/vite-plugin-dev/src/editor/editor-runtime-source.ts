@@ -440,9 +440,12 @@ let ComponentRegistry;
 let componentCatalogFromComponents;
 let configureUIKitRenderer;
 let disposeLoweredSceneNodes;
+let DomeFadeBinding;
+let domeFadeSpecFromComponentValue;
 let ConeGeometry;
 let CylinderGeometry;
 let DirectionalLight;
+let EnvironmentSystem;
 let Float32BufferAttribute;
 let Frustum;
 let FrontSide;
@@ -556,9 +559,12 @@ async function loadEditorRuntimeDependencies() {
     componentCatalogFromComponents,
     configureUIKitRenderer,
     disposeLoweredSceneNodes,
+    DomeFadeBinding,
+    domeFadeSpecFromComponentValue,
     ConeGeometry,
     CylinderGeometry,
     DirectionalLight,
+    EnvironmentSystem,
     Float32BufferAttribute,
     Frustum,
     FrontSide,
@@ -5691,6 +5697,7 @@ function indexLoweredNode(lowered) {
   }
   editorWorldState.objectMap.set(lowered.id, lowered.object);
   attachEditorLightBindings(lowered);
+  attachEditorEnvironmentBindings(lowered);
   for (const virtual of lowered.virtualNodes || []) {
     editorWorldState.objectMap.set(virtual.id, virtual.object);
   }
@@ -5809,6 +5816,7 @@ function detachEditorSceneForSwap() {
   editorWorldState.hoverHelper = null;
   editorWorldState.hoveredNodeId = null;
   disposeEditorLightBindings();
+  disposeEditorEnvironmentBindings();
   for (const root of editorWorldState.loweredNodes || []) {
     root.object.removeFromParent();
   }
@@ -5854,6 +5862,63 @@ function syncEditorLightBindings() {
   for (const bindings of editorWorldState.lightBindings.values()) {
     for (const binding of bindings) binding.syncTransform();
   }
+}
+
+function editorDomeGradientUniforms() {
+  return editorWorldState.world
+    .getSystem(EnvironmentSystem)
+    ?.getDomeGradientUniforms();
+}
+
+// Node components never become ECS components in the editor, so DomeFade
+// renders through the same binding EnvironmentSystem uses at runtime.
+function attachEditorEnvironmentBindings(lowered) {
+  const uniforms = editorDomeGradientUniforms();
+  if (!uniforms) return;
+  const bindings = [];
+  for (const [componentName, value] of Object.entries(
+    lowered.node?.components || {},
+  )) {
+    const spec = domeFadeSpecFromComponentValue(componentName, value);
+    if (!spec) continue;
+    bindings.push(new DomeFadeBinding(lowered.object, uniforms, spec));
+  }
+  if (bindings.length > 0) {
+    editorWorldState.environmentBindings.set(lowered.id, bindings);
+  }
+}
+
+function disposeEditorEnvironmentBindings() {
+  if (!editorWorldState?.environmentBindings) return;
+  for (const bindings of editorWorldState.environmentBindings.values()) {
+    for (const binding of bindings) binding.dispose();
+  }
+  editorWorldState.environmentBindings.clear();
+}
+
+function syncEditorEnvironmentBindings() {
+  if (!editorWorldState?.environmentBindings?.size) return;
+  const active = editorDomeGradientUniforms()?.active.value === 1;
+  for (const bindings of editorWorldState.environmentBindings.values()) {
+    for (const binding of bindings) {
+      binding.refresh();
+      binding.syncTransform();
+      binding.writeMarker(active, active ? null : 'no-dome-gradient');
+    }
+  }
+}
+
+function domeFadeStateProof() {
+  const state = {};
+  for (const [nodeId, bindings] of editorWorldState?.environmentBindings ||
+    []) {
+    for (const binding of bindings) {
+      if (binding instanceof DomeFadeBinding) {
+        state[nodeId] = binding.root.userData.iwsdkDomeFade ?? null;
+      }
+    }
+  }
+  return state;
 }
 
 function syncEditorLightHelperTransforms() {
@@ -6679,6 +6744,7 @@ function renderEditorWorld() {
   }
   hideCurrentEditorHelpersForRenderOnlyCapture();
   syncEditorLightBindings();
+  syncEditorEnvironmentBindings();
   syncEditorLightHelperTransforms();
   syncInfiniteEditorGrid();
   const startedAt = performance.now();
@@ -8209,6 +8275,7 @@ async function createEditorWorld(session, camera) {
     editorAmbient: ambient,
     editorDirectional: directional,
     editorGrid: grid,
+    environmentBindings: new Map(),
     environmentPreviousState: null,
     frameTimeSamples: [],
     host,
@@ -12800,6 +12867,7 @@ async function init() {
     },
     getContributions: () => editorContributionProof(),
     getAuthoredRenderState: () => authoredRenderStateProof(),
+    getDomeFadeState: () => domeFadeStateProof(),
     getEnvironmentDomeState: () => {
       const camera = editorWorldState?.world?.camera;
       let dome = null;

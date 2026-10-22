@@ -242,12 +242,16 @@ Directional lights emit along local `-Z`. Start from the shown transform or anot
 simple intentional angle and refine it from the render; do not write a look-at solver.
 The common light payloads are `AmbientLight: {color, intensity}`,
 `HemisphereLight: {skyColor, groundColor, intensity}` (there is no `color` field),
-and `PointLight: {color, intensity, distance, decay, castShadow}`. A clean state after
+and `PointLight: {color, intensity, distance, decay, castShadow}`. A floor that should
+have no visible edge gets `"com.iwsdk.components.DomeFade": {"start": 4, "end": 10}`
+on the floor node itself: it fades that node's meshes into the root `DomeGradient`
+between those horizontal distances from the node origin, and does nothing without a
+`DomeGradient`. Do not paste sky GLSL into an `onBeforeCompile`. A clean state after
 the correction is the finish gate; do not query capabilities again merely to confirm
 these established fields.
 
 For this common path, do not read the references or call
-`scene_get_capabilities`: `DomeGradient`, `IBLGradient`, `AmbientLight`,
+`scene_get_capabilities`: `DomeGradient`, `IBLGradient`, `DomeFade`, `AmbientLight`,
 `HemisphereLight`, `DirectionalLight`, `PointLight`, asset nodes,
 `player.transform`, and perspective/orthographic `authoring.views` are established
 schema. Do not write a separate projection or light-aim solver. Choose the initial
