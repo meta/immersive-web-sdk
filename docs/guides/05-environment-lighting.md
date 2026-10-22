@@ -119,9 +119,10 @@ scene JSON:
 
 Environment setup is fully explicit: if the level root has no
 `DomeGradient`/`DomeTexture`, IWSDK renders no authored background; if it has
-no `IBLGradient`/`IBLTexture`, IWSDK supplies no image-based lighting. Starter
-scenes include both gradient components, and you can remove either one
-independently.
+no `IBLGradient`/`IBLTexture`, IWSDK supplies no image-based lighting. The VR
+and Desktop 3D starter scene authors both gradient components; the AR starter
+authors only `IBLGradient`, so no sky covers passthrough. You can remove either
+one independently.
 
 ## Ground Shadows
 

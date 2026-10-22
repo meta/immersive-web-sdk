@@ -1,0 +1,57 @@
+<!--
+  Station label. Plain divs keep these colors in both color schemes.
+-->
+<style>
+  .label {
+    flex-direction: row;
+    align-items: center;
+    gap: 18px;
+    padding-top: 14px;
+    padding-bottom: 14px;
+    padding-left: 16px;
+    padding-right: 30px;
+    border-radius: 26px;
+    border-width: 1px;
+    border-color: #3a3b40;
+    background-color: #232427;
+  }
+
+  .number {
+    width: 46px;
+    height: 46px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 23px;
+    background-color: #f1ece3;
+  }
+
+  .digit {
+    color: #1d1e22;
+    font-size: 24px;
+    font-weight: 700;
+  }
+
+  .text {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .title {
+    color: #fafaf7;
+    font-size: 28px;
+    font-weight: 700;
+  }
+
+  .how {
+    color: #eeeff2;
+    font-size: 27px;
+  }
+</style>
+<div class="label">
+  <div class="number"><span class="digit">3</span></div>
+  <div class="text">
+    <span class="title">Spin</span>
+    <span class="how">Point, then hold to turn it</span>
+  </div>
+</div>

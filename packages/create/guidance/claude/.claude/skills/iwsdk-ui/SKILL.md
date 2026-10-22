@@ -54,8 +54,10 @@ JSON representation.
 - Prefer supported explicit properties over CSS shorthand.
 - Reuse the configured Horizon kit and bundled Lucide icons instead of
   registering replacements in application code.
-- In the stock Horizon kit, assume `<Panel>` renders an opaque light surface;
-  start with dark primary and secondary text unless a preview proves otherwise.
+- In the stock Horizon kit, `<Panel>` renders an opaque surface that follows
+  the color scheme: dark at runtime when `spatialUI.preferredColorScheme` is
+  `dark` (the scaffold default), white in editor previews. Give text a dark
+  color plus a light `:dark` variant, as `public/ui/welcome.uikitml` does.
 - Remote fonts can reflow layout. Use a local font when offline availability is
   a product requirement.
 - Use plain ASCII punctuation in runtime status copy. Do not use em dashes,

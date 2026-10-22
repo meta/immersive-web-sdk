@@ -21,6 +21,24 @@ const PACKAGE_ROOT = path.resolve(
 const REPOSITORY_ROOT = path.resolve(PACKAGE_ROOT, '..', '..');
 const TEMPLATE_ROOT = path.join(PACKAGE_ROOT, 'dist', 'template');
 const npmSource = { getPackageInstallSpec: () => undefined };
+// The accepted starter's blob lifts: 2 mm above the node times the node's
+// scale, which is now ContactShadow.size. Undefined keeps the 2 mm default.
+const STARTER_CONTACT_HEIGHTS: Record<string, number | undefined> = {
+  'grab-plinth-contact': 0.0016,
+  'select-plinth-contact': 0.0016,
+  'spin-plinth-contact': 0.0016,
+  'graphite-cube-contact': 0.00052,
+  'graphite-gem-contact': 0.00048,
+  'graphite-knot-contact': 0.00052,
+  'robot-contact': 0.00074,
+  'graphite-ring-contact': 0.0008,
+  'gallery-set-contact': undefined,
+  'gallery-vase-contact': 0.0011,
+  'sideboard-set-contact': undefined,
+  'floor-lamp-contact': 0.0009,
+};
+// AR tints its blobs black, which only darkens what is behind them.
+const AR_CONTACT_SHADOW_OPACITY = 0.4;
 
 async function listUIKitMLFiles(directory: string): Promise<string[]> {
   const files: string[] = [];
@@ -56,6 +74,8 @@ describe('common starter project files', () => {
       'src/panel.ts',
       'src/robot-component.ts',
       'src/robot.ts',
+      'src/scene-assets/decor.scene-asset.ts',
+      'src/scene-assets/studio.scene-asset.ts',
       'src/vite-env.d.ts',
     ];
     for (const files of outputs) {
@@ -69,6 +89,9 @@ describe('common starter project files', () => {
       ...expectedSourcePaths,
       'vite.config.ts',
       'public/ui/welcome.uikitml',
+      'public/ui/label-grab.uikitml',
+      'public/ui/label-select.uikitml',
+      'public/ui/label-spin.uikitml',
     ];
     for (const filePath of commonPaths) {
       const [first, ...rest] = outputs.map((files) =>
@@ -88,7 +111,7 @@ describe('common starter project files', () => {
     expect(
       JSON.parse(textFile(outputs[0], 'iwsdk.config.json')).world.features
         .spatialUI,
-    ).toEqual({ kit: 'horizon' });
+    ).toEqual({ kit: 'horizon', preferredColorScheme: 'dark' });
     expect(textFile(outputs[0], 'vite.config.ts')).toContain('iwsdkDev()');
     expect(textFile(outputs[0], 'vite.config.ts')).toContain('dedupe:');
     expect(textFile(outputs[0], 'vite.config.ts')).toContain('@pmndrs/uikit');
@@ -226,11 +249,20 @@ describe('common starter project files', () => {
       expect(
         validateSceneDocument(scene, {
           knownAssetIds: [
-            'environment-desk',
-            'plant-sansevieria',
+            'gallery-set',
+            'graphite-cube',
+            'graphite-gem',
+            'graphite-knot',
+            'graphite-ring',
+            'label-grab',
+            'label-select',
+            'label-spin',
+            'plinth',
             'robot',
+            'sideboard-set',
+            'stage',
+            'studio-floor',
             'welcome-panel',
-            'webxr-banner',
           ],
           validateAuthoringWorkflow: false,
         }),
@@ -244,12 +276,78 @@ describe('common starter project files', () => {
       });
       expect(welcomePanel?.components).not.toHaveProperty('PanelDocument');
 
-      expect(
-        scene.nodes.find((node: { id?: string }) => node.id === 'webxr-banner'),
-      ).toMatchObject({
-        content: { asset: 'webxr-banner', type: 'asset' },
-        transform: { position: [0, 1, 1.8], rotationDeg: [0, 180, 0] },
+      expect(findNode(scene.nodes, 'graphite-cube')).toMatchObject({
+        content: { asset: 'graphite-cube', type: 'asset' },
+        components: { DistanceGrabbable: { movementMode: 'MoveFromTarget' } },
       });
+      expect(findNode(scene.nodes, 'graphite-ring')).toMatchObject({
+        components: { DistanceGrabbable: { movementMode: 'RotateAtSource' } },
+      });
+      expect(findNode(scene.nodes, 'robot')?.components).toHaveProperty(
+        'Robot',
+      );
+      expect(findNode(scene.nodes, 'gallery-set') != null).toBe(
+        target !== 'ar',
+      );
+      expect(
+        scene.nodes.find((node: { id?: string }) => node.id === 'studio-floor')
+          ?.components,
+      ).toEqual(
+        target === 'ar'
+          ? undefined
+          : { LocomotionEnvironment: {}, DomeFade: { start: 4, end: 10 } },
+      );
+      const contactNodes = flattenNodes(scene.nodes).filter((node) =>
+        node.id?.endsWith('-contact'),
+      );
+      expect(contactNodes).toHaveLength(target === 'ar' ? 8 : 12);
+      for (const node of contactNodes) {
+        expect(node.content).toBeUndefined();
+        const shadow = node.components?.ContactShadow as ContactShadowPayload;
+        expect(shadow.size).toHaveLength(2);
+        expect(shadow.size?.every((value) => value > 0)).toBe(true);
+        expect(shadow.height, node.id).toBe(STARTER_CONTACT_HEIGHTS[node.id!]);
+        if (target === 'ar') {
+          expect(shadow, node.id).toMatchObject({
+            color: [0, 0, 0, 1],
+            opacity: AR_CONTACT_SHADOW_OPACITY,
+          });
+        } else {
+          expect(shadow, node.id).not.toHaveProperty('color');
+          expect(shadow, node.id).not.toHaveProperty('opacity');
+        }
+      }
+    },
+  );
+
+  it.each(['vr', 'browser'] as const)(
+    'authors the %s studio sky, floor fade and lighting with built-in components',
+    async (target) => {
+      const files = await buildStarterProjectFiles({
+        appName: 'studio-app',
+        configuration: getRecommendedConfiguration(target),
+        language: 'ts',
+        packageSource: npmSource,
+        templateRoot: TEMPLATE_ROOT,
+      });
+      const scene = JSON.parse(
+        textFile(files, 'public/scenes/main.iwsdk.scene.json'),
+      );
+
+      expect(scene.components['com.iwsdk.components.DomeGradient']).toEqual({
+        sky: [0.843, 0.796, 0.882, 1],
+        equator: [0.808, 0.855, 0.91, 1],
+        ground: [0.902, 0.855, 0.82, 1],
+        elevationDeg: 24,
+        azimuthDeg: -31,
+        dither: true,
+      });
+      // 0.45 squared: IBLGradient applies its intensity once since 1.1.0.
+      expect(
+        scene.components['com.iwsdk.components.IBLGradient'].intensity,
+      ).toBe(0.2025);
+      expect(findNode(scene.nodes, 'sky')).toBeUndefined();
+      expect(findNode(scene.nodes, 'shadow-catcher')).toBeUndefined();
     },
   );
 
@@ -269,7 +367,174 @@ describe('common starter project files', () => {
     expect(scene.components).not.toHaveProperty(
       'com.iwsdk.components.DomeGradient',
     );
+    expect(scene.components['com.iwsdk.components.IBLGradient'].intensity).toBe(
+      0.25,
+    );
+    expect(findNode(scene.nodes, 'shadow-catcher')).toEqual({
+      id: 'shadow-catcher',
+      name: 'Shadow Catcher',
+      framingRole: 'support',
+      transform: { position: [0, 0.001, -1.35] },
+      components: { ShadowCatcher: { size: [6, 6], opacity: 0.25 } },
+    });
   });
+
+  it('keeps the bundled environment recipes equal to the starter scenes', async () => {
+    const generate = (target: 'vr' | 'ar') =>
+      buildStarterProjectFiles({
+        appName: `recipe-${target}-app`,
+        configuration: getRecommendedConfiguration(target),
+        language: 'ts',
+        packageSource: npmSource,
+        templateRoot: TEMPLATE_ROOT,
+      });
+    const vrFiles = await generate('vr');
+    const arFiles = await generate('ar');
+    const recipePath =
+      'skills/iwsdk-compose-scene/references/environment-recipes.md';
+    const recipes = textFile(vrFiles, `.claude/${recipePath}`);
+    expect(textFile(vrFiles, `.agents/${recipePath}`)).toBe(recipes);
+    expect(textFile(arFiles, `.claude/${recipePath}`)).toBe(recipes);
+    const section = (title: string) => {
+      const start = recipes.indexOf(`\n## ${title}\n`);
+      expect(start, title).toBeGreaterThan(-1);
+      const end = recipes.indexOf('\n## ', start + 1);
+      return recipes.slice(start, end < 0 ? undefined : end);
+    };
+    const payload = (title: string) => {
+      const json = /```json\n([\s\S]*?)\n```/u.exec(section(title))?.[1];
+      expect(json, title).toBeDefined();
+      return JSON.parse(json!) as {
+        components: unknown;
+        environment: unknown;
+        nodes: Array<SceneNode & Record<string, unknown>>;
+      };
+    };
+    const sceneOf = (files: typeof vrFiles) =>
+      JSON.parse(textFile(files, 'public/scenes/main.iwsdk.scene.json'));
+    const vrScene = sceneOf(vrFiles);
+    const arScene = sceneOf(arFiles);
+
+    // Root components, environment, and every recipe node the starter has.
+    for (const [title, scene, examples] of [
+      ['Clay Studio', vrScene, []],
+      ['AR Passthrough', arScene, ['plinth']],
+    ] as const) {
+      const recipe = payload(title);
+      expect(recipe.components, title).toEqual(scene.components);
+      expect(recipe.environment, title).toEqual(scene.environment);
+      const unmatched: string[] = [];
+      for (const node of recipe.nodes) {
+        const starterNode = findNode(scene.nodes, node.id!) as
+          | Record<string, unknown>
+          | undefined;
+        if (starterNode == null) {
+          unmatched.push(node.id!);
+          continue;
+        }
+        for (const key of [
+          'framingRole',
+          'content',
+          'transform',
+          'components',
+        ]) {
+          if (key in node) {
+            expect(starterNode[key], `${title} ${node.id} ${key}`).toEqual(
+              node[key],
+            );
+          }
+        }
+      }
+      expect(unmatched, title).toEqual(examples);
+    }
+
+    // The Clay Studio table lists the starter's contact nodes exactly.
+    const vrContacts = contactNodesByParent(vrScene.nodes);
+    const rows = [
+      ...section('Clay Studio').matchAll(
+        /^\| `([\w-]+-contact)` +\| `([\w-]+)` +\| `(\[[^`]+\])` +\| `(\[[^`]+\])` +\| (?:`([\d.]+)`|default) +\|$/gmu,
+      ),
+    ];
+    expect(rows.map((row) => row[1]).sort()).toEqual(
+      [...vrContacts.keys()].sort(),
+    );
+    for (const [, id, parent, position, size, height] of rows) {
+      const contact = vrContacts.get(id)!;
+      expect(contact.parent, id).toBe(parent);
+      expect(contact.node.transform, id).toEqual({
+        position: JSON.parse(position),
+      });
+      expect(contact.node.components, id).toEqual({
+        ContactShadow: {
+          size: JSON.parse(size),
+          ...(height == null ? {} : { height: Number(height) }),
+        },
+      });
+    }
+
+    // AR keeps the same contact nodes and tints them like the recipe's plinth.
+    const arPlinthShadow = payload('AR Passthrough').nodes.find(
+      (node) => node.id === 'plinth',
+    )?.components?.ContactShadow as ContactShadowPayload;
+    expect(arPlinthShadow).toMatchObject({
+      color: [0, 0, 0, 1],
+      opacity: AR_CONTACT_SHADOW_OPACITY,
+    });
+    const arContacts = contactNodesByParent(arScene.nodes);
+    expect(arContacts.size).toBe(8);
+    for (const [id, { parent, node }] of arContacts) {
+      const vr = vrContacts.get(id);
+      expect(vr, id).toBeDefined();
+      expect(parent, id).toBe(vr!.parent);
+      expect(node.transform, id).toEqual(vr!.node.transform);
+      const { color, opacity, ...shape } = node.components
+        ?.ContactShadow as ContactShadowPayload;
+      expect(shape, id).toEqual(vr!.node.components?.ContactShadow);
+      expect({ color, opacity }, id).toEqual({
+        color: arPlinthShadow.color,
+        opacity: arPlinthShadow.opacity,
+      });
+    }
+  });
+
+  it.each(['ts', 'js'] as const)(
+    'keeps the %s starter on built-in environment systems',
+    async (language) => {
+      const files = await buildStarterProjectFiles({
+        appName: 'built-in-environment-app',
+        configuration: getRecommendedConfiguration('vr'),
+        language,
+        packageSource: npmSource,
+        templateRoot: TEMPLATE_ROOT,
+      });
+      const sources = files.filter(
+        (file) =>
+          file.path.startsWith('src/') && /\.(?:js|ts)$/u.test(file.path),
+      );
+      expect(sources.map((file) => file.path)).toContain(
+        `src/scene-assets/studio.scene-asset.${language}`,
+      );
+      for (const file of sources) {
+        const source = textFile(files, file.path);
+        for (const banned of [
+          'ShaderMaterial',
+          'onBeforeCompile',
+          'CanvasTexture',
+          'BackSide',
+          'ShadowMaterial',
+        ]) {
+          expect(source, `${file.path} uses ${banned}`).not.toContain(banned);
+        }
+        // Asset modules load in the editor realm too; src/index.* may use
+        // the DOM.
+        if (/^src\/(?:assets\.|scene-assets\/)/u.test(file.path)) {
+          expect(source, `${file.path} uses the DOM`).not.toMatch(
+            /\bdocument\.|createElement\(/u,
+          );
+        }
+      }
+    },
+  );
 
   it('keeps static starter composition out of the application entry point', async () => {
     const files = await buildStarterProjectFiles({
@@ -283,7 +548,12 @@ describe('common starter project files', () => {
 
     expect(index).not.toContain('createTransformEntity');
     expect(index).not.toContain('PlaneGeometry');
-    expect(textFile(files, 'src/assets.ts')).toContain("'webxr-banner'");
+    expect(textFile(files, 'src/assets.ts')).toContain(
+      "from './scene-assets/studio.scene-asset.js'",
+    );
+    expect(textFile(files, 'src/assets.ts')).toContain(
+      "from './scene-assets/decor.scene-asset.js'",
+    );
   });
 
   it('always adapts canonical guidance to every supported coding harness', async () => {
@@ -474,6 +744,53 @@ describe('common starter project files', () => {
     }
   });
 });
+
+type SceneNode = {
+  id?: string;
+  content?: unknown;
+  transform?: unknown;
+  components?: Record<string, unknown>;
+  children?: SceneNode[];
+};
+
+type ContactShadowPayload = {
+  size?: number[];
+  opacity?: number;
+  color?: number[];
+  height?: number;
+};
+
+/** Every `-contact` node with the id of its parent node. */
+function contactNodesByParent(
+  nodes: SceneNode[],
+  parent?: string,
+  found = new Map<string, { parent?: string; node: SceneNode }>(),
+): Map<string, { parent?: string; node: SceneNode }> {
+  for (const node of nodes) {
+    if (node.id?.endsWith('-contact')) {
+      found.set(node.id, { parent, node });
+    }
+    contactNodesByParent(node.children ?? [], node.id, found);
+  }
+  return found;
+}
+
+function flattenNodes(nodes: SceneNode[]): SceneNode[] {
+  return nodes.flatMap((node) => [node, ...flattenNodes(node.children ?? [])]);
+}
+
+function findNode(nodes: SceneNode[], id: string): SceneNode | undefined {
+  for (const node of nodes) {
+    if (node.id === id) {
+      return node;
+    }
+    const child = findNode(node.children ?? [], id);
+    if (child) {
+      return child;
+    }
+  }
+  return undefined;
+}
 
 function textFile(
   files: Awaited<ReturnType<typeof buildStarterProjectFiles>>,

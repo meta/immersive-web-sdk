@@ -58,7 +58,8 @@ editor import the exact same catalog.
 
 ### Asset Manifest Structure
 
-In `src/assets.ts`:
+A catalog in `src/assets.ts` maps each asset ID to its URL, type and loading
+priority. For example:
 
 ```typescript
 import { AssetType, defineAssets } from '@iwsdk/core';
@@ -72,9 +73,9 @@ export default defineAssets({
     type: AssetType.GLTF,
     priority: 'lazy',
   },
-  webxr: {
-    url: publicAssetUrl('textures/webxr.png'),
-    type: AssetType.Texture,
+  'welcome-panel': {
+    url: publicAssetUrl('ui/welcome.uikitml'),
+    type: AssetType.UIKitML,
     priority: 'critical',
   },
   chimeSound: {
@@ -198,7 +199,7 @@ import {
   SRGBColorSpace,
 } from '@iwsdk/core';
 
-// In your asset manifest (already in your starter app)
+// In your asset manifest, with your image saved as public/textures/webxr.png
 const assets = {
   webxr: {
     url: publicAssetUrl('textures/webxr.png'),

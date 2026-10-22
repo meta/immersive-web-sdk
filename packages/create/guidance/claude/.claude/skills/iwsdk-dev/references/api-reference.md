@@ -904,7 +904,9 @@ world.exitXR();
 
 Background and image-based lighting are authored explicitly with dome and IBL
 components on the level root. IWSDK does not synthesize missing environment
-components; starter scenes include gradient defaults.
+components; the VR and Desktop 3D starter scene authors `DomeGradient` and
+`IBLGradient`, and the AR starter authors only `IBLGradient` so no sky covers
+passthrough.
 
 ### Post-Creation Initialization Sequence
 

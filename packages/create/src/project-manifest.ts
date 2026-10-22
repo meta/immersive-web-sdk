@@ -28,7 +28,7 @@ export function createProjectManifest(
     ? {
         useWorker: featureFlags.locomotionUseWorker !== false,
         ...(target === 'browser'
-          ? { initialPlayerPosition: [-4, 0, -6] as [number, number, number] }
+          ? { initialPlayerPosition: [0, 0, 1] as [number, number, number] }
           : {}),
         ...(featureFlags.locomotionBrowserControls
           ? { browserControls: true }
@@ -54,20 +54,15 @@ export function createProjectManifest(
             },
       input: { canvasPointerEvents: true },
       render: {
+        fov: 70,
         near: 0.001,
         far: 200,
+        // Camera poses are relative to the player rig. The browser player starts
+        // 1 m back, so every target frames the starter from the same spot.
         camera:
           target === 'browser'
-            ? {
-                position: [0, 1.5, 0],
-                lookAt: [4, 1.1, 4.2],
-              }
-            : target === 'ar'
-              ? { position: [0, 1, 0.5] }
-              : {
-                  position: [-4, 1.5, -6],
-                  lookAt: [0, 1.1, -1.8],
-                },
+            ? { position: [0, 1.6, 0], lookAt: [0, 0.95, -2.95] }
+            : { position: [0, 1.6, 1], lookAt: [0, 0.95, -1.95] },
       },
       features: {
         locomotion,
@@ -75,7 +70,7 @@ export function createProjectManifest(
         physics: featureFlags.physicsEnabled,
         sceneUnderstanding: featureFlags.sceneUnderstandingEnabled,
         environmentRaycast: featureFlags.environmentRaycastEnabled,
-        spatialUI: { kit: 'horizon' },
+        spatialUI: { kit: 'horizon', preferredColorScheme: 'dark' },
       },
     },
     dev: {

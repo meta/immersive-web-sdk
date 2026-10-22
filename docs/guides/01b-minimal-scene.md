@@ -32,9 +32,10 @@ World.create(sceneContainer, projectOptions).then((world) => {
   );
 
   // X is left/right, Y is down/up, and negative Z is forward from the
-  // starter origin. This places the cube below the welcome panel, two metres
-  // away, so both remain visible when you enter XR.
-  cube.position.set(0, 0.75, -2);
+  // starter origin. This places the cube at eye height, two metres ahead and
+  // a little to the left of the welcome panel, so both remain visible when
+  // you enter XR.
+  cube.position.set(-1.2, 1.6, -2);
 
   // Register the Three.js object with IWSDK's ECS and level lifecycle.
   world.createTransformEntity(cube);
@@ -51,7 +52,8 @@ Run the project:
 npm run dev
 ```
 
-The blue cube should appear in front of the starting position. The starter
+The blue cube should appear ahead and to the left of the starting position,
+above the starter's first station. The starter
 robot and welcome panel are examples rather than required framework objects;
 you can remove them when you replace their scene nodes and system registrations
 with your own content.

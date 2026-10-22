@@ -37,24 +37,17 @@ describe('starter project manifest', () => {
       expect(manifest.assets).toEqual({ module: './src/assets' });
       expect(manifest.components).toEqual({ module: './src/components' });
       expect(manifest.dev?.emulator?.iwer).toBeUndefined();
+      expect(manifest.world.render?.fov).toBe(70);
       expect(manifest.world.render?.camera).toEqual(
         target === 'browser'
-          ? {
-              position: [0, 1.5, 0],
-              lookAt: [4, 1.1, 4.2],
-            }
-          : target === 'ar'
-            ? { position: [0, 1, 0.5] }
-            : {
-                position: [-4, 1.5, -6],
-                lookAt: [0, 1.1, -1.8],
-              },
+          ? { position: [0, 1.6, 0], lookAt: [0, 0.95, -2.95] }
+          : { position: [0, 1.6, 1], lookAt: [0, 0.95, -1.95] },
       );
       expect(
         typeof manifest.world.features?.locomotion === 'object'
           ? manifest.world.features.locomotion.initialPlayerPosition
           : undefined,
-      ).toEqual(target === 'browser' ? [-4, 0, -6] : undefined);
+      ).toEqual(target === 'browser' ? [0, 0, 1] : undefined);
     },
   );
 

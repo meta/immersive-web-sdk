@@ -205,15 +205,18 @@ my-iwsdk-app/
 │   ├── assets.ts        # Complete runtime/editor asset catalog
 │   ├── components.ts    # Custom component declarations
 │   ├── robot.ts         # Example custom component and system
-│   └── panel.ts         # UI panel interaction system
+│   ├── panel.ts         # UI panel interaction system
+│   └── scene-assets/
+│       ├── studio.scene-asset.ts # Starter studio props built in code
+│       └── decor.scene-asset.ts  # Background furniture built in code
 ├── public/
 │   ├── scenes/
 │   │   └── main.iwsdk.scene.json # Authored hierarchy and component values
 │   ├── audio/           # Audio files (.mp3, .wav, etc.)
 │   │   └── chime.mp3
-│   ├── textures/        # Standalone texture files
 │   └── ui/
-│       └── welcome.uikitml  # Runtime-loaded spatial UI markup
+│       ├── welcome.uikitml  # Runtime-loaded spatial UI markup
+│       └── label-*.uikitml  # Station labels
 ├── package.json         # Dependencies and scripts
 ├── tsconfig.json        # TypeScript configuration
 ├── vite.config.ts       # Build configuration with IWSDK plugins
@@ -231,7 +234,9 @@ my-iwsdk-app/
 - **`src/assets.ts`** / **`src/components.ts`**: The exact catalogs consumed by
   both runtime and editor.
 - **`src/robot.ts`** & **`src/panel.ts`**: Example custom components and systems showing how to create interactive behaviors.
-- **`public/ui/welcome.uikitml`**: Spatial UI markup parsed directly by the runtime for the 3D interface panel. We'll learn more about UIKitML in [Chapter 10: Spatial UI with UIKitML](./10-spatial-ui-uikitml.md).
+- **`src/scene-assets/studio.scene-asset.ts`**: The starter's floor, stage, plinths, and the dark pieces you can grab and spin, built in code so the starter downloads no extra models. Delete them together with their `src/assets.ts` entries and scene nodes when you replace the starter content. The sky, the floor's fade into it, and the soft shadows are not code: they are the `DomeGradient` on the scene root and the `DomeFade` and `ContactShadow` (in AR, `ShadowCatcher`) components on scene nodes, which you edit in the editor.
+- **`src/scene-assets/decor.scene-asset.ts`**: The marble sculpture, sideboard, and floor lamp behind the VR and Desktop 3D studio, also built in code. Delete this file, the `gallery-set` and `sideboard-set` entries in `src/assets.ts`, and their scene nodes to clear the background.
+- **`public/ui/welcome.uikitml`**: Spatial UI markup parsed directly by the runtime for the 3D interface panel. The `label-*.uikitml` files are the numbered station labels. We'll learn more about UIKitML in [Chapter 10: Spatial UI with UIKitML](./10-spatial-ui-uikitml.md).
 - **`public/scenes/main.iwsdk.scene.json`**: Static scene hierarchy,
   transforms, assets, environment, and component values.
 - **`public/audio/`**: Audio files used for sound effects and spatial audio.

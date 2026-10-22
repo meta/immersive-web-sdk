@@ -1,54 +1,57 @@
 <!--
-  Panel, Divider, Button, ButtonIcon, and ButtonLabel come from the bundled
-  Horizon kit. RectangleGoggles and LogIn are bundled Lucide icon components.
+  Panel, Button, ButtonIcon, and ButtonLabel come from the bundled Horizon kit.
+  RectangleGoggles and LogIn are bundled Lucide icon components. The :dark
+  styles apply because iwsdk.config.json prefers the dark color scheme.
 -->
 <style>
   .panel-root {
     flex-direction: column;
-    width: 344px;
+    width: 420px;
   }
 
   .panel-content {
-    align-items: center;
     flex-direction: column;
-    padding-top: 16px;
-    padding-left: 24px;
-    padding-right: 24px;
+    gap: 7px;
+    padding: 22px;
+  }
+
+  .eyebrow {
+    color: #6b5a00;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 1.4px;
+  }
+
+  .eyebrow:dark {
+    color: #f5d90a;
   }
 
   .heading {
-    height: 48px;
-    text-align: center;
-    font-size: 24px;
+    color: #1c1d20;
+    font-size: 30px;
     font-weight: 700;
-    line-height: 24px;
-    letter-spacing: -0.5px;
-    color: #272727;
+    line-height: 36px;
   }
 
   .heading:dark {
-    color: rgba(255, 255, 255, 0.9);
+    color: #fafaf7;
   }
 
-  .sub-heading {
-    color: #272727;
-    font-size: 14px;
-    font-weight: 500;
-    line-height: 18px;
-    width: 100%;
-    margin-top: 10px;
+  .body {
+    color: #3a3b40;
+    font-size: 20px;
+    line-height: 27px;
   }
 
-  .sub-heading:dark {
-    color: rgba(255, 255, 255, 0.9);
+  .body:dark {
+    color: #dddfe3;
   }
 
   .button {
     justify-content: flex-start;
-    margin-left: 24px;
-    margin-right: 24px;
-    margin-top: 16px;
-    margin-bottom: 24px;
+    margin-left: 22px;
+    margin-right: 22px;
+    margin-bottom: 22px;
   }
 
   .button-label {
@@ -57,12 +60,10 @@
 </style>
 <Panel class="panel-root">
   <div class="panel-content">
+    <div class="eyebrow">IMMERSIVE WEB SDK</div>
     <div class="heading">Hello, Immersive Web!</div>
-    <Divider></Divider>
-    <div class="sub-heading">
-      Build interactive browser, mixed-reality, and virtual-reality experiences
-      with Immersive Web SDK.
-    </div>
+    <div class="body">Try each station around you,</div>
+    <div class="body">then make this scene your own.</div>
   </div>
   <Button id="xr-button" class="button">
     <ButtonIcon>

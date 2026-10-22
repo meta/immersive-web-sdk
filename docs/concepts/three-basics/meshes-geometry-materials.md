@@ -239,8 +239,10 @@ const mesh = new Mesh(new BoxGeometry(1, 1, 1), materials);
 
 ### Authored Lighting
 
-IWSDK does not inject lighting implicitly. Generated starter scenes explicitly
-declare a gradient dome and gradient IBL on the level root:
+IWSDK does not inject lighting implicitly. Scenes declare a gradient dome and
+gradient IBL explicitly on the level root, as the generated VR and Desktop 3D
+starter does (the AR starter declares only the IBL, so no sky covers
+passthrough):
 
 ```json
 {

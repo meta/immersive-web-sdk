@@ -22,9 +22,9 @@ const DEFAULT_EVIDENCE_DIR = path.join(
 );
 const TARGETS = ['generated-vr', 'generated-ar', 'generated-browser'];
 const MUTATION_IDS = {
-  'generated-ar': 'scaffold-added-plant',
+  'generated-ar': 'scaffold-added-robot',
   'generated-browser': 'scaffold-added-group',
-  'generated-vr': 'scaffold-added-plant',
+  'generated-vr': 'scaffold-added-robot',
 };
 const REQUIRED_FILES = [
   'app.png',

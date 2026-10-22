@@ -181,13 +181,13 @@ page:
    <kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd> drive the left
    thumbstick. The arrow keys drive the right thumbstick.
 4. In play mode, left mouse is the right-controller **trigger/select** and
-   right mouse is the right-controller **grip/squeeze**. The starter plant's
+   right mouse is the right-controller **grip/squeeze**. The starter cube's
    `DistanceGrabbable` uses trigger/select; near-field `OneHandGrabbable` and
    `TwoHandsGrabbable` interactions use grip/squeeze.
 5. Outside play mode, click a controller's **Trig** or **Grip** value for a
    momentary press. Use the adjacent pin button to latch that value until you
    release it. Open the gear button to inspect or remap keyboard bindings.
-6. To move the starter plant, leave play mode, latch **Trig**, and drag the
+6. To move the starter cube, leave play mode, latch **Trig**, and drag the
    controller's transform handle in the scene. Use **Grip** instead when testing
    a near-field grabbable. Click the handle to switch between translation and
    rotation, then release the latch to drop the object.

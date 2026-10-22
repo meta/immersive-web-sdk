@@ -204,11 +204,13 @@ largest empty region above or beside the preserved composition.
 Use an opaque or strongly contrasting panel surface. Primary copy must be dark
 on light or light on dark; white or pale text on translucent white, sky, or
 another bright background fails even when the glyphs are technically present.
-For the scaffold's Horizon `<Panel>`, assume the kit's opaque white surface
-wins over a custom root `background-color`; use dark primary and secondary text
-on the first attempt. Use light text only after a compact runtime preview proves
-the actual rendered panel surface is dark. Do not spend a restart discovering
-white-on-white text that the stock kit behavior already predicts.
+For the scaffold's Horizon `<Panel>`, assume the kit's opaque surface wins
+over a custom root `background-color`. That surface follows the color scheme:
+the runtime renders it dark because `iwsdk.config.json` prefers `dark`, while
+editor previews render it white. Give every text class a dark color plus a light
+`:dark` variant, as `public/ui/welcome.uikitml` does, so copy reads on both.
+Do not spend a restart discovering dark-on-dark or white-on-white text that the
+stock kit behavior already predicts.
 
 Reuse the established app panel scale and spacing when available. In the stock
 starter-scale composition, a new front-facing UIKitML panel should begin at

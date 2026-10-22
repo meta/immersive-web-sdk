@@ -433,9 +433,13 @@ describe('create-iwsdk scene flow E2E', () => {
           for (const demoPath of [
             path.join('src', `robot.${language}`),
             path.join('src', `panel.${language}`),
+            path.join('src', 'scene-assets', `studio.scene-asset.${language}`),
+            path.join('src', 'scene-assets', `decor.scene-asset.${language}`),
             path.join('public', 'ui', 'welcome.uikitml'),
+            path.join('public', 'ui', 'label-grab.uikitml'),
+            path.join('public', 'ui', 'label-select.uikitml'),
+            path.join('public', 'ui', 'label-spin.uikitml'),
             path.join('public', 'audio'),
-            path.join('public', 'textures'),
           ]) {
             await expect(
               stat(path.join(appRoot, demoPath)),
@@ -1033,13 +1037,13 @@ async function smokeGeneratedAppEditorFlow({
   const originalScene = JSON.parse(
     await readFile(path.join(appRoot, scenePath), 'utf8'),
   ) as { assets?: unknown[]; nodes?: unknown[] };
-  const expectedNodeCount = (originalScene.nodes?.length ?? 0) + 1;
+  // The editor status counts nested nodes too.
+  const expectedNodeCount =
+    flattenSceneNodes(originalScene.nodes ?? []).length + 1;
   const addedNodeId =
-    target === 'browser' ? 'scaffold-added-group' : 'scaffold-added-plant';
+    target === 'browser' ? 'scaffold-added-group' : 'scaffold-added-robot';
   const assetIds = getSceneAssetIds(originalScene);
-  const sharedAssetIds = assetIds.filter((assetId) =>
-    ['environment-desk', 'plant-sansevieria', 'robot'].includes(assetId),
-  );
+  const sharedAssetIds = assetIds.filter((assetId) => assetId === 'robot');
   const evidenceDir =
     CREATE_E2E_EVIDENCE_DIR == null || language !== 'ts'
       ? undefined
@@ -1151,11 +1155,16 @@ async function smokeGeneratedAppEditorFlow({
       webgl: true,
       worldReady: true,
     });
-    const editorScreenshotStats = await getPageScreenshotStats(
+    // The workspace can report Saved before its runtime iframe presents a
+    // frame. Until it does, AR's transparent canvas shows the workspace
+    // background, which with the toolbar already samples about a dozen
+    // colors, so require more than the app page does.
+    const editorScreenshotStats = await waitForNonblankScreenshot(
       editorPage,
       evidenceDir == null ? undefined : path.join(evidenceDir, 'editor.png'),
+      { minUniqueColors: 17 },
     );
-    expect(editorScreenshotStats.uniqueColors).toBeGreaterThan(8);
+    expect(editorScreenshotStats.uniqueColors).toBeGreaterThan(16);
 
     const toolResult = await editorPage.evaluate(async (experienceTarget) => {
       const runtime = (window as any).IWSDK_SCENE_EDITOR.runtime;
@@ -1168,15 +1177,15 @@ async function smokeGeneratedAppEditorFlow({
             }
           : {
               content: {
-                asset: 'plant-sansevieria',
+                asset: 'robot',
                 type: 'asset',
               },
-              id: 'scaffold-added-plant',
-              name: 'Scaffold Added Plant',
+              id: 'scaffold-added-robot',
+              name: 'Scaffold Added Robot',
               transform: {
-                position: [0.25, 0.2, -1.25],
-                rotationDeg: [0, 20, 0],
-                scale: 1.1,
+                position: [0.45, 0.28, -0.7],
+                rotationDeg: [0, -20, 0],
+                scale: 0.6,
               },
             };
       await runtime.dispatch('scene_add_node', {
@@ -1277,12 +1286,12 @@ async function smokeGeneratedAppEditorFlow({
             })
           : expect.objectContaining({
               content: {
-                asset: 'plant-sansevieria',
+                asset: 'robot',
                 type: 'asset',
               },
               id: addedNodeId,
               transform: expect.objectContaining({
-                position: [0.25, 0.2, -1.25],
+                position: [0.45, 0.28, -0.7],
               }),
             }),
       ]),
@@ -1995,11 +2004,11 @@ async function getPageScreenshotStats(
 async function waitForNonblankScreenshot(
   page: any,
   screenshotPath?: string,
-  timeoutMs = 30000,
+  { minUniqueColors = 9, timeoutMs = 30000 } = {},
 ): Promise<{ sampledPixels: number; uniqueColors: number }> {
   const deadline = Date.now() + timeoutMs;
   let stats = await getPageScreenshotStats(page, screenshotPath);
-  while (stats.uniqueColors <= 8 && Date.now() < deadline) {
+  while (stats.uniqueColors < minUniqueColors && Date.now() < deadline) {
     await page.waitForTimeout(250);
     stats = await getPageScreenshotStats(page, screenshotPath);
   }

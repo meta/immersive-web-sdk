@@ -256,7 +256,9 @@ on the floor (origin at floor contact, size a little wider than the footprint). 
 AR, add one component-only node with `ShadowCatcher: {size, opacity}` at floor height;
 it shows the shadows of `castShadow` content only when `environment.shadows` is true
 and a light has `castShadow`. `ContactShadow` and `ShadowCatcher` are established
-schema too.
+schema too. For a complete look to copy (the starter's tilted clay-studio sky
+with a fading floor, a default sky, or AR passthrough grounding), use
+[environment-recipes.md](references/environment-recipes.md).
 
 For this common path, do not read the references or call
 `scene_get_capabilities`: `DomeGradient`, `IBLGradient`, `DomeFade`, `AmbientLight`,

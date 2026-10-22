@@ -3,61 +3,348 @@
   "units": "meters",
   "components": {
     "com.iwsdk.components.IBLGradient": {
-      "sky": [0.6902, 0.749, 0.7843, 1],
-      "equator": [0.6584, 0.7084, 0.7913, 1],
-      "ground": [0.807, 0.7758, 0.7454, 1],
-      "intensity": 1
+      "sky": [0.96, 0.94, 0.9, 1],
+      "equator": [0.8, 0.76, 0.7, 1],
+      "ground": [0.46, 0.42, 0.38, 1],
+      "intensity": 0.25
     }
+  },
+  "environment": {
+    "toneMapping": "aces",
+    "exposure": 1,
+    "shadows": true,
+    "shadowMapType": "pcf"
   },
   "resources": {},
   "nodes": [
     {
-      "id": "plant-sansevieria",
-      "name": "Plant Sansevieria",
-      "metadata": {
-        "iwsdk.validation": {
-          "allowFloating": true
-        }
-      },
-      "content": {
-        "type": "asset",
-        "asset": "plant-sansevieria"
-      },
+      "id": "shadow-catcher",
+      "name": "Shadow Catcher",
+      "framingRole": "support",
       "transform": {
-        "position": [1.2, 0.2, -1.8],
-        "scale": 2
+        "position": [0, 0.001, -1.35]
       },
       "components": {
-        "RayInteractable": {},
-        "DistanceGrabbable": {
-          "movementMode": "MoveFromTarget"
+        "ShadowCatcher": {
+          "size": [6, 6],
+          "opacity": 0.25
         }
       }
     },
     {
-      "id": "robot",
-      "name": "Robot",
-      "metadata": {
-        "iwsdk.validation": {
-          "allowFloating": true
-        }
-      },
+      "id": "grab-plinth",
+      "name": "Grab Plinth",
       "content": {
         "type": "asset",
-        "asset": "robot"
+        "asset": "plinth",
+        "castShadow": true,
+        "receiveShadow": true
       },
       "transform": {
-        "position": [-1.2, 0.4, -1.8]
+        "position": [-0.9543, 0, -1.1214],
+        "rotationDeg": [0, 30, 0]
       },
-      "components": {
-        "AudioSource": {
-          "src": "./audio/chime.mp3",
-          "maxInstances": 3,
-          "playbackMode": "fade-restart"
+      "children": [
+        {
+          "id": "grab-plinth-contact",
+          "name": "Contact Shadow",
+          "transform": {
+            "position": [0, 0.002, 0]
+          },
+          "components": {
+            "ContactShadow": {
+              "size": [0.8, 0.8],
+              "opacity": 0.4,
+              "color": [0, 0, 0, 1],
+              "height": 0.0016
+            }
+          }
         },
-        "RayInteractable": {},
-        "Robot": {}
-      }
+        {
+          "id": "graphite-cube",
+          "name": "Graphite Cube",
+          "content": {
+            "type": "asset",
+            "asset": "graphite-cube",
+            "castShadow": true,
+            "receiveShadow": true
+          },
+          "transform": {
+            "position": [-0.25, 0.998, -0.03],
+            "rotationDeg": [0, 20, 0],
+            "scale": 1.2
+          },
+          "components": {
+            "RayInteractable": {},
+            "DistanceGrabbable": {
+              "movementMode": "MoveFromTarget"
+            }
+          }
+        },
+        {
+          "id": "graphite-cube-contact",
+          "name": "Contact Shadow",
+          "transform": {
+            "position": [-0.25, 0.921, -0.03]
+          },
+          "components": {
+            "ContactShadow": {
+              "size": [0.26, 0.26],
+              "opacity": 0.4,
+              "color": [0, 0, 0, 1],
+              "height": 0.00052
+            }
+          }
+        },
+        {
+          "id": "graphite-gem",
+          "name": "Graphite Gem",
+          "content": {
+            "type": "asset",
+            "asset": "graphite-gem",
+            "castShadow": true,
+            "receiveShadow": true
+          },
+          "transform": {
+            "position": [0, 1.006, -0.03],
+            "rotationDeg": [15, 0, 10],
+            "scale": 1.2
+          },
+          "components": {
+            "RayInteractable": {},
+            "DistanceGrabbable": {
+              "movementMode": "MoveFromTarget"
+            }
+          }
+        },
+        {
+          "id": "graphite-gem-contact",
+          "name": "Contact Shadow",
+          "transform": {
+            "position": [0, 0.921, -0.03]
+          },
+          "components": {
+            "ContactShadow": {
+              "size": [0.24, 0.24],
+              "opacity": 0.4,
+              "color": [0, 0, 0, 1],
+              "height": 0.00048
+            }
+          }
+        },
+        {
+          "id": "graphite-knot",
+          "name": "Graphite Knot",
+          "content": {
+            "type": "asset",
+            "asset": "graphite-knot",
+            "castShadow": true,
+            "receiveShadow": true
+          },
+          "transform": {
+            "position": [0.25, 1.02, -0.03],
+            "rotationDeg": [0, -30, 0],
+            "scale": 0.74
+          },
+          "components": {
+            "RayInteractable": {},
+            "DistanceGrabbable": {
+              "movementMode": "MoveFromTarget"
+            }
+          }
+        },
+        {
+          "id": "graphite-knot-contact",
+          "name": "Contact Shadow",
+          "transform": {
+            "position": [0.25, 0.921, -0.03]
+          },
+          "components": {
+            "ContactShadow": {
+              "size": [0.26, 0.26],
+              "opacity": 0.4,
+              "color": [0, 0, 0, 1],
+              "height": 0.00052
+            }
+          }
+        },
+        {
+          "id": "grab-label",
+          "name": "Grab Label",
+          "content": {
+            "type": "asset",
+            "asset": "label-grab"
+          },
+          "transform": {
+            "position": [0, 0.94, 0.358],
+            "rotationDeg": [-32, 0, 0],
+            "scale": 0.12
+          }
+        }
+      ]
+    },
+    {
+      "id": "select-plinth",
+      "name": "Select Plinth",
+      "content": {
+        "type": "asset",
+        "asset": "plinth",
+        "castShadow": true,
+        "receiveShadow": true
+      },
+      "transform": {
+        "position": [0, 0, -1.5]
+      },
+      "children": [
+        {
+          "id": "select-plinth-contact",
+          "name": "Contact Shadow",
+          "transform": {
+            "position": [0, 0.002, 0]
+          },
+          "components": {
+            "ContactShadow": {
+              "size": [0.8, 0.8],
+              "opacity": 0.4,
+              "color": [0, 0, 0, 1],
+              "height": 0.0016
+            }
+          }
+        },
+        {
+          "id": "robot",
+          "name": "Robot",
+          "metadata": {
+            "iwsdk.validation": {
+              "allowFloating": true
+            }
+          },
+          "content": {
+            "type": "asset",
+            "asset": "robot",
+            "castShadow": true
+          },
+          "transform": {
+            "position": [0, 1.2, -0.02],
+            "scale": 0.6
+          },
+          "components": {
+            "AudioSource": {
+              "src": "./audio/chime.mp3",
+              "maxInstances": 3,
+              "playbackMode": "fade-restart"
+            },
+            "RayInteractable": {},
+            "Robot": {}
+          }
+        },
+        {
+          "id": "robot-contact",
+          "name": "Contact Shadow",
+          "transform": {
+            "position": [0, 0.921, -0.02]
+          },
+          "components": {
+            "ContactShadow": {
+              "size": [0.37, 0.37],
+              "opacity": 0.4,
+              "color": [0, 0, 0, 1],
+              "height": 0.00074
+            }
+          }
+        },
+        {
+          "id": "select-label",
+          "name": "Select Label",
+          "content": {
+            "type": "asset",
+            "asset": "label-select"
+          },
+          "transform": {
+            "position": [0, 0.94, 0.358],
+            "rotationDeg": [-32, 0, 0],
+            "scale": 0.12
+          }
+        }
+      ]
+    },
+    {
+      "id": "spin-plinth",
+      "name": "Spin Plinth",
+      "content": {
+        "type": "asset",
+        "asset": "plinth",
+        "castShadow": true,
+        "receiveShadow": true
+      },
+      "transform": {
+        "position": [0.9543, 0, -1.1214],
+        "rotationDeg": [0, -30, 0]
+      },
+      "children": [
+        {
+          "id": "spin-plinth-contact",
+          "name": "Contact Shadow",
+          "transform": {
+            "position": [0, 0.002, 0]
+          },
+          "components": {
+            "ContactShadow": {
+              "size": [0.8, 0.8],
+              "opacity": 0.4,
+              "color": [0, 0, 0, 1],
+              "height": 0.0016
+            }
+          }
+        },
+        {
+          "id": "graphite-ring",
+          "name": "Graphite Ring",
+          "content": {
+            "type": "asset",
+            "asset": "graphite-ring",
+            "castShadow": true,
+            "receiveShadow": true
+          },
+          "transform": {
+            "position": [0, 1.165, -0.02]
+          },
+          "components": {
+            "RayInteractable": {},
+            "DistanceGrabbable": {
+              "movementMode": "RotateAtSource"
+            }
+          }
+        },
+        {
+          "id": "graphite-ring-contact",
+          "name": "Contact Shadow",
+          "transform": {
+            "position": [0, 0.921, -0.02]
+          },
+          "components": {
+            "ContactShadow": {
+              "size": [0.4, 0.4],
+              "opacity": 0.4,
+              "color": [0, 0, 0, 1],
+              "height": 0.0008
+            }
+          }
+        },
+        {
+          "id": "spin-label",
+          "name": "Spin Label",
+          "content": {
+            "type": "asset",
+            "asset": "label-spin"
+          },
+          "transform": {
+            "position": [0, 0.94, 0.358],
+            "rotationDeg": [-32, 0, 0],
+            "scale": 0.12
+          }
+        }
+      ]
     },
     {
       "id": "welcome-panel",
@@ -67,37 +354,46 @@
         "asset": "welcome-panel"
       },
       "transform": {
-        "position": [0, 1.6, -2],
-        "scale": 0.4
+        "position": [0, 1.85, -2.2],
+        "rotationDeg": [-6, 0, 0],
+        "scale": 0.27
       },
       "components": {
-        "RayInteractable": {},
-        "ScreenSpace": {
-          "top": "20px",
-          "left": "20px",
-          "width": "25vw",
-          "height": "40%"
+        "RayInteractable": {}
+      }
+    },
+    {
+      "id": "key-light",
+      "name": "Key Light",
+      "transform": {
+        "position": [-2.3541, 11.2763, 1.762],
+        "rotationDeg": [-73.3982, -11.3134, 0]
+      },
+      "components": {
+        "DirectionalLight": {
+          "color": [1, 0.945, 0.87, 1],
+          "intensity": 2,
+          "castShadow": true,
+          "shadowMapSize": "1024",
+          "shadowCameraSize": 6,
+          "shadowCameraNear": 2,
+          "shadowCameraFar": 24,
+          "shadowRadius": 5,
+          "shadowBias": -0.0004,
+          "shadowNormalBias": 0.02
         }
       }
     },
     {
-      "id": "webxr-banner",
-      "name": "WebXR Banner",
-      "metadata": {
-        "iwsdk.validation": {
-          "allowFloating": true
+      "id": "fill-light",
+      "name": "Fill Light",
+      "components": {
+        "HemisphereLight": {
+          "skyColor": [0.96, 0.94, 0.9, 1],
+          "groundColor": [0.55, 0.52, 0.48, 1],
+          "intensity": 1
         }
-      },
-      "content": {
-        "type": "asset",
-        "asset": "webxr-banner"
-      },
-      "transform": {
-        "position": [0, 1, 1.8],
-        "rotationDeg": [0, 180, 0],
-        "scale": [1, -1, 1]
-      },
-      "components": {}
+      }
     }
   ]
 }

@@ -675,6 +675,7 @@ function assertCreateSeeds(failures, validateSceneDocument) {
         `${sceneFile} incorrectly stores a nonimmersive preview pose on the tracked camera`,
       );
     }
+    assertCreateSeedEnvironment(failures, sceneFile, document);
   }
   const indexText = readRelative(
     'packages/create/template/common/src/index.ts',
@@ -694,6 +695,37 @@ function assertCreateSeeds(failures, validateSceneDocument) {
     failures.push(
       'Create common Vite source still uses the stock-asset copy plugin',
     );
+  }
+}
+
+// The starter's sky, floor fade, IBL and AR shadow floor are built-in
+// components, so the seeds must keep authoring them.
+function assertCreateSeedEnvironment(failures, sceneFile, document) {
+  const rootComponents = document.components ?? {};
+  const immersive = sceneFile.endsWith('/immersive.iwsdk.scene.json');
+  const required = immersive
+    ? ['com.iwsdk.components.DomeGradient', 'com.iwsdk.components.IBLGradient']
+    : ['com.iwsdk.components.IBLGradient'];
+  for (const component of required) {
+    if (rootComponents[component] == null) {
+      failures.push(`${sceneFile} root does not author ${component}`);
+    }
+  }
+  const nodes = [];
+  const collect = (list) => {
+    for (const node of list ?? []) {
+      nodes.push(node);
+      collect(node.children);
+    }
+  };
+  collect(document.nodes);
+  if (immersive) {
+    const floor = nodes.find((node) => node.id === 'studio-floor');
+    if (floor?.components?.DomeFade == null) {
+      failures.push(`${sceneFile} studio-floor does not author DomeFade`);
+    }
+  } else if (!nodes.some((node) => node.components?.ShadowCatcher != null)) {
+    failures.push(`${sceneFile} has no ShadowCatcher node`);
   }
 }
 
