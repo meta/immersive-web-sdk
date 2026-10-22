@@ -282,9 +282,7 @@ export function getRenderStats(world: World): RuntimeRenderStats {
 
   world.scene.updateMatrixWorld(true);
   const activeRoot = world.getActiveRoot();
-  const worldBounds = serializeRuntimeBounds(
-    new Box3().setFromObject(activeRoot),
-  );
+  const worldBounds = serializeRuntimeBounds(measureWorldBounds(activeRoot));
   const framingBounds = serializeRuntimeBounds(
     measureFramingBounds(activeRoot),
   );
@@ -329,8 +327,22 @@ interface RuntimeBoundsObject extends Object3D {
   boundingBox?: Box3 | null;
   computeBoundingBox?: () => void;
   geometry?: RuntimeBoundsGeometry;
+  isBatchedMesh?: boolean;
   isInstancedMesh?: boolean;
   isSkinnedMesh?: boolean;
+}
+
+/**
+ * Raw bounds of every object under `root`, hidden ones included. Not
+ * Box3.setFromObject: it copies any object-level `boundingBox`, and on UIKit
+ * content components (Lucide icons) that is a signal, not a Box3.
+ */
+function measureWorldBounds(root: Object3D): Box3 {
+  const bounds = new Box3().makeEmpty();
+  root.traverse((object) => {
+    expandByOwnGeometry(bounds, object as RuntimeBoundsObject);
+  });
+  return bounds;
 }
 
 function measureFramingBounds(root: Object3D): Box3 {
@@ -350,7 +362,13 @@ function expandByOwnGeometry(bounds: Box3, object: RuntimeBoundsObject): void {
     return;
   }
   let localBounds: Box3 | null | undefined;
-  if (object.isInstancedMesh === true || object.isSkinnedMesh === true) {
+  // Instanced, batched and skinned meshes carry bounds covering what they
+  // draw. (UIKit icons have a `boundingBox` too, but it is a signal.)
+  if (
+    object.isInstancedMesh === true ||
+    object.isBatchedMesh === true ||
+    object.isSkinnedMesh === true
+  ) {
     object.computeBoundingBox?.();
     localBounds = object.boundingBox;
   } else {

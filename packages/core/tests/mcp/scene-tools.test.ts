@@ -18,10 +18,13 @@ import {
   DirectionalLight,
   Fog,
   Group,
+  InstancedMesh,
+  Matrix4,
   Mesh,
   MeshStandardMaterial,
   Scene,
   Texture,
+  Vector3,
 } from '../../src/runtime/index.js';
 
 // ---------------------------------------------------------------------------
@@ -396,6 +399,64 @@ describe('getRenderStats', () => {
       max: [1, 1, 1],
       size: [2, 2, 2],
     });
+  });
+
+  it('measures bounds without reading a UIKit icon boundingBox signal', () => {
+    const scene = new Scene();
+    const root = new Group();
+    const subject = new Mesh(
+      new BoxGeometry(2, 2, 2),
+      new MeshStandardMaterial(),
+    );
+    // A UIKit content component (a Lucide icon, say) is a Mesh whose
+    // `boundingBox` is a signal; Box3.setFromObject would copy it and throw.
+    const icon = Object.assign(
+      new Mesh(new BoxGeometry(1, 1, 1), new MeshStandardMaterial()),
+      {
+        boundingBox: {
+          value: { center: new Vector3(), size: new Vector3(1, 1.01, 1) },
+        },
+      },
+    );
+    icon.position.x = 5;
+    // Instanced meshes keep their own bounds, which cover every instance.
+    const instanced = new InstancedMesh(
+      new BoxGeometry(1, 1, 1),
+      new MeshStandardMaterial(),
+      2,
+    );
+    instanced.setMatrixAt(0, new Matrix4().makeTranslation(0, 0, -10));
+    instanced.setMatrixAt(1, new Matrix4().makeTranslation(0, 0, 10));
+    root.add(subject, icon, instanced);
+    scene.add(root);
+    const renderer = {
+      constructor: { name: 'TestRenderer' },
+      domElement: { height: 600, width: 800 },
+      getClearAlpha: () => 1,
+      getPixelRatio: () => 1,
+      info: {
+        memory: { geometries: 3, textures: 0 },
+        programs: [],
+        render: { calls: 3, lines: 0, points: 0, triangles: 36 },
+      },
+      shadowMap: { enabled: false },
+      toneMapping: 0,
+      toneMappingExposure: 1,
+    };
+
+    const stats = getRenderStats({
+      getActiveRoot: () => root,
+      renderer,
+      scene,
+    } as any);
+
+    const expected = {
+      min: [-1, -1, -10.5],
+      max: [5.5, 1, 10.5],
+      size: [6.5, 2, 21],
+    };
+    expect(stats.worldBounds).toEqual(expected);
+    expect(stats.framingBounds).toEqual(expected);
   });
 
   it('reports raw renderer counters, scene resources, and world bounds', () => {
