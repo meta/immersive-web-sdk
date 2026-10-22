@@ -1,6 +1,6 @@
 {
   "name": "@iwsdk/xr-input",
-  "version": "1.0.1",
+  "version": "1.1.0-rc.0",
   "description": "WebXR input system with controller and hand tracking support, visual adapters, and input profiles for Three.js applications",
   "type": "module",
   "main": "dist/index.js",

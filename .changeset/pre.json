@@ -1,0 +1,17 @@
+{
+  "mode": "pre",
+  "tag": "rc",
+  "initialVersions": {
+    "@iwsdk/cli": "1.0.1",
+    "@iwsdk/core": "1.0.1",
+    "@iwsdk/create": "1.0.1",
+    "@iwsdk/example-assets": "0.4.2",
+    "@iwsdk/locomotor": "1.0.1",
+    "@iwsdk/reference": "1.0.1",
+    "@iwsdk/reference-assets": "1.0.1",
+    "@iwsdk/scene-composition": "1.0.1",
+    "@iwsdk/vite-plugin-dev": "1.0.1",
+    "@iwsdk/xr-input": "1.0.1"
+  },
+  "changesets": ["iwer-builtin-rooms", "super-three-185"]
+}

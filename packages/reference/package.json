@@ -1,6 +1,6 @@
 {
   "name": "@iwsdk/reference",
-  "version": "1.0.1",
+  "version": "1.1.0-rc.0",
   "description": "Workspace-local reference CLI/MCP server for semantic IWSDK search using externally hosted corpus/model warmup artifacts",
   "type": "module",
   "main": "dist/index.js",
