@@ -490,6 +490,11 @@ session reports `transparent` even when the level root has one.
 `inactiveReason` (`no-dome-gradient`, `dome-texture-active`, `ar-session`,
 `no-meshes` or `null` while it fades).
 
+`sceneEnvironment.groundShadows` is `{ contactShadows, shadowCatchers }`, the
+number of `ContactShadow` and `ShadowCatcher` meshes in the scene. Both are
+runtime-only meshes, so `framingBounds` and `sceneAssets[].meshCount` leave them
+out, while `worldBounds` and the total `meshCount` include them.
+
 ## ECS Debugging
 
 - `ecs_pause`, `ecs_resume`, `ecs_step`

@@ -443,6 +443,8 @@ let disposeLoweredSceneNodes;
 let DomeFadeBinding;
 let domeFadeSpecFromComponentValue;
 let ConeGeometry;
+let ContactShadowBinding;
+let createGroundShadowResources;
 let CylinderGeometry;
 let DirectionalLight;
 let EnvironmentSystem;
@@ -451,6 +453,7 @@ let Frustum;
 let FrontSide;
 let finalizeSceneReviewDraft;
 let Group;
+let groundShadowSpecFromComponentValue;
 let hashSceneDocument;
 let hashRuntimeSceneDocument;
 let LevelComponentApplier;
@@ -472,6 +475,7 @@ let Raycaster;
 let restoreSceneEnvironment;
 let Scene;
 let ShaderMaterial;
+let ShadowCatcherBinding;
 let SphereGeometry;
 let SRGBColorSpace;
 let Types;
@@ -562,6 +566,8 @@ async function loadEditorRuntimeDependencies() {
     DomeFadeBinding,
     domeFadeSpecFromComponentValue,
     ConeGeometry,
+    ContactShadowBinding,
+    createGroundShadowResources,
     CylinderGeometry,
     DirectionalLight,
     EnvironmentSystem,
@@ -569,6 +575,7 @@ async function loadEditorRuntimeDependencies() {
     Frustum,
     FrontSide,
     Group,
+    groundShadowSpecFromComponentValue,
     LevelComponentApplier,
     LineBasicMaterial,
     LineSegments,
@@ -588,6 +595,7 @@ async function loadEditorRuntimeDependencies() {
     restoreSceneEnvironment,
     Scene,
     ShaderMaterial,
+    ShadowCatcherBinding,
     SphereGeometry,
     SRGBColorSpace,
     Types,
@@ -4754,7 +4762,7 @@ function runtimeSummaryForNode(node) {
     if (entry.userData?.iwsdkEditorHelperType && summary.helperType == null) {
       summary.helperType = entry.userData.iwsdkEditorHelperType;
     }
-    if (entry.isMesh === true) {
+    if (entry.isMesh === true && entry.userData?.iwsdkRuntimeOnly !== true) {
       summary.meshCount += 1;
       summary.materialCount += Array.isArray(entry.material)
         ? entry.material.length
@@ -5673,7 +5681,7 @@ function applyEditorReviewLens(documentValue) {
     if (child.isLight) {
       maskObjectFromReviewLens(child);
     }
-    if (child.isMesh) {
+    if (child.isMesh && child.userData?.iwsdkRuntimeOnly !== true) {
       editorWorldState.lensMaterials.set(child, child.material);
       child.material = neutral;
     }
@@ -5696,6 +5704,7 @@ function indexLoweredNode(lowered) {
     lowered.object.add(createComponentHelperDecoration(lowered.node, helperType));
   }
   editorWorldState.objectMap.set(lowered.id, lowered.object);
+  attachEditorGroundShadowBindings(lowered);
   attachEditorLightBindings(lowered);
   attachEditorEnvironmentBindings(lowered);
   for (const virtual of lowered.virtualNodes || []) {
@@ -5815,6 +5824,7 @@ function detachEditorSceneForSwap() {
   editorWorldState.transformControls?.detach();
   editorWorldState.hoverHelper = null;
   editorWorldState.hoveredNodeId = null;
+  disposeEditorGroundShadowBindings();
   disposeEditorLightBindings();
   disposeEditorEnvironmentBindings();
   for (const root of editorWorldState.loweredNodes || []) {
@@ -5827,6 +5837,38 @@ function detachEditorSceneForSwap() {
     }
   }
   editorWorldState.objectMap.clear();
+}
+
+function attachEditorGroundShadowBindings(lowered) {
+  const bindings = [];
+  for (const [componentName, value] of Object.entries(
+    lowered.node?.components || {},
+  )) {
+    const groundShadow = groundShadowSpecFromComponentValue(componentName, value);
+    if (!groundShadow) continue;
+    const Binding =
+      groundShadow.kind === 'contact-shadow'
+        ? ContactShadowBinding
+        : ShadowCatcherBinding;
+    bindings.push(
+      new Binding(
+        lowered.object,
+        editorWorldState.groundShadowResources,
+        groundShadow.spec,
+      ),
+    );
+  }
+  if (bindings.length > 0) {
+    editorWorldState.groundShadowBindings.set(lowered.id, bindings);
+  }
+}
+
+function disposeEditorGroundShadowBindings() {
+  if (!editorWorldState?.groundShadowBindings) return;
+  for (const bindings of editorWorldState.groundShadowBindings.values()) {
+    for (const binding of bindings) binding.dispose();
+  }
+  editorWorldState.groundShadowBindings.clear();
 }
 
 function attachEditorLightBindings(lowered) {
@@ -6436,6 +6478,7 @@ function boundsForSceneFramingObjects() {
     if (
       !objectIsEffectivelyVisible(object) ||
       object.userData?.iwsdkEditorHelper === true ||
+      object.userData?.iwsdkRuntimeOnly === true ||
       object.userData?.iwsdkSceneFramingRole === 'support'
     ) {
       return;
@@ -6469,7 +6512,10 @@ function boundsForObjectWithoutEditorHelpers(object) {
   const authoredBounds = new Box3();
   authoredBounds.makeEmpty();
   object.traverse((entry) => {
-    if (entry.userData?.iwsdkEditorHelper === true) {
+    if (
+      entry.userData?.iwsdkEditorHelper === true ||
+      entry.userData?.iwsdkRuntimeOnly === true
+    ) {
       return;
     }
     expandBoundsByOwnGeometry(authoredBounds, entry);
@@ -7204,7 +7250,10 @@ function currentEditorRenderStats() {
     if (typeof assetId === 'string') {
       let assetMeshCount = 0;
       object.traverse((entry) => {
-        if (entry.isMesh === true) {
+        if (
+          entry.isMesh === true &&
+          entry.userData?.iwsdkRuntimeOnly !== true
+        ) {
           assetMeshCount += 1;
         }
       });
@@ -8263,6 +8312,15 @@ async function createEditorWorld(session, camera) {
   directional.position.set(4, 8, 5);
   directional.userData.iwsdkEditorHelper = true;
   world.scene.add(directional);
+  const groundShadowResources = createGroundShadowResources();
+  window.addEventListener(
+    'pagehide',
+    () => {
+      disposeEditorGroundShadowBindings();
+      groundShadowResources.dispose();
+    },
+    { once: true },
+  );
 
   editorWorldState = {
     appliedRootComponentNames: new Set(),
@@ -8278,6 +8336,8 @@ async function createEditorWorld(session, camera) {
     environmentBindings: new Map(),
     environmentPreviousState: null,
     frameTimeSamples: [],
+    groundShadowBindings: new Map(),
+    groundShadowResources,
     host,
     hoveredNodeId: null,
     hoverHelper: null,
@@ -8499,6 +8559,59 @@ function authoredRenderStateProof() {
     lights,
     materials: [...materials.values()],
     shadowMapType: editorWorldState.world.renderer.shadowMap.type,
+  };
+}
+
+function groundShadowStateProof() {
+  if (!editorWorldState) {
+    return null;
+  }
+  const meshes = [];
+  editorWorldState.world.scene.traverse((object) => {
+    const kind =
+      object.userData?.iwsdkContactShadow === true
+        ? 'contact-shadow'
+        : object.userData?.iwsdkShadowCatcher === true
+          ? 'shadow-catcher'
+          : null;
+    if (!kind) {
+      return;
+    }
+    meshes.push({
+      castShadow: object.castShadow === true,
+      color: '#' + object.material.color.getHexString(),
+      kind,
+      layerMask: object.layers.mask,
+      materialType: object.material.type,
+      materialUuid: object.material.uuid,
+      nodeId: object.parent?.userData?.iwsdkSceneNodeId ?? null,
+      opacity: object.material.opacity,
+      positionY: Number(object.position.y.toFixed(4)),
+      receiveShadow: object.receiveShadow === true,
+      runtimeOnly: object.userData.iwsdkRuntimeOnly === true,
+      scale: [
+        Number(object.scale.x.toFixed(4)),
+        Number(object.scale.y.toFixed(4)),
+      ],
+      visible: objectIsEffectivelyVisible(object),
+    });
+  });
+  meshes.sort((first, second) =>
+    (first.nodeId + first.kind).localeCompare(second.nodeId + second.kind),
+  );
+  // Selection bounds of every node, with -0 reported as 0.
+  const round = (vector) => roundVec3(vector.toArray()).map((value) => value || 0);
+  const nodeBounds = {};
+  for (const [nodeId, object] of editorWorldState.objectMap) {
+    const bounds = boundsForObjectWithoutEditorHelpers(object);
+    nodeBounds[nodeId] = bounds
+      ? { max: round(bounds.max), min: round(bounds.min) }
+      : null;
+  }
+  return {
+    bindingNodeIds: [...editorWorldState.groundShadowBindings.keys()].sort(),
+    meshes,
+    nodeBounds,
   };
 }
 
@@ -8968,7 +9081,11 @@ function ghostObjectMaterials(object) {
     return;
   }
   object.traverse((child) => {
-    if (!child.isMesh || child.userData?.iwsdkEditorHelper === true) {
+    if (
+      !child.isMesh ||
+      child.userData?.iwsdkEditorHelper === true ||
+      child.userData?.iwsdkRuntimeOnly === true
+    ) {
       return;
     }
     const original = child.material;
@@ -12887,6 +13004,7 @@ async function init() {
           dome?.material?.vertexShader?.includes?.('mat3(viewMatrix)') ?? false,
       };
     },
+    getGroundShadowState: () => groundShadowStateProof(),
     getProof: () => createViewportProof(),
     getResourceState: () => editorResourceStateProof(),
     getRendererGlobals: () => rendererGlobalsProof(),

@@ -355,6 +355,20 @@ describe('Locomotor environment geometry', () => {
     expect(payload.indices).toHaveLength(6);
   });
 
+  it('ignores IWSDK runtime-only meshes such as shadow catchers', async () => {
+    const floor = new Mesh(floorGeometry(4));
+    const catcher = new Mesh(floorGeometry(6));
+    catcher.userData.iwsdkRuntimeOnly = true;
+    const root = scaledEnvironment(floor, catcher);
+    const expected = meshTriangleCorners(scaledEnvironment(floor.clone()));
+
+    const payload = await addWorkerEnvironment(root);
+
+    expect(payloadTriangleCorners(payload)).toEqual(
+      expected.map((value) => expect.closeTo(value, 4)),
+    );
+  });
+
   it('uses 32-bit indices when a sequential index exceeds 16 bits', async () => {
     const vertexCount = 65538;
     const geometry = new BufferGeometry();

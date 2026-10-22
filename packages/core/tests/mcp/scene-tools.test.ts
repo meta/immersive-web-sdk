@@ -7,6 +7,11 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+  ContactShadowBinding,
+  ShadowCatcherBinding,
+  createGroundShadowResources,
+} from '../../src/environment/ground-shadows.js';
+import {
   getObjectTransform,
   getRenderStats,
   getSceneHierarchy,
@@ -459,6 +464,79 @@ describe('getRenderStats', () => {
     expect(stats.framingBounds).toEqual(expected);
   });
 
+  it('counts ground shadows and keeps their runtime meshes out of framing bounds', () => {
+    const scene = new Scene();
+    const root = new Group();
+    const plinth = new Mesh(
+      new BoxGeometry(0.6, 0.2, 0.6),
+      new MeshStandardMaterial(),
+    );
+    plinth.position.set(1, 0.1, -1);
+    plinth.userData.iwsdkSceneAssetId = 'plinth';
+    root.add(plinth);
+    // An asset that loaded no meshes, with a blob on its node.
+    const emptyAsset = new Group();
+    emptyAsset.userData.iwsdkSceneAssetId = 'empty-asset';
+    root.add(emptyAsset);
+    scene.add(root);
+    const resources = createGroundShadowResources();
+    const blobSpec = {
+      color: [0.3765, 0.3922, 0.4549, 1],
+      height: 0.002,
+      opacity: 0.72,
+      size: [1.2, 1.2],
+    };
+    new ContactShadowBinding(plinth, resources, blobSpec);
+    new ContactShadowBinding(root, resources, blobSpec);
+    new ContactShadowBinding(emptyAsset, resources, blobSpec);
+    new ShadowCatcherBinding(root, resources, {
+      color: [0, 0, 0, 1],
+      opacity: 0.25,
+      size: [6, 6],
+    });
+    const renderer = {
+      constructor: { name: 'TestRenderer' },
+      domElement: { height: 1, width: 1 },
+      getClearAlpha: () => 1,
+      getPixelRatio: () => 1,
+      info: {
+        memory: { geometries: 2, textures: 1 },
+        programs: [],
+        render: { calls: 4, lines: 0, points: 0, triangles: 18 },
+      },
+      shadowMap: { enabled: true, type: 1 },
+      toneMapping: 0,
+      toneMappingExposure: 1,
+    };
+
+    const stats = getRenderStats({
+      getActiveRoot: () => root,
+      renderer,
+      scene,
+    } as any);
+
+    expect(stats.sceneEnvironment.groundShadows).toEqual({
+      contactShadows: 3,
+      shadowCatchers: 1,
+    });
+    expect(stats.meshCount).toBe(5);
+    // Asset mesh counts leave the blobs out, so an empty asset still reads 0.
+    expect(stats.sceneAssets).toEqual([
+      { id: 'empty-asset', meshCount: 0 },
+      { id: 'plinth', meshCount: 1 },
+    ]);
+    expect(stats.framingBounds?.min[0]).toBeCloseTo(0.7);
+    expect(stats.framingBounds?.min[1]).toBeCloseTo(0);
+    expect(stats.framingBounds?.min[2]).toBeCloseTo(-1.3);
+    expect(stats.framingBounds?.max[0]).toBeCloseTo(1.3);
+    expect(stats.framingBounds?.max[1]).toBeCloseTo(0.2);
+    expect(stats.framingBounds?.max[2]).toBeCloseTo(-0.7);
+    expect(stats.worldBounds).toMatchObject({
+      max: [3, expect.any(Number), 3],
+      min: [-3, expect.any(Number), -3],
+    });
+  });
+
   it('reports raw renderer counters, scene resources, and world bounds', () => {
     const scene = new Scene();
     scene.background = new Color('#112233');
@@ -535,6 +613,7 @@ describe('getRenderStats', () => {
           near: 2,
           type: 'linear',
         },
+        groundShadows: { contactShadows: 0, shadowCatchers: 0 },
         shadows: true,
         toneMapping: 'aces',
       },

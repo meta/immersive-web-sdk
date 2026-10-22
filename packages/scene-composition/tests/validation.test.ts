@@ -47,6 +47,75 @@ function makeAssetScene(): SceneDocument {
   };
 }
 
+describe('ground shadow component validation', () => {
+  const componentCatalog = createSceneComponentCatalog([
+    {
+      id: 'ContactShadow',
+      source: 'iwsdk',
+      fields: {
+        color: { type: 'Color', default: [0.3765, 0.3922, 0.4549, 1] },
+        height: { type: 'Float32', default: 0.002, min: 0 },
+        opacity: { type: 'Float32', default: 0.72, max: 1, min: 0 },
+        size: { type: 'Vec2', default: [1, 1] },
+      },
+    },
+    {
+      id: 'ShadowCatcher',
+      source: 'iwsdk',
+      fields: {
+        color: { type: 'Color', default: [0, 0, 0, 1] },
+        opacity: { type: 'Float32', default: 0.25, max: 1, min: 0 },
+        size: { type: 'Vec2', default: [6, 6] },
+      },
+    },
+  ]);
+
+  function sceneWith(components: Record<string, unknown>): SceneDocument {
+    return {
+      version: CURRENT_SCENE_VERSION,
+      units: 'meters',
+      resources: {},
+      nodes: [{ id: 'plinth', content: { type: 'group' }, components }],
+    };
+  }
+
+  it('accepts positive and default sizes', () => {
+    expect(
+      validateSceneDocument(
+        sceneWith({
+          'com.iwsdk.components.ContactShadow': { size: [1.2, 0.8] },
+          'com.iwsdk.components.ShadowCatcher': {},
+        }),
+        { componentCatalog },
+      ),
+    ).toEqual({ valid: true, issues: [] });
+  });
+
+  it('rejects a zero or negative size entry as a range issue', () => {
+    for (const [component, size] of [
+      ['ContactShadow', [0, 1]],
+      ['ContactShadow', [1, -0.5]],
+      ['ShadowCatcher', [-6, 6]],
+    ] as const) {
+      const name = `com.iwsdk.components.${component}`;
+      expect(
+        validateSceneDocument(sceneWith({ [name]: { size } }), {
+          componentCatalog,
+        }),
+      ).toEqual({
+        valid: false,
+        issues: [
+          {
+            path: `$.nodes[0].components[${JSON.stringify(name)}].size`,
+            message: 'size must be positive',
+            code: 'range',
+          },
+        ],
+      });
+    }
+  });
+});
+
 describe('scene asset catalog validation', () => {
   it('is disabled when no asset catalog is supplied', () => {
     expect(validateSceneDocument(makeAssetScene())).toEqual({

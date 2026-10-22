@@ -53,3 +53,5 @@ pattern for repetition; a pattern whose prefab resolves to a single component-fr
 mesh lowers to one `InstancedMesh`.
 
 Start assets at `castShadow: false` and opt in only for grounded focal masses.
+Don't build contact-shadow blob cards or `ShadowMaterial` catcher planes here: put
+`ContactShadow` or `ShadowCatcher` node components on the scene nodes instead.

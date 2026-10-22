@@ -158,6 +158,8 @@ export interface RuntimeSceneEnvironmentState {
     | { color: string; far: number; near: number; type: 'linear' }
     | { color: string; density: number; type: 'exponential' }
     | null;
+  /** ContactShadow and ShadowCatcher meshes currently in the scene. */
+  groundShadows: { contactShadows: number; shadowCatchers: number };
   shadows: boolean;
   shadowMapType: NonNullable<SceneEnvironment['shadowMapType']> | 'unknown';
   imageBasedLighting:
@@ -278,12 +280,16 @@ export function getRenderStats(world: World): RuntimeRenderStats {
   const domeFades: RuntimeSceneDomeFadeState[] = [];
   let meshCount = 0;
   let shadowCasters = 0;
+  const groundShadows = { contactShadows: 0, shadowCatchers: 0 };
   world.scene.traverse((object) => {
     const assetId = object.userData?.iwsdkSceneAssetId;
     if (typeof assetId === 'string') {
       let assetMeshCount = 0;
       object.traverse((descendant) => {
-        if ((descendant as Object3D & { isMesh?: boolean }).isMesh === true) {
+        if (
+          (descendant as Object3D & { isMesh?: boolean }).isMesh === true &&
+          descendant.userData?.iwsdkRuntimeOnly !== true
+        ) {
           assetMeshCount += 1;
         }
       });
@@ -323,6 +329,11 @@ export function getRenderStats(world: World): RuntimeRenderStats {
     meshCount += 1;
     if (renderable.castShadow === true) {
       shadowCasters += 1;
+    }
+    if (object.userData?.iwsdkContactShadow === true) {
+      groundShadows.contactShadows += 1;
+    } else if (object.userData?.iwsdkShadowCatcher === true) {
+      groundShadows.shadowCatchers += 1;
     }
     if (renderable.geometry != null) {
       geometries.add(renderable.geometry);
@@ -379,6 +390,7 @@ export function getRenderStats(world: World): RuntimeRenderStats {
     sceneEnvironment: inspectSceneEnvironment(
       world,
       domeFades.sort(compareDomeFadeState),
+      groundShadows,
     ),
     sceneLights: sceneLights.sort(compareRuntimeState),
     sceneMaterials: sceneMaterials.sort(compareRuntimeState),
@@ -415,7 +427,10 @@ function measureWorldBounds(root: Object3D): Box3 {
 function measureFramingBounds(root: Object3D): Box3 {
   const bounds = new Box3().makeEmpty();
   root.traverseVisible((object) => {
-    if (object.userData?.iwsdkSceneFramingRole === 'support') {
+    if (
+      object.userData?.iwsdkSceneFramingRole === 'support' ||
+      object.userData?.iwsdkRuntimeOnly === true
+    ) {
       return;
     }
     expandByOwnGeometry(bounds, object as RuntimeBoundsObject);
@@ -737,7 +752,8 @@ function compareDomeFadeState(
 
 function inspectSceneEnvironment(
   world: World,
-  domeFades: RuntimeSceneDomeFadeState[] = [],
+  domeFades: RuntimeSceneDomeFadeState[],
+  groundShadows: RuntimeSceneEnvironmentState['groundShadows'],
 ): RuntimeSceneEnvironmentState {
   const background = world.scene.background as
     | (RuntimeColorLike & {
@@ -857,6 +873,7 @@ function inspectSceneEnvironment(
               type: 'exponential',
             }
           : null,
+    groundShadows,
     shadows: world.renderer.shadowMap.enabled,
     shadowMapType: shadowMapTypeName(world.renderer.shadowMap.type),
     toneMapping: toneMappingName(world.renderer.toneMapping),

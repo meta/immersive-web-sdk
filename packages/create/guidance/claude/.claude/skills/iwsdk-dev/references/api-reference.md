@@ -1323,6 +1323,8 @@ Before writing custom code, check if IWSDK already provides the functionality. R
 | Custom skybox sphere                                               | `DomeGradient` or `DomeTexture` component                                    |
 | Floor fading into the sky (`onBeforeCompile` with copied sky GLSL) | `DomeFade` on the floor node                                                 |
 | PBR environment lighting                                           | `IBLGradient` or `IBLTexture` component                                      |
+| Canvas or radial blob shadow card                                  | `ContactShadow` node component                                               |
+| ShadowMaterial plane for AR                                        | `ShadowCatcher` node component                                               |
 | Teleport arc + landing marker                                      | `LocomotionSystem` — full visuals included                                   |
 | Comfort vignette for motion                                        | `LocomotionSystem` — `comfortAssist` config                                  |
 | Controller 3D models                                               | Auto-loaded from WebXR Input Profiles                                        |

@@ -2029,6 +2029,17 @@ function validateComponents(
         );
       }
     }
+    if (['ContactShadow', 'ShadowCatcher'].includes(componentId)) {
+      const size = value.size ?? schema.fields.size?.default;
+      if (isVec2(size) && (size[0] <= 0 || size[1] <= 0)) {
+        addIssue(
+          issues,
+          childPath(componentPath, 'size'),
+          'size must be positive',
+          'range',
+        );
+      }
+    }
     if (['DirectionalLight', 'PointLight', 'SpotLight'].includes(componentId)) {
       const near =
         value.shadowCameraNear ?? schema.fields.shadowCameraNear?.default;

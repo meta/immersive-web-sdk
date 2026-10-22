@@ -6,8 +6,14 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import {
+  ContactShadowBinding,
+  ShadowCatcherBinding,
+  createGroundShadowResources,
+} from '../../src/environment/index.js';
 import { PhysicsShapeType } from '../../src/physics/physicsShape.js';
 import {
+  calculateObject3DBounds,
   detectShapeFromGeometry,
   generateMergedGeometry,
   sequentialIndices,
@@ -15,8 +21,11 @@ import {
 import {
   BoxGeometry,
   BufferGeometry,
+  Float32BufferAttribute,
+  Group,
   Mesh,
   Object3D,
+  Vector3,
 } from '../../src/runtime/three.js';
 
 // physics/utils.ts -> runtime barrel -> xr-input cursor-visual.ts touches
@@ -147,5 +156,57 @@ describe('detectShapeFromGeometry', () => {
     expect(result.shapeType).toBe(PhysicsShapeType.Box);
     expect(result.dimensions).toEqual([1, 2, 3]);
     expect(disposeSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('runtime-only meshes', () => {
+  // A 0.6 x 0.2 x 0.6 plinth with vertex colors (glTF COLOR_0), which the
+  // ground-shadow plane does not have, plus a 1.2 m blob and a 6 m catcher.
+  function shadowedPlinth(): Group {
+    const geometry = new BoxGeometry(0.6, 0.2, 0.6).translate(0, 0.1, 0);
+    const colors = new Float32Array(geometry.attributes.position.count * 3);
+    geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
+    const root = new Group().add(new Mesh(geometry));
+    root.position.set(2, 0, -1);
+    const resources = createGroundShadowResources();
+    new ContactShadowBinding(root, resources, {
+      color: [0, 0, 0, 1],
+      height: 0.002,
+      opacity: 0.72,
+      size: [1.2, 1.2],
+    });
+    new ShadowCatcherBinding(root, resources, {
+      color: [0, 0, 0, 1],
+      opacity: 0.25,
+      size: [6, 6],
+    });
+    return root;
+  }
+
+  it('leaves ground-shadow meshes out of merged collider geometry', () => {
+    const merged = generateMergedGeometry(shadowedPlinth());
+
+    expect(merged.attributes.color).toBeDefined();
+    merged.computeBoundingBox();
+    const size = merged.boundingBox!.getSize(new Vector3());
+    expect(size.toArray()).toEqual([
+      expect.closeTo(0.6, 6),
+      expect.closeTo(0.2, 6),
+      expect.closeTo(0.6, 6),
+    ]);
+  });
+
+  it('auto-detects the shape without the ground-shadow planes', () => {
+    expect(detectShapeFromGeometry(shadowedPlinth()).shapeType).toBe(
+      PhysicsShapeType.ConvexHull,
+    );
+  });
+
+  it('leaves ground-shadow meshes out of fallback bounds', () => {
+    expect(calculateObject3DBounds(shadowedPlinth())).toEqual([
+      expect.closeTo(0.6, 6),
+      expect.closeTo(0.2, 6),
+      expect.closeTo(0.6, 6),
+    ]);
   });
 });

@@ -228,6 +228,20 @@ describe('SceneTargetResolver', () => {
     expectVector(targets[1].position, [1, 1, -1]);
   });
 
+  it('leaves runtime-only meshes such as a contact shadow out of the box', () => {
+    const { addEntity, resolver } = createWorld();
+    const plinth = box('Plinth', [0, 0.1, -1], [0.6, 0.2, 0.6]);
+    const blob = box('ContactShadow', [0, -0.098, 0], [1.2, 0.001, 1.2]);
+    blob.userData.iwsdkRuntimeOnly = true;
+    plinth.add(blob);
+    addEntity(plinth, ['RayInteractable']);
+
+    const [target] = resolver.list();
+
+    expectVector(target.position, [0, 0.1, -1]);
+    expectVector(target.size, [0.6, 0.2, 0.6]);
+  });
+
   it('gives targets that share a name their own and rejects the shared one', () => {
     const { addEntity, resolver } = createWorld();
     for (const [id, x] of [

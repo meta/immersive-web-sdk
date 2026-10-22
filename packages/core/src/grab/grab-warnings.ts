@@ -28,10 +28,12 @@ export function hasRaycastableMesh(object: Object3D): boolean {
     }
 
     const mesh = child as Mesh;
+    // Runtime-only meshes, such as ground shadows, never take grab hits.
     found =
       mesh.isMesh === true &&
       Boolean(mesh.geometry) &&
-      typeof mesh.raycast === 'function';
+      typeof mesh.raycast === 'function' &&
+      mesh.userData.iwsdkRuntimeOnly !== true;
   });
 
   return found;

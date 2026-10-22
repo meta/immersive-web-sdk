@@ -26,6 +26,7 @@ const tempVec2 = new Vector3();
 const tempQuat = new Quaternion();
 const tempMatrix = new Matrix4();
 const tempMatrix2 = new Matrix4();
+const tempBox = new Box3();
 
 const UNIT_SCALE = new Vector3(1, 1, 1);
 
@@ -140,6 +141,38 @@ export function detectShapeFromGeometry(
 }
 
 /**
+ * IWSDK runtime-only meshes (ContactShadow and ShadowCatcher planes) are
+ * visuals owned by their system, not part of the body's shape.
+ */
+function isRuntimeOnly(object: Object3D): boolean {
+  return object.userData?.iwsdkRuntimeOnly === true;
+}
+
+/** Box3.expandByObject for one object, without its children. */
+function expandByOwnBounds(box: Box3, object: Object3D): void {
+  const bounded = object as Object3D & {
+    boundingBox?: Box3 | null;
+    computeBoundingBox?: () => void;
+    geometry?: BufferGeometry;
+  };
+  if (bounded.geometry === undefined) {
+    return;
+  }
+  if (bounded.boundingBox !== undefined) {
+    if (bounded.boundingBox === null) {
+      bounded.computeBoundingBox?.();
+    }
+    tempBox.copy(bounded.boundingBox!);
+  } else {
+    if (bounded.geometry.boundingBox === null) {
+      bounded.geometry.computeBoundingBox();
+    }
+    tempBox.copy(bounded.geometry.boundingBox!);
+  }
+  box.union(tempBox.applyMatrix4(object.matrixWorld));
+}
+
+/**
  * Calculates bounding box dimensions from Object3D for fallback cases
  */
 export function calculateObject3DBounds(
@@ -147,7 +180,13 @@ export function calculateObject3DBounds(
 ): [number, number, number] {
   try {
     // Create a bounding box for the object
-    const box = new Box3().setFromObject(object3D);
+    const box = new Box3();
+    object3D.updateWorldMatrix(false, true);
+    object3D.traverse((child) => {
+      if (!isRuntimeOnly(child)) {
+        expandByOwnBounds(box, child);
+      }
+    });
 
     if (!box.isEmpty()) {
       const size = new Vector3();
@@ -187,7 +226,11 @@ export function generateMergedGeometry(object3D: Object3D): BufferGeometry {
 
   const geometries: BufferGeometry[] = [];
   object3D.traverse((child) => {
-    if ((child as Mesh).isMesh && (child as Mesh).geometry) {
+    if (
+      (child as Mesh).isMesh &&
+      (child as Mesh).geometry &&
+      !isRuntimeOnly(child)
+    ) {
       const geometry = (child as Mesh).geometry.clone();
       geometry.applyMatrix4(child.matrixWorld);
       geometries.push(geometry);

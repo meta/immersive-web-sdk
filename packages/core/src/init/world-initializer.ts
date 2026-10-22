@@ -23,6 +23,11 @@ import {
 } from '../ecs/index.js';
 import { World, VisibilityState } from '../ecs/world.js';
 import {
+  ContactShadow,
+  GroundShadowSystem,
+  ShadowCatcher,
+} from '../environment/ground-shadows.js';
+import {
   DomeTexture,
   DomeGradient,
   DomeFade,
@@ -672,9 +677,12 @@ function registerCoreSystems(world: World) {
     .registerComponent(PointLightComponent)
     .registerComponent(SpotLightComponent)
     .registerComponent(RectAreaLightComponent)
+    .registerComponent(ContactShadow)
+    .registerComponent(ShadowCatcher)
     // Unified environment system (background + IBL)
     .registerSystem(EnvironmentSystem)
     .registerSystem(LightSystem)
+    .registerSystem(GroundShadowSystem)
     .registerSystem(LevelSystem);
 }
 

@@ -123,6 +123,84 @@ no `IBLGradient`/`IBLTexture`, IWSDK supplies no image-based lighting. Starter
 scenes include both gradient components, and you can remove either one
 independently.
 
+## Ground Shadows
+
+Two node components ground objects without hand-built shadow meshes. Add them
+to scene nodes in the editor or in native scene JSON; `GroundShadowSystem`
+builds the meshes, which move and scale with their node.
+
+**Contact shadows** are soft round blobs under an object. `ContactShadow` costs
+one transparent quad and needs no lights or shadow maps, so it looks the same
+in VR, AR and the browser:
+
+```json
+{
+  "id": "plinth",
+  "content": { "type": "asset", "asset": "plinth" },
+  "transform": { "position": [0, 0, -1.5] },
+  "components": {
+    "ContactShadow": { "size": [0.9, 0.9], "opacity": 0.72 }
+  }
+}
+```
+
+- `size` is the blob's width (X) and depth (Z) in meters, in the node's local
+  space, so it scales with the node. Make it a little wider than the
+  footprint.
+- `opacity` is the darkness at the center; the blob fades to nothing at its
+  edge. `color` tints it.
+- `height` lifts it above the node's origin (2 mm by default) so it does not
+  z-fight with the floor.
+
+Put it on the node that stands on the surface, with the node's origin at floor
+contact, or on a separate node under a loose object. The blob is static: it
+does not follow an object that is grabbed or moved by physics.
+
+**Shadow catchers** keep content grounded over AR passthrough, where there is no
+floor of yours to receive shadows. `ShadowCatcher` is an invisible plane at its
+node's origin that shows only the shadows cast onto it:
+
+```json
+{
+  "environment": { "shadows": true },
+  "nodes": [
+    {
+      "id": "ar-floor",
+      "components": { "ShadowCatcher": { "size": [6, 6], "opacity": 0.25 } }
+    },
+    {
+      "id": "key-light",
+      "transform": { "position": [-2, 4, 1], "rotationDeg": [-60, -30, 0] },
+      "components": {
+        "DirectionalLight": { "intensity": 2.5, "castShadow": true }
+      }
+    },
+    {
+      "id": "plinth",
+      "content": { "type": "asset", "asset": "plinth", "castShadow": true },
+      "transform": { "position": [0, 0, -1.5] }
+    }
+  ]
+}
+```
+
+A catcher shows shadows only when the document sets `environment.shadows`, a
+light component has `castShadow: true`, and the content above it casts shadows
+(`castShadow: true` on its asset or primitive content). It sits exactly at the
+node's origin, so use it where nothing else is the floor; a floor you render
+can receive shadows itself with `receiveShadow: true`.
+
+Both meshes are runtime-only: they never cast shadows, never take ray, grab or
+touch pointer hits, and stay visible during AR sessions. Selection and framing
+bounds, gaze target bounds, physics shapes detected from a node's meshes,
+locomotion collision, asset mesh counts and `entity.dispose()` all leave them
+out; `GroundShadowSystem` owns and frees them. In the editor, clicking a ground
+shadow in the viewport does not select its node: select a node whose only
+content is a ground shadow from the outliner (or with MCP), and its selection
+box is the shadow's footprint. Because they take no rays, the editor's review
+visibility (`visibleNodeIds`) never lists such a node.
+`scene_get_render_stats` counts them in `sceneEnvironment.groundShadows`.
+
 ## Setup Background
 
 In real life, our background environment determines the lighting. However, in 3D graphics, these are two completely separate concepts:

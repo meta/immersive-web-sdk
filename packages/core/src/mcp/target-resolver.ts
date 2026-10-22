@@ -248,15 +248,17 @@ export class SceneTargetResolver {
     }
     // Inside a UIKit tree only the components' own quads count: its
     // instanced panel and glyph meshes keep unused instances at the origin.
+    // Runtime-only meshes (a ContactShadow blob) are not part of the target.
     const stack: Array<[Object3D, boolean]> = [[object, false]];
     let traversed = 0;
     while (stack.length > 0 && traversed < MAX_TRAVERSED_OBJECTS) {
       const [current, inUikit] = stack.pop()!;
       traversed += 1;
       if (
-        current !== object &&
-        typeof current.entityIdx === 'number' &&
-        current.entityIdx !== candidate.entityIndex
+        (current !== object &&
+          typeof current.entityIdx === 'number' &&
+          current.entityIdx !== candidate.entityIndex) ||
+        current.userData?.iwsdkRuntimeOnly === true
       ) {
         continue;
       }

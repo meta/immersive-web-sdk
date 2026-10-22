@@ -39,6 +39,8 @@ player eye height to prove it.
 did not appear — even when the image looks plausible and `valid` is `true`. Check
 it against what you expect rather than trusting the picture. Single-sided
 surfaces facing away from the camera are the usual cause, and they report nothing.
+`ContactShadow` and `ShadowCatcher` meshes take no rays, so a node whose only
+content is one of them is never listed; check the object it grounds instead.
 
 ## Component keys come in two forms
 

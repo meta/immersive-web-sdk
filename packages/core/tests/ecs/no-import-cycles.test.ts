@@ -10,6 +10,11 @@ import { AudioSystem } from '../../src/audio/audio-system.js';
 import { AudioSource } from '../../src/audio/audio.js';
 import { EnvironmentSystem } from '../../src/environment/environment-system.js';
 import {
+  ContactShadow,
+  GroundShadowSystem,
+  ShadowCatcher,
+} from '../../src/environment/ground-shadows.js';
+import {
   DomeFade,
   DomeGradient,
   DomeTexture,
@@ -88,6 +93,18 @@ describe('module load order — System.queries must capture defined components',
       InputSystem,
       'pokeInteractables',
       [PokeInteractable, Transform],
+    ],
+    [
+      'GroundShadowSystem',
+      GroundShadowSystem,
+      'contactShadows',
+      [ContactShadow],
+    ],
+    [
+      'GroundShadowSystem',
+      GroundShadowSystem,
+      'shadowCatchers',
+      [ShadowCatcher],
     ],
   ];
 

@@ -55,6 +55,9 @@ runtime projection strips `authoring` and hashes canonical JSON for runtime iden
   terrain node to fade that node's own meshes into the root `DomeGradient` sky.
 - `LevelRoot`, `LevelTag`, and `Transform` are runtime-owned and must not appear in
   `components`.
+- `ContactShadow` (a soft blob under a node) and `ShadowCatcher` (an invisible AR
+  floor that shows received shadows) are node components: put them on the grounded
+  node or a floor node, not in root `components`.
 - `resources` contains only reusable scene prefabs.
 - Use namespaced keys in opaque `metadata`. Do not hide structural fields there.
 - Structural objects are closed. Unknown fields fail validation.

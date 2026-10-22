@@ -403,7 +403,9 @@ export class Locomotor {
     const geometries: BufferGeometry[] = [];
     object3D.traverse((child) => {
       const mesh = child as Mesh;
-      if (!mesh.isMesh) {
+      // IWSDK runtime-only meshes (ContactShadow and ShadowCatcher planes) are
+      // visuals, not walkable surfaces.
+      if (!mesh.isMesh || mesh.userData?.iwsdkRuntimeOnly === true) {
         return;
       }
       const position = mesh.geometry?.getAttribute('position');

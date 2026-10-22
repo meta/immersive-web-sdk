@@ -187,6 +187,12 @@ export class World extends ElicsWorld {
    */
   private disposeObject3DResources(object: Object3D): void {
     object.traverse((child: any) => {
+      // Runtime-only meshes (ContactShadow, ShadowCatcher) use resources their
+      // system shares and disposes.
+      if (child.userData?.iwsdkRuntimeOnly === true) {
+        return;
+      }
+
       // Dispose geometry
       if (child.geometry) {
         child.geometry.dispose();

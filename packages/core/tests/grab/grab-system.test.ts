@@ -428,6 +428,15 @@ describe('grab warnings', () => {
     expect(hasRaycastableMesh(root)).toBe(false);
   });
 
+  it('does not count runtime-only meshes such as ground shadows', () => {
+    const root = new Object3D();
+    const blob = new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial());
+    blob.userData.iwsdkRuntimeOnly = true;
+    root.add(blob);
+
+    expect(hasRaycastableMesh(root)).toBe(false);
+  });
+
   it('warns once when a grabbable entity has no raycastable mesh', () => {
     const root = new Object3D();
 

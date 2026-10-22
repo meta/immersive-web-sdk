@@ -11,6 +11,7 @@ import { DepthOccludable } from '../depth/depth-occludable.js';
 import { DomeFade } from '../environment/dome-fade.js';
 import { DomeGradient } from '../environment/dome-gradient.js';
 import { DomeTexture } from '../environment/dome-texture.js';
+import { ContactShadow, ShadowCatcher } from '../environment/ground-shadows.js';
 import { IBLGradient } from '../environment/ibl-gradient.js';
 import { IBLTexture } from '../environment/ibl-texture.js';
 import { EnvironmentRaycastTarget } from '../environment-raycast/raycast-target.js';
@@ -57,6 +58,7 @@ export const IWSDK_BUILTIN_COMPONENTS = defineComponents([
   AudioSource,
   AmbientLightComponent,
   CameraSource,
+  ContactShadow,
   DepthOccludable,
   DistanceGrabbable,
   DirectionalLightComponent,
@@ -86,6 +88,7 @@ export const IWSDK_BUILTIN_COMPONENTS = defineComponents([
   RayInteractable,
   RectAreaLightComponent,
   ScreenSpace,
+  ShadowCatcher,
   SpotLightComponent,
   Transform,
   TwoHandsGrabbable,

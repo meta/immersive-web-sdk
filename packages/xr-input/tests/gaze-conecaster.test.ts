@@ -145,6 +145,25 @@ describe('GazeConecaster membership', () => {
     expect(hit!.intersection.point.x).toBeLessThan(0.001);
   });
 
+  it('leaves runtime-only meshes out of the candidate bounds', () => {
+    // IWSDK marks ground-shadow planes runtime-only. This 3 m one under the
+    // off-axis card reaches the gaze axis.
+    const caster = new GazeConecaster({
+      coneAngle: 5 * DEG,
+      dwellWindowSeconds: 0,
+    });
+    const target = card(new Vector3(1, 0, -3));
+    const blob = new Mesh(new PlaneGeometry(3, 3), new MeshBasicMaterial());
+    blob.rotation.x = -Math.PI / 2;
+    blob.position.y = -0.2;
+    blob.userData.iwsdkRuntimeOnly = true;
+    blob.raycast = () => {};
+    target.add(blob);
+    target.updateMatrixWorld(true);
+
+    expect(caster.update(0, DT, context([target]))).toBeNull();
+  });
+
   it('rejects a card beyond the cone length', () => {
     const caster = new GazeConecaster({
       coneLength: 2,

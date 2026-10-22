@@ -441,6 +441,34 @@ floorMaterial.onBeforeCompile = (shader) => {
 }
 ```
 
+### 22. Hand-built ground shadows
+
+Flag: a canvas-painted radial blob card under a prop, or a `ShadowMaterial` plane
+added to ground content in AR. Both are built in: author `ContactShadow` and
+`ShadowCatcher` node components in the scene instead.
+
+```typescript
+// ❌ BAD - blob card and AR catcher built by hand (DOM canvas, extra assets)
+const blob = new Mesh(
+  plane,
+  new MeshBasicMaterial({ map: canvasBlob, transparent: true }),
+);
+const catcher = new Mesh(plane, new ShadowMaterial({ opacity: 0.25 }));
+```
+
+✅ GOOD - a node component in the scene JSON; for AR, add one floor node with
+`com.iwsdk.components.ShadowCatcher`:
+
+```json
+{
+  "id": "plinth",
+  "content": { "type": "asset", "asset": "plinth" },
+  "components": {
+    "com.iwsdk.components.ContactShadow": { "size": [0.9, 0.9] }
+  }
+}
+```
+
 ---
 
 ## Confidence-Based Reporting

@@ -11,6 +11,21 @@ export { DomeGradient } from './dome-gradient.js';
 export { DomeFade } from './dome-fade.js';
 export { IBLTexture } from './ibl-texture.js';
 export { IBLGradient } from './ibl-gradient.js';
+export {
+  ContactShadow,
+  ContactShadowBinding,
+  GroundShadowSystem,
+  ShadowCatcher,
+  ShadowCatcherBinding,
+  createGroundShadowResources,
+  groundShadowSpecFromComponentValue,
+} from './ground-shadows.js';
+export type {
+  ContactShadowSpec,
+  GroundShadowResources,
+  GroundShadowSpec,
+  ShadowCatcherSpec,
+} from './ground-shadows.js';
 export { EnvironmentSystem } from './environment-system.js';
 /** @internal */
 export type { DomeGradientUniforms } from './gradient-environment.js';

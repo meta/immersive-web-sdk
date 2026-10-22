@@ -250,6 +250,14 @@ between those horizontal distances from the node origin, and does nothing withou
 the correction is the finish gate; do not query capabilities again merely to confirm
 these established fields.
 
+Ground props with node components, not blob or catcher assets. Add
+`"com.iwsdk.components.ContactShadow": {"size": [0.9, 0.9]}` to each node that stands
+on the floor (origin at floor contact, size a little wider than the footprint). For
+AR, add one component-only node with `ShadowCatcher: {size, opacity}` at floor height;
+it shows the shadows of `castShadow` content only when `environment.shadows` is true
+and a light has `castShadow`. `ContactShadow` and `ShadowCatcher` are established
+schema too.
+
 For this common path, do not read the references or call
 `scene_get_capabilities`: `DomeGradient`, `IBLGradient`, `DomeFade`, `AmbientLight`,
 `HemisphereLight`, `DirectionalLight`, `PointLight`, asset nodes,

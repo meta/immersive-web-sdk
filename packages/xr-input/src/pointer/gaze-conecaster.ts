@@ -325,6 +325,11 @@ export class GazeConecaster implements GazeCandidateProvider {
    * fallback) in the same traversal.
    */
   private expandSafely(obj: Object3D, worldBox: Box3, localBox: Box3): void {
+    // IWSDK runtime-only meshes (ContactShadow and ShadowCatcher planes) take
+    // no pointer hits, so they must not widen the candidate either.
+    if (obj.userData?.iwsdkRuntimeOnly === true) {
+      return;
+    }
     const candidate = obj as Object3D & {
       geometry?: {
         boundingBox: Box3 | null;
