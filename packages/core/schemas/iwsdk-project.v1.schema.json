@@ -327,7 +327,16 @@
         },
         "iwer": { "type": "boolean" },
         "environment": {
+          "description": "Emulated environment: one of IWER SEM's built-in rooms. The legacy capture room ids still load, as the room that replaces each.",
           "enum": [
+            "sunlit_living_room",
+            "home_office",
+            "conference_room",
+            "open_office",
+            "kitchen",
+            "bedroom",
+            "music_studio",
+            "open_studio",
             "living_room",
             "meeting_room",
             "music_room",

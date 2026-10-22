@@ -42,9 +42,10 @@ iwsdkDev({
     // Options: 'metaQuest2' | 'metaQuest3' | 'metaQuestPro' | 'metaVRGlasses' | 'oculusQuest1'
     device: 'metaQuest3', // default
 
-    // Synthetic environment for AR room simulation
-    // Options: 'living_room' | 'meeting_room' | 'music_room' | 'office_large' | 'office_small'
-    environment: 'living_room',
+    // Room for AR scene-understanding testing: one of IWER's built-in rooms
+    // Options: 'sunlit_living_room' | 'home_office' | 'conference_room' |
+    //   'open_office' | 'kitchen' | 'bedroom' | 'music_studio' | 'open_studio'
+    environment: 'sunlit_living_room',
 
     // When to activate emulation
     // 'localhost' - only on localhost/127.0.0.1 (default)
@@ -103,7 +104,7 @@ iwsdkDev({
 iwsdkDev({
   emulator: {
     device: 'metaQuest3',
-    environment: 'living_room',
+    environment: 'sunlit_living_room',
   },
 });
 ```

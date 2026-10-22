@@ -14,6 +14,9 @@ import {
   normalizeProjectDevOptions,
   normalizeProjectWorldOptions,
   validateIwsdkProjectManifest,
+  LEGACY_EMULATOR_ENVIRONMENT_ROOMS,
+  PROJECT_EMULATOR_ROOMS,
+  resolveProjectEmulatorRoom,
   type IwsdkProjectManifestV1,
 } from '../../src/project/index.js';
 
@@ -111,6 +114,32 @@ const vrManifest = {
 } as const satisfies IwsdkProjectManifestV1;
 
 describe('iwsdk.project.v1 validation and normalization', () => {
+  it('accepts the built-in rooms and still accepts legacy capture room ids', () => {
+    const withEnvironment = (environment: string) => ({
+      ...vrManifest,
+      dev: { emulator: { environment } },
+    });
+    for (const id of [
+      ...PROJECT_EMULATOR_ROOMS,
+      ...Object.keys(LEGACY_EMULATOR_ENVIRONMENT_ROOMS),
+    ]) {
+      expect(validateIwsdkProjectManifest(withEnvironment(id)).valid).toBe(
+        true,
+      );
+    }
+    const invalid = validateIwsdkProjectManifest(withEnvironment('garage'));
+    expect(invalid.valid).toBe(false);
+    expect(invalid.issues[0]?.message).toBe(
+      'expected one of the built-in rooms: "sunlit_living_room", "home_office", "conference_room", "open_office", "kitchen", "bedroom", "music_studio", "open_studio"',
+    );
+
+    expect(resolveProjectEmulatorRoom('kitchen')).toBe('kitchen');
+    expect(resolveProjectEmulatorRoom('living_room')).toBe(
+      'sunlit_living_room',
+    );
+    expect(resolveProjectEmulatorRoom('office_small')).toBe('home_office');
+  });
+
   it('normalizes a complete VR manifest to the existing WorldOptions shape', () => {
     expect(validateIwsdkProjectManifest(vrManifest)).toEqual({
       valid: true,
@@ -250,7 +279,7 @@ describe('iwsdk.project.v1 validation and normalization', () => {
       },
       dev: {
         emulator: {
-          environment: 'living_room',
+          environment: 'sunlit_living_room',
           activation: { source: '^(localhost|127\\.0\\.0\\.1)$', flags: 'i' },
           injectOnBuild: false,
         },

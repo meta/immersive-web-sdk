@@ -81,7 +81,7 @@ export function createProjectManifest(
     dev: {
       emulator: {
         device: 'metaQuest3',
-        ...(target === 'ar' ? { environment: 'living_room' } : {}),
+        ...(target === 'ar' ? { environment: 'sunlit_living_room' } : {}),
       },
     },
   };

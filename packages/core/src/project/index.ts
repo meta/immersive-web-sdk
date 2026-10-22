@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+export * from './environments.js';
 export * from './normalize.js';
 export * from './paths.js';
 export * from './types.js';

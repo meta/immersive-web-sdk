@@ -179,12 +179,32 @@ export type ProjectEmulatorDevice =
   | 'metaVRGlasses'
   | 'oculusQuest1';
 
-export type ProjectEmulatorEnvironment =
+/** IWER SEM's built-in GLTS rooms, the emulator's environments. */
+export type ProjectEmulatorRoom =
+  | 'sunlit_living_room'
+  | 'home_office'
+  | 'conference_room'
+  | 'open_office'
+  | 'kitchen'
+  | 'bedroom'
+  | 'music_studio'
+  | 'open_studio';
+
+/**
+ * Ids of the legacy capture rooms, which IWSDK no longer offers; each loads
+ * the built-in room that replaces it (see LEGACY_EMULATOR_ENVIRONMENT_ROOMS).
+ * @deprecated Use a {@link ProjectEmulatorRoom} id.
+ */
+export type LegacyProjectEmulatorEnvironment =
   | 'living_room'
   | 'meeting_room'
   | 'music_room'
   | 'office_large'
   | 'office_small';
+
+export type ProjectEmulatorEnvironment =
+  | ProjectEmulatorRoom
+  | LegacyProjectEmulatorEnvironment;
 
 export interface ProjectEmulatorOptions {
   device?: ProjectEmulatorDevice;

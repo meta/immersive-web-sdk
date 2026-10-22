@@ -20,9 +20,6 @@ import {
 import { initMCPBridge, initMCPClient } from './mcp/ws-client.js';
 import type { ProcessedDevOptions } from './types.js';
 
-// Configuration will be replaced by the plugin
-const CONFIG: ProcessedDevOptions = '__IWSDK_DEV_CONFIG__' as any;
-
 type XRDeviceConfig = ConstructorParameters<typeof XRDevice>[0];
 
 // IWER's Meta VR Glasses profile leaves gaze off until the WebXR feature name
@@ -46,10 +43,16 @@ const DEVICE_CONFIGS = {
   oculusQuest1,
 } as const;
 
-type SEMConstructor = Parameters<XRDevice['installSEM']>[0];
-// @iwer/sem is runtime-compatible with installSEM, but its published type lags
-// IWER's SEMConstructor interface.
-const SEM_CONSTRUCTOR = SyntheticEnvironmentModule as unknown as SEMConstructor;
+// IWSDK offers SEM's built-in GLTS rooms (plus environments added at runtime),
+// not the legacy capture rooms, so they are left out of the list the DevUI
+// environment menu shows. Their data is not in the runtime either.
+class IWSDKSyntheticEnvironmentModule extends SyntheticEnvironmentModule {
+  get environments(): string[] {
+    return super.environments.filter(
+      (id) => this.environmentInfo(id)?.kind !== 'legacy-scan',
+    );
+  }
+}
 
 // Activation check function
 function shouldActivate(
@@ -302,18 +305,25 @@ function initDevRuntime(config: ProcessedDevOptions): void {
         );
       }
 
-      // Install SEM and load environment from CDN
-      xrDevice.installSEM(SEM_CONSTRUCTOR);
+      xrDevice.installSEM(IWSDKSyntheticEnvironmentModule);
 
       if (config.verbose) {
         console.log(
-          '[IWSDK Dev] 📍 Loading default environment from CDN:',
+          '[IWSDK Dev] 📍 Loading environment:',
           config.sem.defaultScene,
         );
       }
 
-      // Use SEM's built-in CDN loading (since __IS_UMD__ is true)
-      xrDevice.sem?.loadDefaultEnvironment(config.sem.defaultScene);
+      // The room and GLTS load lazily, as separate runtime chunks.
+      const defaultScene = config.sem.defaultScene;
+      xrDevice.sem
+        ?.loadDefaultEnvironment(defaultScene)
+        .catch((error: unknown) =>
+          console.error(
+            `[IWSDK Dev] ❌ Failed to load environment ${defaultScene}:`,
+            error,
+          ),
+        );
     }
 
     // Managed desktop tabs and the explicitly enabled physical headset expose
@@ -356,5 +366,7 @@ function initDevRuntime(config: ProcessedDevOptions): void {
   }
 }
 
-// Execute with configuration
-initDevRuntime(CONFIG);
+/** Starts the emulator runtime; the plugin's injected module passes the config. */
+export function startIwsdkDevRuntime(config: ProcessedDevOptions): void {
+  initDevRuntime(config);
+}

@@ -5,21 +5,19 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import type { ProjectEmulatorEnvironment } from '@iwsdk/core/project';
+
 /**
  * Synthetic Environment Module configuration
  * @deprecated Use `emulator.environment` instead
  */
 export interface SEMOptions {
   /**
-   * Default scene to load
-   * @default 'living_room'
+   * Default room to load: one of IWER SEM's built-in rooms. Legacy capture
+   * room ids load the room that replaces them.
+   * @default 'sunlit_living_room'
    */
-  defaultScene?:
-    | 'living_room'
-    | 'meeting_room'
-    | 'music_room'
-    | 'office_large'
-    | 'office_small';
+  defaultScene?: ProjectEmulatorEnvironment;
 }
 
 export type AiMode = 'agent' | 'collaborate';
@@ -114,15 +112,14 @@ export interface EmulatorOptions {
   activation?: 'localhost' | 'always' | RegExp;
 
   /**
-   * Synthetic environment to load in the emulator
+   * Room to load in the emulator: one of IWER SEM's built-in rooms
+   * ('sunlit_living_room', 'home_office', 'conference_room', 'open_office',
+   * 'kitchen', 'bedroom', 'music_studio', 'open_studio'). The legacy capture
+   * room ids ('living_room', 'meeting_room', 'music_room', 'office_large',
+   * 'office_small') are deprecated and load the room that replaces each.
    * @default undefined (no environment)
    */
-  environment?:
-    | 'living_room'
-    | 'meeting_room'
-    | 'music_room'
-    | 'office_large'
-    | 'office_small';
+  environment?: ProjectEmulatorEnvironment;
 
   /**
    * Inject script during build phase (in addition to dev)
@@ -310,6 +307,12 @@ export type ProcessedIWEROptions = ProcessedDevOptions;
  * Injection bundle result
  */
 export interface InjectionBundleResult {
-  code: string;
+  /** The pre-built runtime entry (dist/injection/runtime.js). */
+  entryPath: string;
+  /** Its folder, which also holds the lazy chunks (GLTS, rooms). */
+  directory: string;
+  /** The configuration the runtime starts with, as JSON. */
+  config: string;
+  /** Bytes the page loads up front: the entry and its static imports. */
   size: number;
 }

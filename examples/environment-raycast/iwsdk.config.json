@@ -28,7 +28,7 @@
   "dev": {
     "emulator": {
       "device": "metaQuest3",
-      "environment": "living_room",
+      "environment": "sunlit_living_room",
       "activation": "always",
       "injectOnBuild": true
     }

@@ -66,6 +66,6 @@ describe('starter project manifest', () => {
     expect(serialized).not.toContain('workspace');
     expect(serialized).not.toContain('assets.include');
     expect(serialized).not.toContain('"iwer"');
-    expect(manifest.dev?.emulator?.environment).toBe('living_room');
+    expect(manifest.dev?.emulator?.environment).toBe('sunlit_living_room');
   });
 });

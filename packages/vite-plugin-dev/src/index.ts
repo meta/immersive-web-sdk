@@ -37,6 +37,8 @@ import {
 import { acquireRuntimeOwner } from '@iwsdk/cli/runtime-owner';
 import {
   normalizeProjectDevOptions,
+  PROJECT_EMULATOR_ROOMS,
+  resolveProjectEmulatorRoom,
   type IwsdkProjectManifestV1,
 } from '@iwsdk/core/project';
 import {
@@ -96,7 +98,12 @@ import {
   type ManagedBrowser,
   type ManagedRuntimePublishEvidence,
 } from './headless-browser.js';
-import { buildInjectionBundle } from './injection-bundler.js';
+import {
+  buildInjectionBundle,
+  createInjectionModuleSource,
+  resolveInjectionRuntimeFile,
+  resolveInjectionRuntimeId,
+} from './injection-bundler.js';
 import { ManagedBrowserLifecycle } from './managed-browser/lifecycle.js';
 import { createRelayHandler } from './mcp-relay.js';
 import { reportSessionStart, reportSessionEnd } from './metavr-telemetry.js';
@@ -336,8 +343,14 @@ function processOptions(
 
   // Process SEM options from emulator.environment
   if (emulator.environment) {
+    const room = resolveProjectEmulatorRoom(emulator.environment);
+    if (room !== emulator.environment) {
+      console.warn(
+        `[IWSDK] dev.emulator.environment "${emulator.environment}" is a legacy capture room, which IWSDK no longer offers. Loading "${room}" instead; set it to one of: ${PROJECT_EMULATOR_ROOMS.join(', ')}.`,
+      );
+    }
     processed.sem = {
-      defaultScene: emulator.environment,
+      defaultScene: room,
     };
   }
 
@@ -3359,7 +3372,12 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       });
     },
 
-    resolveId(id) {
+    resolveId(id, importer) {
+      // The pre-built emulator runtime and its lazy chunks (GLTS, rooms).
+      const runtimeId = resolveInjectionRuntimeId(id, importer);
+      if (runtimeId != null) {
+        return runtimeId;
+      }
       if (
         id === DISABLED_HAVOK_ID ||
         (!bundlePhysics && id === '@babylonjs/havok')
@@ -3402,6 +3420,11 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
     },
 
     async load(id) {
+      const runtimeFile =
+        injectionBundle && resolveInjectionRuntimeFile(injectionBundle, id);
+      if (runtimeFile != null) {
+        return readFileSync(runtimeFile, 'utf8');
+      }
       if (id === RESOLVED_DISABLED_HAVOK_ID) {
         return createDisabledHavokModule();
       }
@@ -3412,7 +3435,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         if (!injectionBundle) {
           return 'console.warn("[IWSDK Dev] Runtime not available - injection bundle not loaded");';
         }
-        return `${injectionBundle.code}
+        return `${createInjectionModuleSource(injectionBundle)}
 if (import.meta.hot) {
   const role =
     window.__IWSDK_MCP_PAGE_ROLE === 'editor'

@@ -500,6 +500,9 @@ describe('manifest-first Vite integration', () => {
     );
     expect(runtimeSource).toContain('"nativeXRControl": true');
     expect(runtimeSource).toContain(
+      'import { startIwsdkDevRuntime } from "virtual:iwsdk-dev-runtime/runtime.js"',
+    );
+    expect(await readInjectedRuntime()).toContain(
       'Native XR control requires Meta Quest Browser',
     );
   });
@@ -575,8 +578,9 @@ describe('manifest-first Vite integration', () => {
       runtimeId,
     );
     expect(serveRuntime).toContain('"gazeSimulation": "head"');
-    expect(serveRuntime).toContain('gazeSimulation:!1');
-    expect(serveRuntime).toContain('"gaze-only"');
+    const runtimeCode = await readInjectedRuntime();
+    expect(runtimeCode).toContain('gazeSimulation:!1');
+    expect(runtimeCode).toContain('"gaze-only"');
 
     manifest.dev.emulator.injectOnBuild = true;
     await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
@@ -911,6 +915,101 @@ describe('manifest-first Vite integration', () => {
     );
   });
 
+  it('starts the emulator in the configured room and maps legacy capture ids', async () => {
+    const loadRuntime = async (environment: string) => {
+      const manifestPath = path.join(projectRoot, 'iwsdk.config.json');
+      const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+      manifest.dev.emulator = { environment };
+      await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+      const plugin = iwsdkDev({ https: false });
+      await callHook(
+        plugin.config,
+        plugin,
+        { root: projectRoot },
+        { command: 'serve', mode: 'development' },
+      );
+      callHook(plugin.configResolved, plugin, {
+        command: 'serve',
+        root: projectRoot,
+        server: {},
+      });
+      await callHook(plugin.buildStart, { addWatchFile: vi.fn() });
+      const runtimeId = callHook(
+        plugin.resolveId,
+        plugin,
+        '/@iwer-injection-runtime',
+      );
+      return callHook(plugin.load, { resolve: vi.fn() }, runtimeId);
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect(await loadRuntime('kitchen')).toContain(
+        '"defaultScene": "kitchen"',
+      );
+      expect(warn).not.toHaveBeenCalled();
+
+      expect(await loadRuntime('office_large')).toContain(
+        '"defaultScene": "open_office"',
+      );
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '"office_large" is a legacy capture room, which IWSDK no longer offers. Loading "open_office" instead',
+        ),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('loads the pre-built emulator runtime and its lazy chunks as modules', async () => {
+    const manifestPath = path.join(projectRoot, 'iwsdk.config.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    manifest.dev.emulator = { iwer: true, injectOnBuild: true };
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    const plugin = iwsdkDev({ https: false });
+    await callHook(
+      plugin.config,
+      plugin,
+      { root: projectRoot },
+      { command: 'build', mode: 'production' },
+    );
+    callHook(plugin.configResolved, plugin, {
+      command: 'build',
+      root: projectRoot,
+      server: {},
+    });
+    await callHook(plugin.buildStart, { addWatchFile: vi.fn() });
+    const runtimeId = callHook(
+      plugin.resolveId,
+      plugin,
+      '/@iwer-injection-runtime',
+    );
+    const runtimeSource = await callHook(
+      plugin.load,
+      { resolve: vi.fn() },
+      runtimeId,
+    );
+    expect(runtimeSource).toContain(
+      'import { startIwsdkDevRuntime } from "virtual:iwsdk-dev-runtime/runtime.js"',
+    );
+    // The runtime and its chunks load from dist/injection, so in production
+    // builds GLTS and the rooms become lazy chunks of the app.
+    const entryId = callHook(
+      plugin.resolveId,
+      plugin,
+      'virtual:iwsdk-dev-runtime/runtime.js',
+    );
+    expect(entryId).toBe('\0virtual:iwsdk-dev-runtime/runtime.js');
+    const entry = await callHook(plugin.load, { resolve: vi.fn() }, entryId);
+    const chunk = entry.match(/from\s*"(\.\/chunks\/[^"]+)"/)?.[1];
+    expect(chunk).toBeDefined();
+    const chunkId = callHook(plugin.resolveId, plugin, chunk, entryId);
+    expect(chunkId).toBe(`\0virtual:iwsdk-dev-runtime/${chunk!.slice(2)}`);
+    expect(
+      await callHook(plugin.load, { resolve: vi.fn() }, chunkId),
+    ).toContain('[IWSDK Dev]');
+  });
+
   it('keeps production IWER injection independent from the development workspace', async () => {
     const manifestPath = path.join(projectRoot, 'iwsdk.config.json');
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
@@ -948,6 +1047,26 @@ describe('manifest-first Vite integration', () => {
     expect(runtimeSource).not.toContain('"workspace": {');
   });
 });
+
+// The pre-built emulator runtime the injected module imports: its entry and
+// everything that loads with it (not the lazy GLTS and room chunks).
+async function readInjectedRuntime(
+  file = path.resolve(import.meta.dirname, '../dist/injection/runtime.js'),
+  seen = new Set<string>(),
+): Promise<string> {
+  if (seen.has(file)) {
+    return '';
+  }
+  seen.add(file);
+  const code = await readFile(file, 'utf8');
+  const imports = [...code.matchAll(/from\s*"(\.{1,2}\/[^"]+)"/g)].map(
+    (match) => path.resolve(path.dirname(file), match[1]),
+  );
+  const nested = await Promise.all(
+    imports.map((imported) => readInjectedRuntime(imported, seen)),
+  );
+  return [code, ...nested].join('\n');
+}
 
 function callHook(hook: unknown, context: unknown, ...args: unknown[]): any {
   if (typeof hook === 'function') {

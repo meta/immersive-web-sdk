@@ -5,6 +5,10 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import {
+  LEGACY_EMULATOR_ENVIRONMENT_ROOMS,
+  PROJECT_EMULATOR_ROOMS,
+} from './environments.js';
 import { normalizeProjectSourcePath } from './paths.js';
 import {
   IWSDK_PROJECT_MANIFEST_VERSION,
@@ -32,12 +36,9 @@ const DEVICES = [
   'oculusQuest1',
 ] as const;
 const ENVIRONMENTS = [
-  'living_room',
-  'meeting_room',
-  'music_room',
-  'office_large',
-  'office_small',
-] as const;
+  ...PROJECT_EMULATOR_ROOMS,
+  ...Object.keys(LEGACY_EMULATOR_ENVIRONMENT_ROOMS),
+];
 
 /** Error containing every issue found in a project manifest. */
 export class ProjectManifestValidationError extends Error {
@@ -775,6 +776,7 @@ function validateDev(
           `${path}.emulator.environment`,
           ENVIRONMENTS,
           issues,
+          `expected one of the built-in rooms: ${PROJECT_EMULATOR_ROOMS.map((room) => `"${room}"`).join(', ')}`,
         );
       }
       if ('activation' in emulator) {
