@@ -236,7 +236,7 @@ async function runRuntimeOperation(
     timeoutMs = parseIntegerOption(
       options.timeout,
       '--timeout',
-      getDefaultRuntimeCommandTimeoutMs(operation.wsMethod),
+      getDefaultRuntimeCommandTimeoutMs(operation.wsMethod, command.params),
     );
   } catch (error) {
     telemetry.fail('invalid_input');

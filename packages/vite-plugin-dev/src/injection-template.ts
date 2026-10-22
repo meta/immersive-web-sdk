@@ -17,7 +17,11 @@ import {
   metaVRGlasses,
   oculusQuest1,
 } from 'iwer';
-import { initMCPBridge, initMCPClient } from './mcp/ws-client.js';
+import {
+  connectFrameworkTargetResolver,
+  initMCPBridge,
+  initMCPClient,
+} from './mcp/ws-client.js';
 import type { ProcessedDevOptions } from './types.js';
 
 type XRDeviceConfig = ConstructorParameters<typeof XRDevice>[0];
@@ -325,6 +329,9 @@ function initDevRuntime(config: ProcessedDevOptions): void {
           ),
         );
     }
+
+    // Hand sequences resolve target names through the IWSDK world.
+    connectFrameworkTargetResolver(xrDevice);
 
     // Managed desktop tabs and the explicitly enabled physical headset expose
     // the same command surface. A paired target-device preview also owns an

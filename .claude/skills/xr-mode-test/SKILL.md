@@ -12,43 +12,43 @@ Test the XR session lifecycle by entering and exiting XR mode, verifying state t
 
 ### 1. Check Initial State
 
-Use `mcp__iwsdk-dev-mcp__xr_get_session_status` to confirm starting state:
+Use `mcp__iwsdk-runtime__xr_get_session_status` to confirm starting state:
 
 - In 2D mode: no active session
 - Already in XR: note current state before proceeding
 
 ### 2. Enter XR Mode
 
-Use `mcp__iwsdk-dev-mcp__xr_accept_session` to enter XR.
+Use `mcp__iwsdk-runtime__xr_accept_session` to enter XR.
 
 ### 3. Verify XR Session Active
 
-Use `mcp__iwsdk-dev-mcp__xr_get_session_status` to confirm:
+Use `mcp__iwsdk-runtime__xr_get_session_status` to confirm:
 
 - Session is active
 - `visibilityState` is `"visible"`
 
 ### 4. Optional: Verify Input Devices
 
-Use `mcp__iwsdk-dev-mcp__xr_get_device_state` to check:
+Use `mcp__iwsdk-runtime__xr_get_device_state` to check:
 
 - Controllers are connected
 - Headset position is valid
 
 ### 5. Exit XR Mode
 
-Use `mcp__iwsdk-dev-mcp__xr_end_session` to leave XR.
+Use `mcp__iwsdk-runtime__xr_end_session` to leave XR.
 
 ### 6. Verify Session Ended
 
-Use `mcp__iwsdk-dev-mcp__xr_get_session_status` to confirm:
+Use `mcp__iwsdk-runtime__xr_get_session_status` to confirm:
 
 - No active session
 - Back to 2D mode
 
 ### 7. Check Application State
 
-Use `mcp__iwsdk-dev-mcp__browser_get_console_logs` to verify:
+Use `mcp__iwsdk-runtime__browser_get_console_logs` to verify:
 
 - Any mode-switch logs fired correctly
 - Application state reset as expected (if applicable)

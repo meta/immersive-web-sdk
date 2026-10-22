@@ -136,6 +136,23 @@ object, run
 `npx @iwsdk/cli xr set-gamepad-state --input-json '{"device":"controller-right","buttons":[{"index":0,"value":1}]}'`,
 observe `Grabbed` or movement, then repeat with `value:0` to release.
 
+For hand input (poke, pinch-grab, gestures), switch with
+`xr set-input-mode` `{"mode":"hand"}` and drive the hand by target name with one
+`xr run-sequence` per interaction (`--timeout 45000`). `xr list-targets` names
+the interactable entities and their UIKitML element IDs. Press a button with
+`press`, never a pinch; a near grab needs `grabbing.useHandPinchForGrab` (on by
+default):
+
+```bash
+npx @iwsdk/cli xr run-sequence --input-json '{"device":"hand-right","steps":[{"target":"Btn_Action","press":{}}]}' --timeout 45000
+npx @iwsdk/cli xr run-sequence --input-json '{"device":"hand-right","steps":[{"target":"Requested Name","approach":{"distance":0.06},"pinch":{"value":1,"at":"arrival"}},{"position":{"x":0,"y":1,"z":-0.5},"depart":{"distance":0.08}}]}' --timeout 45000
+npx @iwsdk/cli xr run-sequence --input-json '{"device":"hand-right","steps":[{"pinch":0,"duration":0.15}]}'
+```
+
+Query `Grabbed` between the grab and the release. A press result whose
+`presses[0].contactMs` is 800 or more did not click. Slow headless frames can
+stretch a press that far, so run that press once more before changing code.
+
 If a scene/source/UI edit happens after the managed runtime started and live
 state becomes stale, do not call `scene open`, repeatedly poll `dev status`, or
 loop on browser reload. Run one

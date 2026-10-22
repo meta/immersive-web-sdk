@@ -6,6 +6,16 @@
  */
 
 export { MCPRuntime } from './mcp-runtime.js';
+export { SceneTargetResolver } from './target-resolver.js';
+export type {
+  ResolvedTarget,
+  TargetFace,
+  TargetIntent,
+  TargetReference,
+  TargetResolveContext,
+  TargetSummary,
+  TargetVector,
+} from './target-resolver.js';
 export type { HierarchyNode, ObjectTransform } from './scene-tools.js';
 export type {
   EcsPauseResult,

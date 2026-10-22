@@ -1010,6 +1010,16 @@ describe('manifest-first Vite integration', () => {
     ).toContain('[IWSDK Dev]');
   });
 
+  it('hands the IWSDK target resolver to the emulator for hand sequences', async () => {
+    // Tree-shaking drops connectFrameworkTargetResolver unless the runtime
+    // calls it, and the minifier keeps property names.
+    const runtimeCode = await readInjectedRuntime();
+    expect(runtimeCode).toContain(
+      'setTargetResolver(window.FRAMEWORK_MCP_RUNTIME?.targetResolver',
+    );
+    expect(runtimeCode).toContain('"run_sequence"');
+  });
+
   it('keeps production IWER injection independent from the development workspace', async () => {
     const manifestPath = path.join(projectRoot, 'iwsdk.config.json');
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));

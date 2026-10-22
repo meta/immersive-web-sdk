@@ -393,6 +393,73 @@ other runtime-dispatched tools still require their corresponding in-page bridge.
 
 These tools operate on the emulated WebXR device, input sources, session, and poses.
 Inspect each installed schema for device names, axes, timing, and optional fields.
+Positions and orientations are relative to the XR origin (`world.player`); `-Z` is
+forward and `+Y` is up.
+
+## Hands
+
+- `xr_run_sequence`, `xr_cancel_sequence`
+- `xr_list_targets`
+- `xr_set_hand_pose`
+- `xr_get_hand_state`
+- `xr_microgesture`
+
+Set `xr_set_input_mode` to `hand` first. These tools come from IWER and drive the
+emulated hands the way a person moves them, so the application's real poke, pinch,
+and grab code reacts.
+
+### `xr_run_sequence`
+
+Runs a whole hand interaction in one call: press a button with the index fingertip,
+pinch-grab an object, carry it, set it down, make a gesture. Each move is one smooth
+reach; the head turns toward the target, and the body leans or steps closer when it
+is out of reach. The result lists the select events the application saw, step times,
+press contact times, warnings, and the final hand state. Pass `dryRun: true` to check
+a plan without moving anything. A sequence gives up 28 seconds after it is sent, with
+a partial result; `xr_cancel_sequence` stops it sooner. A UIKit click needs the
+fingertip to leave within 800 ms; slow headless frames can stretch a press past that,
+so press again when `presses[0].contactMs` is 800 or more.
+
+```bash
+npx @iwsdk/cli xr run-sequence --input-json \
+  '{"device":"hand-right","steps":[{"target":"counter-button","press":{}}]}'
+```
+
+### `xr_list_targets`
+
+Lists the names that `xr_run_sequence` steps accept as `target`, with each target's
+box centre and size. IWSDK resolves them in the live scene:
+
+- entities with `PokeInteractable`, `RayInteractable`, `OneHandGrabbable`,
+  `TwoHandsGrabbable`, or `DistanceGrabbable`, by Object3D name (`Map Pin 1`)
+- UIKitML elements with an `id` inside those entities (`counter-button`); hidden
+  elements are left out
+
+A step's `target` also accepts a scene node id, any Object3D name, or a UUID. Targets
+that share a name are listed under their scene node id. A press goes to the face
+toward the body (or `{ "name": ..., "face": "top" }`), a grab to the middle of the
+object, and setting a held object down to the top of the target.
+
+### `xr_set_hand_pose`, `xr_get_hand_state`, `xr_microgesture`
+
+`xr_set_hand_pose` shapes a hand with one of IWER's built-in poses (`point`, `fist`,
+`thumbs-up`, and others), optionally per finger and faded over `duration`. Poses
+never select; pinch with `xr_set_select_value` or a sequence's `pinch`.
+`xr_get_hand_state` reads the pose, pinch, and the XR-origin positions of the wrist,
+grip, grasp point, and fingertips. `xr_microgesture` swipes or taps the thumb along
+the index finger; the application sees the hand gamepad's microgesture buttons.
+
+`xr_set_transform` and `xr_animate_to` also place a hand by a point on it (`anchor`:
+`index-tip`, `grasp`, `wrist`) and orient it by direction (`{"fingers":"forward",
+"thumb":"up"}`) or `"auto"`.
+
+`xr_set_hand_pose`, `xr_set_select_value`, `xr_animate_to`, and `xr_select` reply
+once their `duration` has passed, so their default timeout grows by that duration.
+
+On a physical headset target, IWER places the hands relative to the native session,
+while IWSDK reports targets relative to `world.player`. The two agree in the
+emulator, but targeted sequences have not been verified on a headset; check one
+`press` there before relying on target names.
 
 ## ECS Debugging
 

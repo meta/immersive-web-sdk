@@ -302,6 +302,47 @@ describe('runtime relay command deadlines', () => {
     });
   });
 
+  test('a hand sequence outlasts the 28 s IWER gives it', () => {
+    vi.useFakeTimers();
+    const f = fixture();
+    f.request(undefined, 'sequence', 'run_sequence');
+
+    // run_sequence: 40s caller deadline minus the 3s relay margin, so IWER's
+    // own deadline result (28s after dispatch) arrives first.
+    vi.advanceTimersByTime(36_999);
+    expect(f.agent.send).not.toHaveBeenCalled();
+    f.relay.onMessage(
+      f.app,
+      JSON.stringify({
+        id: decode(f.app).id,
+        result: { completed: false, reason: 'deadline' },
+      }),
+      f.clients,
+    );
+    expect(decode(f.agent)).toMatchObject({
+      id: 'sequence',
+      result: { completed: false, reason: 'deadline' },
+    });
+    expect(f.relay.pendingCount()).toBe(0);
+  });
+
+  test('a pose fade waits out its duration', () => {
+    vi.useFakeTimers();
+    const f = fixture();
+    f.request(undefined, 'fade', 'set_hand_pose', {
+      params: { device: 'hand-right', poseId: 'fist', duration: 45 },
+    });
+
+    // IWER replies when the fade ends: 30s plus 45s, less the 3s margin.
+    vi.advanceTimersByTime(71_999);
+    expect(f.agent.send).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(decode(f.agent).error.data).toMatchObject({
+      code: 'command_timeout',
+      outcome: 'outcome_unknown',
+    });
+  });
+
   test('every settlement path disarms the exact deadline', () => {
     vi.useFakeTimers();
     const onOutcomeUnknown = vi.fn();

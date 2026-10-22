@@ -217,11 +217,16 @@ export function createRelayHandler(options?: RelayOptions): RelayHandler {
     );
   }
   /** Milliseconds this relay may wait, NaN when the deadline is malformed. */
-  function relayWindowMs(method: string, deadline: unknown): number {
+  function relayWindowMs(
+    method: string,
+    deadline: unknown,
+    params: unknown,
+  ): number {
     // Only an omitted deadline is legacy; an explicit null is malformed.
     if (deadline === undefined) {
       return (
-        getDefaultRuntimeCommandTimeoutMs(method) - RELAY_DEADLINE_MARGIN_MS
+        getDefaultRuntimeCommandTimeoutMs(method, params) -
+        RELAY_DEADLINE_MARGIN_MS
       );
     }
     if (typeof deadline !== 'number' || !Number.isFinite(deadline)) {
@@ -270,7 +275,11 @@ export function createRelayHandler(options?: RelayOptions): RelayHandler {
       }
       return;
     }
-    const windowMs = relayWindowMs(message.method, message.deadline);
+    const windowMs = relayWindowMs(
+      message.method,
+      message.deadline,
+      message.params,
+    );
     if (Number.isNaN(windowMs)) {
       return replyError(
         source,

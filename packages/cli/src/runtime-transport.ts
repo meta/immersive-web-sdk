@@ -748,7 +748,7 @@ export async function sendRuntimeCommand({
   method,
   params,
   target,
-  timeoutMs = getDefaultRuntimeCommandTimeoutMs(method),
+  timeoutMs = getDefaultRuntimeCommandTimeoutMs(method, params),
   runtimeSession,
 }: SendRuntimeCommandOptions): Promise<RuntimeCommandResponse> {
   const deadline = Date.now() + Math.max(timeoutMs, 1);

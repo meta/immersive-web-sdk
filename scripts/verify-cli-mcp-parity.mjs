@@ -842,6 +842,36 @@ const SMOKE_STEPS = [
     args: () => ({ count: 10, level: ['warn', 'error'] }),
     expectTabMetadata: true,
   },
+  // Hand steps go after the console logs: the time they take changes how
+  // the two runtimes group repeated warnings.
+  { name: 'xr_set_input_mode', args: () => ({ mode: 'hand' }) },
+  {
+    name: 'xr_list_targets',
+    args: () => ({}),
+    expectTabMetadata: true,
+    after({ cliOutcome }) {
+      const names = cliOutcome.result.targets.map((target) => target.name);
+      assert(
+        cliOutcome.result.resolver && names.includes('counter-button'),
+        `IWSDK should resolve the poke panel's counter-button: ${names}`,
+      );
+    },
+  },
+  {
+    name: 'xr_run_sequence',
+    args: () => ({
+      device: 'hand-right',
+      dryRun: true,
+      steps: [{ label: 'press', target: 'counter-button', press: {} }],
+    }),
+  },
+  { name: 'xr_get_hand_state', args: () => ({ device: 'hand-right' }) },
+  {
+    name: 'xr_run_sequence',
+    args: () => ({ device: 'hand-right', steps: [{ pose: 'point' }] }),
+    expectError: true,
+  },
+  { name: 'xr_set_input_mode', args: () => ({ mode: 'controller' }) },
   {
     name: 'browser_snapshot',
     args: () => ({ maxNodes: 20, maxTextLength: 80 }),

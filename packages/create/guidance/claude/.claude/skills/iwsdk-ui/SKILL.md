@@ -245,6 +245,20 @@ query the entity while held to observe `Grabbed`, then release with the same
 command and `"value":0`. Movement is unnecessary unless the request asks for
 it.
 
+When the request asks for a poke (near touch) on a control, press it with the
+emulated hand's index fingertip by its element ID. The panel entity needs
+`PokeInteractable`:
+
+```bash
+npx @iwsdk/cli xr set-input-mode --input-json '{"mode":"hand"}'
+npx @iwsdk/cli xr run-sequence --input-json '{"device":"hand-right","steps":[{"target":"Btn_Action","press":{}}]}' --timeout 45000
+```
+
+The press clicked when `presses[0].contactMs` is below 800; at 800 or more a
+slow headless frame held the touch too long, so run the press once more. Confirm
+the state change with `ui inspect`. `xr list-targets` lists the element IDs that
+can be pressed.
+
 The commands in this section are the supported path. Do not call broad
 `iwsdk`, `ui`, `browser`, `ecs`, or `xr` help. If a shown command fails, use its
 error output and the exact forms above to correct it instead of invoking

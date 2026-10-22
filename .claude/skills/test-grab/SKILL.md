@@ -1,12 +1,12 @@
 ---
 name: test-grab
-description: 'Test grab system (distance grab, one-hand grab, two-hand grab) against the grab example using the iwsdk CLI.'
+description: 'Test grab system (distance grab, one-hand grab, two-hand grab, hand pinch grab) against the grab example using the iwsdk CLI.'
 argument-hint: '[--suite distance|onehand|twohand|all]'
 ---
 
 # Grab System Test
 
-Run 5 test suites covering distance grab, one-hand grab, two-hand grab, system/component registration, and stability.
+Run 6 test suites covering distance grab, one-hand grab, two-hand grab, system/component registration, hand pinch grab, and stability.
 
 **Configuration:**
 
@@ -366,7 +366,65 @@ Assert: Must include: `OneHandGrabbable`, `TwoHandsGrabbable`, `DistanceGrabbabl
 
 ---
 
-### Suite 5: Stability
+### Suite 5: Hand Pinch Grab (run_sequence)
+
+The grab example sets `useHandPinchForGrab`, so an emulated hand's pinch grabs
+`OneHandGrabbable` entities. IWSDK resolves the target names the hand
+sequences use.
+
+**Test 5.1: Hand Input and Targets**
+
+```bash
+npx @iwsdk/cli xr set-input-mode --input-json '{"mode":"hand"}' 2>/dev/null
+```
+
+```bash
+npx @iwsdk/cli xr list-targets 2>/dev/null
+```
+
+Assert: `resolver` is `true` and `targets` includes `Map Pin 1`, `Map Pin 2`, and
+`Map Pin 3`. Save the `Map Pin 1` entry's `position` (box centre) as `<pin-pos>`
+and `size` as `<pin-size>`, and find its entity index with
+`npx @iwsdk/cli ecs find --input-json '{"namePattern":"^Map Pin 1$"}'` as `<pin>`.
+
+**Test 5.2: Pinch-Grab and Carry**
+
+The carry position is where the pin's base goes while it is held (here 30 cm
+toward the user and 10 cm up):
+
+```bash
+npx @iwsdk/cli xr run-sequence --input-json '{"device":"hand-right","steps":[{"label":"grab","target":"Map Pin 1","approach":{"distance":0.06},"pinch":{"value":1,"at":"arrival"}},{"label":"carry","position":{"x":<pin-pos.x - 0.05>,"y":<pin-pos.y - pin-size.y/2 + 0.1>,"z":<pin-pos.z + 0.3>},"depart":{"distance":0.08}}]}' --timeout 45000 2>/dev/null
+```
+
+Assert: `completed` is `true` and `events` contains `selectstart`.
+
+```bash
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":<pin>,"components":["Grabbed"]}' 2>/dev/null
+```
+
+Assert: `Grabbed` present. Query `Map Pin 2` and `Map Pin 3` the same way and
+assert `Grabbed` is absent on both.
+
+**Test 5.3: Release**
+
+```bash
+npx @iwsdk/cli xr run-sequence --input-json '{"device":"hand-right","steps":[{"label":"release","pinch":0,"duration":0.15}]}' --timeout 45000 2>/dev/null
+```
+
+Assert: `events` contains `selectend`. Then `sleep 0.5`, query `<pin>` for
+`["Grabbed"]` and assert it is absent. Run `npx @iwsdk/cli xr list-targets` again:
+the `Map Pin 1` centre must have moved at least 0.2 m from `<pin-pos>`, and its
+base (centre y minus half its height) must be within 0.02 m of the carry position.
+
+**Test 5.4: Back to Controllers**
+
+```bash
+npx @iwsdk/cli xr set-input-mode --input-json '{"mode":"controller"}' 2>/dev/null
+```
+
+---
+
+### Suite 6: Stability
 
 ```bash
 npx @iwsdk/cli browser logs --input-json '{"count":30,"level":["error","warn"]}' 2>/dev/null
@@ -393,7 +451,8 @@ Output a summary table:
 | 2. One-Hand Grab              | PASS/FAIL |
 | 3. Two-Hand Grab              | PASS/FAIL |
 | 4. System/Component Reg.      | PASS/FAIL |
-| 5. Stability                  | PASS/FAIL |
+| 5. Hand Pinch Grab            | PASS/FAIL |
+| 6. Stability                  | PASS/FAIL |
 ```
 
 If any suite fails, include which assertion failed and actual vs expected values.
@@ -426,6 +485,11 @@ OneHandGrabbable and TwoHandsGrabbable entities do NOT get `Hovered` or `Pressed
 ### Trigger vs Squeeze confusion
 
 Distance grab uses **trigger** (`set_select_value`), not squeeze. One-hand and two-hand grab use **squeeze** (`set_gamepad_state` button index 1). Wrong button silently fails.
+
+### Hand sequences need a longer timeout
+
+`xr run-sequence` resolves when the whole interaction is done, up to 28 s after
+it is sent. Pass `--timeout 45000`.
 
 ### Grab sphere radius is 0.07m
 

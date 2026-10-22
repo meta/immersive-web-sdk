@@ -1,6 +1,6 @@
 ---
 name: iwsdk-grab
-description: Use emulated XR controllers to verify proximity grabbing for OneHandGrabbable and TwoHandsGrabbable objects. Use for pick up, move, release, or regression-test requests involving near-hand grab with the squeeze button.
+description: Use emulated XR controllers or hands to verify proximity grabbing for OneHandGrabbable and TwoHandsGrabbable objects. Use for pick up, move, release, or regression-test requests involving near-hand grab with the squeeze button or a hand pinch.
 argument-hint: '(use the current request)'
 ---
 
@@ -35,6 +35,29 @@ Use this workflow only for `OneHandGrabbable` or `TwoHandsGrabbable`. A
 Do not use trigger index `0`, `xr select`, or teleport-style device mutation for
 proximity grab. Do not edit source merely to make an existing named entity easier
 to locate; report missing runtime identity when that is the actual defect.
+
+## Hand pinch grab
+
+When the user asks for hands or a pinch, grab with the emulated hand instead of
+squeeze. This needs `grabbing.useHandPinchForGrab`, which is on unless the project
+manifest sets it to `false`.
+Switch input once, then grab and carry in one sequence, by the entity's name
+from `xr list-targets`:
+
+```bash
+npx @iwsdk/cli xr set-input-mode --input-json '{"mode":"hand"}'
+npx @iwsdk/cli xr run-sequence --input-json '{"device":"hand-right","steps":[{"target":"Requested Name","approach":{"distance":0.06},"pinch":{"value":1,"at":"arrival"}},{"position":{"x":0.3,"y":1,"z":-1.2},"depart":{"distance":0.08}}]}' --timeout 45000
+```
+
+While the hand holds something, a step `position` is where the object's base
+goes. Query `Grabbed` while held, then let go and query the final transform:
+
+```bash
+npx @iwsdk/cli xr run-sequence --input-json '{"device":"hand-right","steps":[{"pinch":0,"duration":0.15}]}'
+```
+
+The sequence result lists the select events the application saw; a missing
+`selectstart` means the pinch never reached the object.
 
 ## Evidence and stopping
 

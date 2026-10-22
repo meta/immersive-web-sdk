@@ -54,7 +54,7 @@
   "license": "MIT",
   "dependencies": {
     "@drawcall/uikitml": "0.1.8",
-    "@iwer/devui": "^2.6.0",
+    "@iwer/devui": "^2.7.0",
     "@iwsdk/core": "workspace:*",
     "@iwsdk/scene-composition": "workspace:*",
     "@preact/signals-core": "^1.12.1",
@@ -69,10 +69,10 @@
     "ws": "^8.21.1"
   },
   "devDependencies": {
-    "@iwer/sem": "^2.6.0",
+    "@iwer/sem": "^2.7.0",
     "@iwsdk/cli": "workspace:*",
     "@types/ws": "^8.5.13",
-    "iwer": "^2.6.0",
+    "iwer": "^2.7.0",
     "vitest": "^4.1.10"
   },
   "peerDependencies": {

@@ -8,6 +8,7 @@
 import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   MCPWebSocketClient,
+  connectFrameworkTargetResolver,
   initMCPBridge,
   initMCPClient,
 } from '../src/mcp/ws-client.js';
@@ -1288,5 +1289,78 @@ describe('initMCPClient', () => {
 
     client.disconnect();
     consoleSpy.mockRestore();
+  });
+});
+
+describe('connectFrameworkTargetResolver', () => {
+  let originalWindow: typeof globalThis.window | undefined;
+  let readyListeners: Array<() => void>;
+
+  beforeEach(() => {
+    readyListeners = [];
+    originalWindow = (globalThis as any).window;
+    (globalThis as any).window = {
+      addEventListener: vi.fn((type: string, listener: () => void) => {
+        if (type === 'iwsdk:mcp-runtime-ready') {
+          readyListeners.push(listener);
+        }
+      }),
+    };
+  });
+
+  afterEach(() => {
+    if (originalWindow !== undefined) {
+      (globalThis as any).window = originalWindow;
+    } else {
+      delete (globalThis as any).window;
+    }
+  });
+
+  test("hands IWER the framework runtime's resolver now and after every runtime start", () => {
+    const first = { resolve: vi.fn(), list: vi.fn() };
+    const second = { resolve: vi.fn(), list: vi.fn() };
+    const device = {
+      remote: { dispatch: vi.fn(), setTargetResolver: vi.fn() },
+    };
+    (globalThis as any).window.FRAMEWORK_MCP_RUNTIME = {
+      targetResolver: first,
+    };
+
+    connectFrameworkTargetResolver(device);
+    expect(device.remote.setTargetResolver).toHaveBeenLastCalledWith(first);
+
+    // A new world after a reload or HMR brings its own resolver.
+    (globalThis as any).window.FRAMEWORK_MCP_RUNTIME = {
+      targetResolver: second,
+    };
+    readyListeners.forEach((listener) => listener());
+    expect(device.remote.setTargetResolver).toHaveBeenLastCalledWith(second);
+
+    // A runtime without one leaves IWER without a resolver, not a stale one.
+    (globalThis as any).window.FRAMEWORK_MCP_RUNTIME = {};
+    readyListeners.forEach((listener) => listener());
+    expect(device.remote.setTargetResolver).toHaveBeenLastCalledWith(null);
+  });
+
+  test('waits for the runtime when the world starts after the emulator', () => {
+    const resolver = { resolve: vi.fn() };
+    const device = {
+      remote: { dispatch: vi.fn(), setTargetResolver: vi.fn() },
+    };
+
+    connectFrameworkTargetResolver(device);
+    expect(device.remote.setTargetResolver).toHaveBeenLastCalledWith(null);
+
+    (globalThis as any).window.FRAMEWORK_MCP_RUNTIME = {
+      targetResolver: resolver,
+    };
+    readyListeners.forEach((listener) => listener());
+    expect(device.remote.setTargetResolver).toHaveBeenLastCalledWith(resolver);
+  });
+
+  test('leaves an IWER without target resolution alone', () => {
+    const device = { remote: { dispatch: vi.fn() } };
+    expect(() => connectFrameworkTargetResolver(device)).not.toThrow();
+    expect(readyListeners).toHaveLength(0);
   });
 });

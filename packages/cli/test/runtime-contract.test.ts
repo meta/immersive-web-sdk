@@ -11,6 +11,7 @@ import {
   RUNTIME_MCP_TOOLS,
   SCENE_MCP_TOOL_NAMES,
   getDefaultRuntimeCommandTimeoutMs,
+  getRuntimeOperationByCliPath,
   getRuntimeOperationByToolName,
   resolveRuntimeOperationRequest,
 } from '../src/runtime-contract.js';
@@ -501,5 +502,262 @@ describe('runtime contract scene tools', () => {
         limit: 51,
       }),
     ).toThrow('ui_inspect.limit must be at most 50');
+  });
+});
+
+describe('runtime contract hand tools', () => {
+  const resolve = (toolName: string, params: unknown) =>
+    resolveRuntimeOperationRequest(
+      getRuntimeOperationByToolName(toolName)!,
+      params,
+    );
+
+  test('exposes the IWER hand tools as application-page xr commands', () => {
+    for (const [toolName, method, action] of [
+      ['xr_set_hand_pose', 'set_hand_pose', 'set-hand-pose'],
+      ['xr_microgesture', 'microgesture', 'microgesture'],
+      ['xr_get_hand_state', 'get_hand_state', 'get-hand-state'],
+      ['xr_run_sequence', 'run_sequence', 'run-sequence'],
+      ['xr_cancel_sequence', 'cancel_sequence', 'cancel-sequence'],
+      ['xr_list_targets', 'list_targets', 'list-targets'],
+    ]) {
+      const operation = getRuntimeOperationByToolName(toolName);
+      expect(operation, toolName).toMatchObject({
+        cliPath: ['xr', action],
+        execution: 'runtime',
+        physical: true,
+        wsMethod: method,
+      });
+      expect(operation?.target).toBeUndefined();
+      expect(getRuntimeOperationByCliPath('xr', action)?.mcpName).toBe(
+        toolName,
+      );
+      expect(operation?.inputSchema.properties).toHaveProperty('expectedTab');
+    }
+  });
+
+  test('lets a hand sequence outlast its own 28 s deadline', () => {
+    expect(getDefaultRuntimeCommandTimeoutMs('run_sequence')).toBe(40_000);
+    for (const method of ['microgesture', 'set_hand_pose', 'list_targets']) {
+      expect(getDefaultRuntimeCommandTimeoutMs(method)).toBe(30_000);
+    }
+  });
+
+  test('waits out the duration of a fade, ramp or animation', () => {
+    for (const method of [
+      'set_hand_pose',
+      'set_select_value',
+      'animate_to',
+      'select',
+    ]) {
+      expect(getDefaultRuntimeCommandTimeoutMs(method, { duration: 45 })).toBe(
+        75_000,
+      );
+      expect(
+        getDefaultRuntimeCommandTimeoutMs(method, { duration: 0.25 }),
+      ).toBe(30_250);
+      expect(getDefaultRuntimeCommandTimeoutMs(method, { duration: 0 })).toBe(
+        30_000,
+      );
+      expect(getDefaultRuntimeCommandTimeoutMs(method, {})).toBe(30_000);
+    }
+    // Bounded, so a runaway duration cannot overflow a timer.
+    expect(
+      getDefaultRuntimeCommandTimeoutMs('set_hand_pose', { duration: 1e12 }),
+    ).toBe(30_000 + 3_600_000);
+    expect(
+      getDefaultRuntimeCommandTimeoutMs('set_transform', { duration: 45 }),
+    ).toBe(30_000);
+    expect(
+      getDefaultRuntimeCommandTimeoutMs('run_sequence', { duration: 45 }),
+    ).toBe(40_000);
+  });
+
+  test('accepts the example in the run_sequence description unchanged', () => {
+    const operation = getRuntimeOperationByToolName('xr_run_sequence')!;
+    const example = JSON.parse(
+      operation.description.slice(
+        operation.description.indexOf('Example: ') + 'Example: '.length,
+      ),
+    );
+    expect(example.steps).toHaveLength(6);
+    expect(resolve('xr_run_sequence', example)).toEqual({
+      params: example,
+      target: undefined,
+    });
+    expect(
+      resolve('xr_run_sequence', {
+        device: 'hand-left',
+        dryRun: true,
+        body: 'fixed',
+        gaze: 'fixed',
+        idleHand: 'keep',
+        steps: [
+          { target: { name: 'Map Pin 1', face: 'top' }, duration: 'auto' },
+          { position: [0.1, 1.2, -0.4], offset: { normal: 0.01 } },
+          {
+            position: { x: 0, y: 1, z: -0.5, normal: [0, 0, 1] },
+            poseId: { value: 'open', start: 0.2, end: 0.8 },
+            fingers: { index: { poseId: 'point', weight: 0.5 } },
+            pinch: { value: 0.4, easing: 'linear' },
+            orientation: { fingers: { x: 0, y: 0, z: -1 }, palm: 'down' },
+          },
+          { body: { stepTo: 'Map Pin 2', facing: 'forward' } },
+          { microgesture: 'tap', label: 'confirm' },
+        ],
+      }).params,
+    ).toMatchObject({ dryRun: true, steps: { length: 5 } });
+  });
+
+  test('takes hand placement, ramps and hand state on the existing tools', () => {
+    expect(
+      resolve('xr_set_transform', {
+        device: 'hand-right',
+        anchor: 'wrist',
+        position: { x: 0.12, y: 1.2, z: -0.3 },
+        orientation: { fingers: [0, -0.6, -0.8], palm: 'left' },
+      }).params,
+    ).toMatchObject({ anchor: 'wrist' });
+    expect(
+      resolve('xr_animate_to', {
+        device: 'hand-right',
+        anchor: 'index-tip',
+        position: { x: 0.1, y: 1.05, z: -0.45 },
+        orientation: 'auto',
+        duration: 0.6,
+        easing: 'minimum-jerk',
+      }).params,
+    ).toMatchObject({ easing: 'minimum-jerk', orientation: 'auto' });
+    expect(
+      resolve('xr_set_select_value', {
+        device: 'hand-right',
+        value: 1,
+        duration: 0.15,
+        easing: 'linear',
+      }).params,
+    ).toMatchObject({ duration: 0.15 });
+    expect(
+      resolve('xr_set_device_state', {
+        state: {
+          hands: { right: { poseId: 'point', pinchValue: 0.5 } },
+          controllers: { left: { orientation: { yaw: 90 } } },
+        },
+      }).params,
+    ).toMatchObject({ state: { hands: { right: { poseId: 'point' } } } });
+    // Quaternions and euler angles still set any device as before.
+    expect(
+      resolve('xr_set_transform', {
+        device: 'headset',
+        position: { x: 0, y: 1.6, z: 0 },
+        orientation: { pitch: -10, yaw: 45 },
+      }).params,
+    ).toMatchObject({ orientation: { pitch: -10, yaw: 45 } });
+  });
+
+  test('rejects misspelt keys and out-of-range values at every level, naming them', () => {
+    for (const [toolName, params, message] of [
+      [
+        'xr_set_transform',
+        {
+          device: 'hand-right',
+          orientation: { fingers: 'forward', thum: 'up' },
+        },
+        'xr_set_transform.orientation has unknown parameter "thum"; allowed: fingers, palm, thumb',
+      ],
+      [
+        'xr_set_transform',
+        { device: 'headset', orientation: { x: 0, y: 0, z: 0 } },
+        'xr_set_transform.orientation.w is required',
+      ],
+      [
+        'xr_set_transform',
+        { device: 'hand-right', orientation: 'automatic' },
+        'xr_set_transform.orientation must be one of: auto',
+      ],
+      [
+        'xr_animate_to',
+        { device: 'hand-right', anchr: 'grasp' },
+        'xr_animate_to has unknown parameter "anchr"',
+      ],
+      [
+        'xr_animate_to',
+        { device: 'headset', position: { x: 0, y: 1.6 } },
+        'xr_animate_to.position.z is required',
+      ],
+      [
+        'xr_run_sequence',
+        { device: 'hand-right', steps: [{ target: 'button', pres: {} }] },
+        'xr_run_sequence.steps[0] has unknown parameter "pres"',
+      ],
+      [
+        'xr_run_sequence',
+        { device: 'hand-right', steps: [{ press: { depth: 0.02 } }] },
+        'xr_run_sequence.steps[0].press.depth must be at most 0.015',
+      ],
+      [
+        'xr_run_sequence',
+        {
+          device: 'hand-right',
+          steps: [{ target: 'pin', pinch: { value: 1, at: 'arival' } }],
+        },
+        'xr_run_sequence.steps[0].pinch.at must be one of: arrival',
+      ],
+      [
+        'xr_run_sequence',
+        { device: 'hand-right', steps: [] },
+        'xr_run_sequence.steps requires at least 1 items',
+      ],
+      [
+        'xr_run_sequence',
+        { device: 'controller-right', steps: [{ duration: 1 }] },
+        'xr_run_sequence.device must be one of: hand-left, hand-right',
+      ],
+      [
+        'xr_set_hand_pose',
+        {
+          device: 'hand-left',
+          poseId: 'open',
+          fingers: { index: { poseId: 'fist', weight: 2 } },
+        },
+        'xr_set_hand_pose.fingers.index.weight must be at most 1',
+      ],
+      [
+        'xr_microgesture',
+        { device: 'hand-right', gesture: 'swipe-up' },
+        'xr_microgesture.gesture must be one of:',
+      ],
+      [
+        'xr_get_hand_state',
+        { device: 'hand-right', joints: 'some' },
+        'xr_get_hand_state.joints must be one of: key, all',
+      ],
+      [
+        'xr_set_device_state',
+        { state: { hands: { left: { pinchValue: 2 } } } },
+        'xr_set_device_state.state.hands.left.pinchValue must be at most 1',
+      ],
+      [
+        'xr_cancel_sequence',
+        { device: 'hand-right' },
+        'xr_cancel_sequence has unknown parameter "device"',
+      ],
+      [
+        'xr_list_targets',
+        { resolver: true },
+        'xr_list_targets has unknown parameter "resolver"',
+      ],
+    ] as const) {
+      expect(() => resolve(toolName, params), toolName).toThrow(message);
+    }
+    expect(() => resolve('xr_microgesture', { device: 'hand-right' })).toThrow(
+      'xr_microgesture requires parameter: gesture',
+    );
+  });
+
+  test('glosses every built-in pose in the set_hand_pose description', () => {
+    const { description } = getRuntimeOperationByToolName('xr_set_hand_pose')!;
+    for (const pose of ['default', 'point', 'thumbs-up', 'microgesture']) {
+      expect(description).toContain(`${pose} (`);
+    }
   });
 });

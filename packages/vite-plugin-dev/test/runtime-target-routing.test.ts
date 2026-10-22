@@ -304,6 +304,72 @@ describe('runtime target routing through the plugin server', () => {
     expect(mocks.launchManagedBrowser).toHaveBeenCalledOnce();
   });
 
+  test('routes the hand tools to the app page and lists them for every XR target', async () => {
+    const h = await createHarness(true);
+    const app = h.managedPage('app');
+    h.managedPage('editor');
+    const handMethods = [
+      'set_hand_pose',
+      'microgesture',
+      'get_hand_state',
+      'run_sequence',
+      'cancel_sequence',
+      'list_targets',
+    ];
+    const params = {
+      device: 'hand-right',
+      steps: [{ target: 'counter-button', press: {} }],
+    };
+
+    for (const [index, method] of handMethods.entries()) {
+      sendJson(h.agent, {
+        id: `hand-${method}`,
+        method,
+        params: method === 'run_sequence' ? params : {},
+      });
+      await vi.waitFor(() => expect(app.send).toHaveBeenCalledTimes(index + 1));
+      expect(wire(app, index)).toMatchObject({
+        method,
+        target: { deviceClass: 'managed', role: 'app' },
+      });
+    }
+    expect(wire(app, 3).params).toEqual(params);
+
+    const paired = await h.call({
+      method: 'runtime_pair_headset',
+      params: { headsetId: 'quest-serial' },
+    });
+    hello({
+      deviceClass: 'physical',
+      headsetToken: new URL(paired.result.url).searchParams.get(
+        '__iwsdk_headset',
+      ),
+      pageId: 'quest-page',
+      pageRole: 'app',
+    });
+    const targets = (await h.call({ method: 'runtime_list_targets' })).result
+      .targets;
+    for (const deviceClass of ['managed', 'physical']) {
+      const target = targets.find(
+        (entry: any) =>
+          entry.deviceClass === deviceClass && entry.role === 'app',
+      );
+      expect(target?.methods, deviceClass).toEqual(
+        expect.arrayContaining([
+          'xr_set_hand_pose',
+          'xr_microgesture',
+          'xr_get_hand_state',
+          'xr_run_sequence',
+          'xr_cancel_sequence',
+          'xr_list_targets',
+        ]),
+      );
+    }
+    expect(
+      targets.find((entry: any) => entry.role === 'editor')?.methods,
+    ).not.toContain('xr_run_sequence');
+  });
+
   test('targetless commands never fall back to the only connected headset', async () => {
     const h = await createHarness(true);
     const paired = await h.call({

@@ -8,12 +8,20 @@
 type MCPPageRole = 'app' | 'editor' | 'preview';
 type MCPDeviceClass = 'managed' | 'physical';
 
+/** IWER's TargetResolver: turns run_sequence target names into scene points. */
+interface MCPTargetResolver {
+  resolve(target: unknown, context: unknown): unknown;
+  list?(): unknown[];
+}
+
 interface MCPDevice {
   remote: {
     dispatch(
       method: string,
       params: Record<string, unknown>,
     ): Promise<unknown> | unknown;
+    /** Registers how hand sequences resolve target names (IWER 2.7+). */
+    setTargetResolver?(resolver: MCPTargetResolver | null): void;
   };
 }
 
@@ -33,6 +41,9 @@ interface FrameworkMCPRuntime {
    * Dispatch a method call. Returns result or throws an error.
    */
   dispatch(method: string, params: Record<string, unknown>): Promise<unknown>;
+
+  /** Resolves the target names of emulated hand sequences in the scene. */
+  targetResolver?: MCPTargetResolver;
 }
 
 declare global {
@@ -644,6 +655,27 @@ export function initMCPClient(
   });
   client.connect(options.port);
   return client;
+}
+
+/**
+ * IWER's hand sequences name their targets ("counter-button", "Map Pin 1"),
+ * but only the framework knows the scene. Hands IWER the framework runtime's
+ * resolver now, and again whenever a runtime starts (a new world after a
+ * reload or HMR).
+ */
+export function connectFrameworkTargetResolver(device: MCPDevice): void {
+  const { remote } = device;
+  if (typeof remote.setTargetResolver !== 'function') {
+    return;
+  }
+  const register = () =>
+    remote.setTargetResolver!(
+      window.FRAMEWORK_MCP_RUNTIME?.targetResolver ?? null,
+    );
+  register();
+  if (typeof window.addEventListener === 'function') {
+    window.addEventListener('iwsdk:mcp-runtime-ready', register);
+  }
 }
 
 /**

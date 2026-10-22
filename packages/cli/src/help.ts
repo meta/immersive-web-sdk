@@ -76,6 +76,15 @@ function formatSchemaPropertyLines(
   return lines;
 }
 
+// Where the schema alone would make an empty or placeholder example.
+const RUNTIME_HELP_EXAMPLES: Record<string, unknown> = {
+  xr_run_sequence: {
+    device: 'hand-right',
+    steps: [{ label: 'press', target: 'counter-button', press: {} }],
+  },
+  xr_set_hand_pose: { device: 'hand-right', poseId: 'point' },
+};
+
 function schemaExample(schema: JsonSchema): unknown {
   if (schema.enum?.length) {
     return schema.enum[0];
@@ -151,7 +160,8 @@ export function buildRuntimeCommandHelp(
     '',
     'Example:',
     `  iwsdk ${domain} ${action} --input-json '${JSON.stringify(
-      schemaExample(operation.inputSchema),
+      RUNTIME_HELP_EXAMPLES[operation.mcpName] ??
+        schemaExample(operation.inputSchema),
     )}'`,
     '',
     'Options:',

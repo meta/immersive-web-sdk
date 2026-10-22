@@ -455,7 +455,9 @@ iwsdk xr       status | enter | exit | get-transform | set-transform |
                look-at | animate-to | set-input-mode | set-connected |
                get-select-value | set-select-value | select |
                get-gamepad-state | set-gamepad-state |
-               get-device-state | set-device-state
+               get-device-state | set-device-state |
+               run-sequence | cancel-sequence | list-targets |
+               set-hand-pose | get-hand-state | microgesture
 iwsdk browser  screenshot | logs | reload
 iwsdk scene    open | render-file | flatten | state | capabilities | select |
                set-camera | screenshot | set-preview-visibility |
@@ -621,7 +623,23 @@ npx @iwsdk/cli xr get-select-value --input-json '{"device":"controller-right"}'
 npx @iwsdk/cli xr set-select-value --input-json '{"device":"controller-right","value":1}'
 npx @iwsdk/cli xr get-gamepad-state --input-json '{"device":"controller-right"}'
 npx @iwsdk/cli xr set-gamepad-state --input-json '{"device":"controller-right","buttons":[{"index":0,"value":1}]}'
+
+# Hand input: press, grab, and gesture by target name
+npx @iwsdk/cli xr set-input-mode --input-json '{"mode":"hand"}'
+npx @iwsdk/cli xr list-targets
+npx @iwsdk/cli xr run-sequence --input-json '{"device":"hand-right","steps":[{"target":"counter-button","press":{}}]}'
+npx @iwsdk/cli xr run-sequence --input-json '{"device":"hand-right","steps":[{"target":"Map Pin 1","approach":{"distance":0.06},"pinch":{"value":1,"at":"arrival"}},{"position":{"x":0.3,"y":1.0,"z":-1.3},"depart":{"distance":0.08}},{"pinch":0,"duration":0.15}]}'
+npx @iwsdk/cli xr get-hand-state --input-json '{"device":"hand-right"}'
+npx @iwsdk/cli xr set-hand-pose --input-json '{"device":"hand-right","poseId":"thumbs-up","duration":0.3}'
 ```
+
+`xr run-sequence` moves the hand like a person: one reach per step, the head turning
+to the target and the body stepping closer when needed. Press buttons with `press`;
+pick things up with `pinch: {"value":1,"at":"arrival"}` on the target and let go with
+`pinch: 0`. `xr list-targets` names the interactable entities (by Object3D name) and
+the UIKitML element ids inside them; scene node ids also work as targets. Add
+`"dryRun":true` to check a plan first. Near grabs by hand need
+`grabbing.useHandPinchForGrab`, which is on by default.
 
 ### `set-device-state` (Different Naming Convention)
 

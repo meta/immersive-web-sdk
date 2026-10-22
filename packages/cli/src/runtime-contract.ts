@@ -11,6 +11,22 @@ export const DEFAULT_RUNTIME_COMMAND_TIMEOUT_MS = 30_000;
 export const UI_RENDER_PREVIEW_TIMEOUT_MS = 60_000;
 export const ASSET_RENDER_PREVIEW_TIMEOUT_MS = 120_000;
 export const BROWSER_RUNTIME_COMMAND_TIMEOUT_MS = 60_000;
+/**
+ * IWER resolves a running hand sequence at most 28 s after dispatch, with a
+ * partial result when it runs out of time. The default budget, less the
+ * relay's margin, would give up first.
+ */
+export const HAND_SEQUENCE_COMMAND_TIMEOUT_MS = 40_000;
+/** The longest `duration` (seconds) that extends a default command timeout. */
+export const MAX_TIMED_COMMAND_DURATION_S = 3_600;
+
+/** IWER replies to these only once their `duration` (seconds) has elapsed. */
+const TIMED_RUNTIME_METHODS = new Set([
+  'animate_to',
+  'select',
+  'set_hand_pose',
+  'set_select_value',
+]);
 
 const BROWSER_RUNTIME_METHODS = new Set([
   'browser_interact',
@@ -22,12 +38,26 @@ const BROWSER_RUNTIME_METHODS = new Set([
   'screenshot',
 ]);
 
-export function getDefaultRuntimeCommandTimeoutMs(method: string): number {
+export function getDefaultRuntimeCommandTimeoutMs(
+  method: string,
+  params?: unknown,
+): number {
   if (method === 'asset_render_preview') {
     return ASSET_RENDER_PREVIEW_TIMEOUT_MS;
   }
   if (method === 'ui_render_preview') {
     return UI_RENDER_PREVIEW_TIMEOUT_MS;
+  }
+  if (method === 'run_sequence') {
+    return HAND_SEQUENCE_COMMAND_TIMEOUT_MS;
+  }
+  if (TIMED_RUNTIME_METHODS.has(method)) {
+    // A long fade or ramp gets the default budget on top of its duration.
+    const duration = (params as { duration?: unknown } | undefined)?.duration;
+    return typeof duration === 'number' && duration > 0
+      ? DEFAULT_RUNTIME_COMMAND_TIMEOUT_MS +
+          Math.ceil(Math.min(duration, MAX_TIMED_COMMAND_DURATION_S) * 1000)
+      : DEFAULT_RUNTIME_COMMAND_TIMEOUT_MS;
   }
   return BROWSER_RUNTIME_METHODS.has(method)
     ? BROWSER_RUNTIME_COMMAND_TIMEOUT_MS
@@ -64,6 +94,50 @@ function describeValue(value: unknown): string {
   return typeof value;
 }
 
+/**
+ * The error of the union member a value was evidently meant for: the only one
+ * of its type, or the object shape sharing the most of its keys. A misspelt
+ * key in a hand direction then reports that key, not "a supported shape".
+ */
+function closestShapeError(
+  value: unknown,
+  candidates: JsonSchema[],
+  errors: unknown[],
+): unknown {
+  const kind = describeValue(value);
+  const sameKind = candidates
+    .map((candidate, index) => ({ candidate, error: errors[index] }))
+    .filter(
+      ({ candidate }) =>
+        candidate.type == null ||
+        candidate.type === kind ||
+        (candidate.type === 'integer' && kind === 'number'),
+    );
+  if (sameKind.length === 1) {
+    return sameKind[0].error;
+  }
+  if (!isRecord(value)) {
+    return null;
+  }
+  const keys = Object.keys(value);
+  let best: (typeof sameKind)[number] | null = null;
+  let bestScore = 0;
+  let tied = false;
+  for (const entry of sameKind) {
+    const score = keys.filter(
+      (key) => entry.candidate.properties?.[key] != null,
+    ).length;
+    if (score > bestScore) {
+      best = entry;
+      bestScore = score;
+      tied = false;
+    } else if (score === bestScore) {
+      tied = true;
+    }
+  }
+  return best && !tied ? best.error : null;
+}
+
 function assertSchemaValue(
   value: unknown,
   schema: JsonSchema,
@@ -83,16 +157,21 @@ function assertSchemaValue(
     }
   }
   if (schema.anyOf?.length) {
+    const errors: unknown[] = [];
     const matches = schema.anyOf.some((candidate) => {
       try {
         assertSchemaValue(value, candidate, path);
         return true;
-      } catch {
+      } catch (error) {
+        errors.push(error);
         return false;
       }
     });
     if (!matches) {
-      throw new Error(`${path} must match a supported shape`);
+      throw (
+        closestShapeError(value, schema.anyOf, errors) ??
+        new Error(`${path} must match a supported shape`)
+      );
     }
   }
   if (schema.not) {
@@ -768,6 +847,411 @@ const SCENE_OBJECT_INSPECTION_ASSESSMENT_SCHEMA: JsonSchema = {
   required: ['id', 'status', 'evidenceRefs', 'observation'],
 };
 
+// =============================================================================
+// Emulated device shapes
+// =============================================================================
+// The xr_* schemas mirror IWER's extension-bridge contract and its JSON Schema
+// catalog (`iwer/lib/remote/catalog.js`): the same parameters, unions and
+// descriptions. vite-plugin-dev's tests compare them with the catalog of the
+// IWER it installs.
+
+const XR_POSITION_SCHEMA: JsonSchema = {
+  type: 'object',
+  description: 'A 3D position in metres, XR-origin relative.',
+  properties: {
+    x: { type: 'number' },
+    y: { type: 'number' },
+    z: { type: 'number' },
+  },
+  required: ['x', 'y', 'z'],
+};
+
+const XR_STRICT_POSITION_SCHEMA: JsonSchema = {
+  ...XR_POSITION_SCHEMA,
+  additionalProperties: false,
+};
+
+const XR_TUPLE3_SCHEMA: JsonSchema = {
+  type: 'array',
+  items: { type: 'number' },
+  minItems: 3,
+  maxItems: 3,
+};
+
+const XR_QUATERNION_SCHEMA: JsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    x: { type: 'number', description: 'Quaternion X component' },
+    y: { type: 'number', description: 'Quaternion Y component' },
+    z: { type: 'number', description: 'Quaternion Z component' },
+    w: { type: 'number', description: 'Quaternion W component' },
+  },
+  required: ['x', 'y', 'z', 'w'],
+};
+
+const XR_EULER_SCHEMA: JsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    pitch: { type: 'number', description: 'Pitch in degrees (X rotation)' },
+    yaw: { type: 'number', description: 'Yaw in degrees (Y rotation)' },
+    roll: { type: 'number', description: 'Roll in degrees (Z rotation)' },
+  },
+};
+
+const XR_ORIENTATION_SCHEMA: JsonSchema = {
+  anyOf: [XR_QUATERNION_SCHEMA, XR_EULER_SCHEMA],
+  description:
+    'Orientation as a quaternion {x,y,z,w} or euler degrees {pitch,yaw,roll}.',
+};
+
+const XR_DIRECTION_SCHEMA: JsonSchema = {
+  anyOf: [
+    {
+      type: 'string',
+      enum: [
+        'up',
+        'down',
+        'forward',
+        'back',
+        'left',
+        'right',
+        'toward-head',
+        'away-from-head',
+      ],
+    },
+    XR_STRICT_POSITION_SCHEMA,
+    XR_TUPLE3_SCHEMA,
+  ],
+  description:
+    'A direction: a name (up, down, forward, back, left, right, toward-head, away-from-head; forward/left/right follow where the headset faces) or an XR-origin vector (approximate is fine).',
+};
+
+// Hand directions come before quaternion/euler and every orientation object
+// is strict, so a misspelt hand direction is an error, not an empty euler.
+const XR_HAND_DIRECTIONS_SCHEMA: JsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  description:
+    'Hand orientation by direction: where the fingers point plus where the palm faces OR where the thumb side points. A thumbs up is {fingers:"forward", thumb:"up"}.',
+  properties: {
+    fingers: XR_DIRECTION_SCHEMA,
+    palm: XR_DIRECTION_SCHEMA,
+    thumb: XR_DIRECTION_SCHEMA,
+  },
+  required: ['fingers'],
+};
+
+const XR_PLACEMENT_ORIENTATION_SCHEMA: JsonSchema = {
+  anyOf: [
+    { type: 'string', enum: ['auto'] },
+    XR_HAND_DIRECTIONS_SCHEMA,
+    XR_QUATERNION_SCHEMA,
+    XR_EULER_SCHEMA,
+  ],
+  description:
+    'For hands: {fingers, palm|thumb} directions, or "auto" (a natural reach from the shoulder toward the position). A quaternion {x,y,z,w} or euler degrees {pitch,yaw,roll} sets the device (for hands, the target ray) as before.',
+};
+
+const XR_HAND_ANCHOR_SCHEMA: JsonSchema = {
+  type: 'string',
+  description:
+    'Hands: the point of the hand `position` places and keeps there while the hand changes shape: index-tip (press), grasp (where thumb and index tips meet in a full pinch), wrist (gestures), grip, thumb-tip, target-ray (default), or a WebXR joint name.',
+};
+
+const XR_EASING_SCHEMA: JsonSchema = {
+  type: 'string',
+  enum: ['linear', 'minimum-jerk'],
+  description: 'Time curve; minimum-jerk starts and stops like a human reach.',
+};
+
+const XR_HAND_DEVICE_SCHEMA: JsonSchema = {
+  type: 'string',
+  enum: ['hand-left', 'hand-right'],
+  description: 'A hand-tracking device.',
+};
+
+// One short gloss per built-in IWER hand pose, for xr_set_hand_pose. Keep in
+// sync with IWER's BUILTIN_HAND_POSE_IDS (checked by vite-plugin-dev's tests).
+export const XR_HAND_POSE_GLOSS: Readonly<Record<string, string>> = {
+  default: 'relaxed',
+  pinch: 'thumb and index touching',
+  point: 'index extended',
+  open: 'high five',
+  flat: 'fingers together, blade',
+  fist: 'closed fist',
+  'thumbs-up': 'fist with thumb up',
+  'finger-gun': 'index and thumb out',
+  peace: 'V sign',
+  three: 'index, middle, ring up',
+  four: 'four fingers up, thumb folded',
+  ok: 'thumb-index circle',
+  rock: 'index and pinky out',
+  call: 'thumb and pinky out',
+  'pinch-middle': 'thumb to middle tip',
+  'pinch-ring': 'thumb to ring tip',
+  'pinch-pinky': 'thumb to pinky tip',
+  tripod: 'thumb, index, middle tips together',
+  'key-pinch': 'thumb against side of index',
+  microgesture: 'loose curl, thumb by the side of the index',
+  grip: 'wrapped around a handle',
+  claw: 'holding a ball',
+  hook: 'carrying a bag handle',
+  cup: 'scooping water',
+};
+
+const XR_HAND_POSE_GLOSSES = Object.entries(XR_HAND_POSE_GLOSS)
+  .map(([id, gloss]) => `${id} (${gloss})`)
+  .join(', ');
+
+const XR_FINGER_POSE_SCHEMA: JsonSchema = {
+  anyOf: [
+    { type: 'string' },
+    {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        poseId: { type: 'string' },
+        weight: { type: 'number', minimum: 0, maximum: 1 },
+      },
+      required: ['poseId'],
+    },
+  ],
+  description:
+    'A pose id, or {poseId, weight} where weight 0-1 blends from the base pose toward it.',
+};
+
+const XR_FINGER_POSES_SCHEMA: JsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  description: 'Fingers to take from other poses, on top of poseId.',
+  properties: {
+    thumb: XR_FINGER_POSE_SCHEMA,
+    index: XR_FINGER_POSE_SCHEMA,
+    middle: XR_FINGER_POSE_SCHEMA,
+    ring: XR_FINGER_POSE_SCHEMA,
+    pinky: XR_FINGER_POSE_SCHEMA,
+  },
+};
+
+const XR_INPUT_STATE_SCHEMA: JsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    connected: { type: 'boolean' },
+    position: XR_POSITION_SCHEMA,
+    orientation: XR_ORIENTATION_SCHEMA,
+  },
+};
+
+const XR_HAND_STATE_SCHEMA: JsonSchema = {
+  ...XR_INPUT_STATE_SCHEMA,
+  properties: {
+    ...XR_INPUT_STATE_SCHEMA.properties,
+    poseId: { type: 'string' },
+    pinchValue: { type: 'number', minimum: 0, maximum: 1 },
+  },
+};
+
+const XR_MICROGESTURE_SCHEMA: JsonSchema = {
+  type: 'string',
+  enum: ['swipe-left', 'swipe-right', 'swipe-forward', 'swipe-backward', 'tap'],
+  description:
+    "A thumb microgesture on the side of the curled index finger: swipe left / right (the user's), forward (over the finger), backward (toward the palm), or tap.",
+};
+
+// --- run_sequence ------------------------------------------------------------
+
+const XR_FRACTION_SCHEMA: JsonSchema = {
+  type: 'number',
+  minimum: 0,
+  maximum: 1,
+};
+
+const XR_TIMED_WINDOW_PROPERTIES: Record<string, JsonSchema> = {
+  start: XR_FRACTION_SCHEMA,
+  end: XR_FRACTION_SCHEMA,
+  easing: XR_EASING_SCHEMA,
+};
+
+const XR_SEQUENCE_TARGET_SCHEMA: JsonSchema = {
+  anyOf: [
+    { type: 'string' },
+    {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        name: { type: 'string' },
+        face: {
+          type: 'string',
+          enum: ['front', 'back', 'top', 'bottom', 'left', 'right'],
+        },
+      },
+      required: ['name'],
+    },
+  ],
+  description:
+    'A target name from xr_list_targets, or {name, face}; resolved again when the step starts.',
+};
+
+const XR_SEQUENCE_POSITION_SCHEMA: JsonSchema = {
+  anyOf: [
+    XR_TUPLE3_SCHEMA,
+    {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        x: { type: 'number' },
+        y: { type: 'number' },
+        z: { type: 'number' },
+        normal: XR_DIRECTION_SCHEMA,
+      },
+      required: ['x', 'y', 'z'],
+    },
+    {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        relativeTo: { type: 'string', enum: ['head', 'body'] },
+        x: { type: 'number' },
+        y: { type: 'number' },
+        z: { type: 'number' },
+      },
+      required: ['relativeTo', 'x', 'y', 'z'],
+    },
+  ],
+  description:
+    'XR-origin metres (optionally with the surface normal), or {relativeTo:"head"|"body", x right, y up, z back} turning with the body, never with head pitch; "body" measures y from the floor.',
+};
+
+const XR_STAND_OFF_SCHEMA: JsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    distance: { type: 'number', minimum: 0 },
+    normal: XR_DIRECTION_SCHEMA,
+  },
+  required: ['distance'],
+};
+
+const XR_SEQUENCE_STEP_SCHEMA: JsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    label: { type: 'string' },
+    duration: {
+      anyOf: [
+        { type: 'number', minimum: 0 },
+        { type: 'string', enum: ['auto'] },
+      ],
+      description:
+        'Seconds for the reach, or "auto" (the default for moves): scaled to distance, turn and pose change.',
+    },
+    target: XR_SEQUENCE_TARGET_SCHEMA,
+    position: XR_SEQUENCE_POSITION_SCHEMA,
+    offset: {
+      anyOf: [
+        XR_STRICT_POSITION_SCHEMA,
+        {
+          type: 'object',
+          additionalProperties: false,
+          properties: { normal: { type: 'number' } },
+          required: ['normal'],
+        },
+      ],
+      description:
+        'Added to the target or position; {normal:d} moves d metres along the surface normal. Setting a held object down: its clearance above the surface.',
+    },
+    approach: {
+      ...XR_STAND_OFF_SCHEMA,
+      description:
+        'Come straight in along the surface normal (straight down while holding) for the last `distance` metres.',
+    },
+    depart: {
+      ...XR_STAND_OFF_SCHEMA,
+      description:
+        'Lift straight off first, along the last surface normal (straight up while holding).',
+    },
+    press: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        depth: { type: 'number', minimum: 0, maximum: 0.015 },
+        hold: { type: 'number', minimum: 0, maximum: 0.2 },
+        retract: { type: 'number', minimum: 0.05 },
+      },
+      description:
+        'Press the target with the index fingertip: reach, go `depth` m (default 0.008) past the surface, hold `hold` s, pull back `retract` m. Implies anchor index-tip and pose point. Use this for buttons, not a pinch.',
+    },
+    anchor: XR_HAND_ANCHOR_SCHEMA,
+    orientation: XR_PLACEMENT_ORIENTATION_SCHEMA,
+    poseId: {
+      anyOf: [
+        { type: 'string' },
+        {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            value: { type: 'string' },
+            ...XR_TIMED_WINDOW_PROPERTIES,
+          },
+          required: ['value'],
+        },
+      ],
+      description:
+        'Pose to fade to during the step; {value, start, end} as fractions of the reach. Never "pinch": poses do not select.',
+    },
+    fingers: XR_FINGER_POSES_SCHEMA,
+    pinch: {
+      anyOf: [
+        XR_FRACTION_SCHEMA,
+        {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            value: XR_FRACTION_SCHEMA,
+            ...XR_TIMED_WINDOW_PROPERTIES,
+          },
+          required: ['value'],
+        },
+        {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            value: XR_FRACTION_SCHEMA,
+            at: { type: 'string', enum: ['arrival'] },
+          },
+          required: ['value', 'at'],
+        },
+      ],
+      description:
+        'Pinch 0..1 (selects at 0.9, lets go at 0.7). {value:1, at:"arrival"} opens to a grip and closes as the hand arrives; on a target it implies anchor grasp.',
+    },
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        position: XR_SEQUENCE_POSITION_SCHEMA,
+        stepTo: XR_SEQUENCE_TARGET_SCHEMA,
+        facing: XR_DIRECTION_SCHEMA,
+      },
+      description:
+        'Move the body first: to position, or a step closer to stepTo; facing turns it. The hand goes along.',
+    },
+    microgesture: {
+      ...XR_MICROGESTURE_SCHEMA,
+      description:
+        'Make a microgesture where the hand is, as a step of its own (only label alongside); events report it by name.',
+    },
+  },
+};
+
+const XR_RUN_SEQUENCE_DESCRIPTION =
+  "Run a whole hand interaction in one call with natural motion: one smooth arc per move, the head turning to each target first, the body leaning or stepping closer when needed, the other hand resting by the hip. Steps run in order and each step's properties animate together. Positions are XR-origin metres; -Z is forward, +Y up. Resolves when done with the select events the app saw, step times, press contact times, warnings and the final hand state. " +
+  'Rules: press buttons with `press`, not a pinch. To pick something up, target it with `pinch:{value:1,at:"arrival"}` (the grasp point, between thumb and index, goes on the target). While holding, targeting a surface sets the object down on it; let go with pinch 0. The anchor carries over to later steps. A thumbs up is poseId "thumbs-up" with orientation {fingers:"forward",thumb:"up"} at a head-relative position. A microgesture is a step of its own, {"microgesture":"swipe-left"}, with the hand raised in view and the pinch open (see xr_microgesture). Get names from xr_list_targets and check a plan with dryRun:true first. ' +
+  'Example: {"device":"hand-right","steps":[{"label":"reach","target":"button","press":{}},{"label":"grab","target":"piece","approach":{"distance":0.06},"pinch":{"value":1,"at":"arrival"}},{"label":"carry","target":"tray","depart":{"distance":0.08},"approach":{"distance":0.06}},{"label":"release","pinch":0,"duration":0.15},{"label":"thumbs up","position":{"relativeTo":"head","x":0.12,"y":-0.35,"z":-0.35},"anchor":"wrist","orientation":{"fingers":"forward","thumb":"up"},"poseId":"thumbs-up"},{"label":"hold","duration":1}]}';
+
 const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   // =============================================================================
   // Session Management
@@ -830,9 +1314,10 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'xr_set_transform',
     description:
-      'Set position and/or orientation of a tracked device. Position is in meters, orientation can be quaternion or euler angles (degrees). Gaze accepts orientation only; move its origin with the headset.',
+      'Set a device position and/or orientation immediately (XR-origin). Gaze accepts orientation only; move its origin with the headset. Hands: `anchor` puts that point of the hand at `position` and keeps it there while the hand changes shape (e.g. anchor "index-tip" on a button, "grasp" on an object before pinching); orientation may be hand directions or "auto". Requires an active session.',
     inputSchema: {
       type: 'object',
+      additionalProperties: false,
       properties: {
         device: {
           type: 'string',
@@ -847,8 +1332,7 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
           description: 'The device to move',
         },
         position: {
-          type: 'object',
-          description: 'World position in meters',
+          ...XR_POSITION_SCHEMA,
           properties: {
             x: { type: 'number', description: 'X position (left/right)' },
             y: {
@@ -861,26 +1345,8 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
             },
           },
         },
-        orientation: {
-          type: 'object',
-          description:
-            'Rotation as quaternion {x,y,z,w} or euler angles {pitch,yaw,roll} in degrees',
-          properties: {
-            x: { type: 'number', description: 'Quaternion X component' },
-            y: { type: 'number', description: 'Quaternion Y component' },
-            z: { type: 'number', description: 'Quaternion Z component' },
-            w: { type: 'number', description: 'Quaternion W component' },
-            pitch: {
-              type: 'number',
-              description: 'Pitch in degrees (X rotation)',
-            },
-            yaw: { type: 'number', description: 'Yaw in degrees (Y rotation)' },
-            roll: {
-              type: 'number',
-              description: 'Roll in degrees (Z rotation)',
-            },
-          },
-        },
+        orientation: XR_PLACEMENT_ORIENTATION_SCHEMA,
+        anchor: XR_HAND_ANCHOR_SCHEMA,
       },
       required: ['device'],
     },
@@ -926,9 +1392,10 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'xr_animate_to',
     description:
-      'Smoothly animate a device to a new position/orientation over time. Gaze accepts orientation only.',
+      'Animate a device to a target position and/or orientation (XR-origin) over `duration` seconds (default 0.5), from where it is when the animation starts. Gaze accepts orientation only. Hands take `anchor` and hand directions as in xr_set_transform. easing "minimum-jerk" moves like a person (default "linear"). For multi-step hand interactions (press, grab, carry, gestures) prefer xr_run_sequence. Requires an active, rendering session.',
     inputSchema: {
       type: 'object',
+      additionalProperties: false,
       properties: {
         device: {
           type: 'string',
@@ -942,39 +1409,15 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
           ],
           description: 'The device to animate',
         },
-        position: {
-          type: 'object',
-          description: 'Target world position in meters',
-          properties: {
-            x: { type: 'number' },
-            y: { type: 'number' },
-            z: { type: 'number' },
-          },
-        },
-        orientation: {
-          type: 'object',
-          description:
-            'Target rotation as quaternion {x,y,z,w} or euler angles {pitch,yaw,roll} in degrees',
-          properties: {
-            x: { type: 'number', description: 'Quaternion X component' },
-            y: { type: 'number', description: 'Quaternion Y component' },
-            z: { type: 'number', description: 'Quaternion Z component' },
-            w: { type: 'number', description: 'Quaternion W component' },
-            pitch: {
-              type: 'number',
-              description: 'Pitch in degrees (X rotation)',
-            },
-            yaw: { type: 'number', description: 'Yaw in degrees (Y rotation)' },
-            roll: {
-              type: 'number',
-              description: 'Roll in degrees (Z rotation)',
-            },
-          },
-        },
+        position: XR_POSITION_SCHEMA,
+        orientation: XR_PLACEMENT_ORIENTATION_SCHEMA,
         duration: {
           type: 'number',
+          exclusiveMinimum: 0,
           description: 'Animation duration in seconds (default: 0.5)',
         },
+        easing: XR_EASING_SCHEMA,
+        anchor: XR_HAND_ANCHOR_SCHEMA,
       },
       required: ['device'],
     },
@@ -1051,9 +1494,10 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'xr_set_select_value',
     description:
-      'Set the select (trigger/pinch) value for an input device. Use for grab-move-release patterns.',
+      'Set the select value (trigger/pinch), 0..1, optionally ramping from the current value over `duration` seconds (easing default minimum-jerk). A hand pinch selects at 0.9 and lets go at 0.7; a trigger selects above 0. Use xr_select for a full press+release.',
     inputSchema: {
       type: 'object',
+      additionalProperties: false,
       properties: {
         device: {
           type: 'string',
@@ -1071,6 +1515,12 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
           maximum: 1,
           description: 'Select value (0=released, 1=fully pressed/pinched)',
         },
+        duration: {
+          type: 'number',
+          minimum: 0,
+          description: 'Seconds to ramp from the current value (default: 0)',
+        },
+        easing: XR_EASING_SCHEMA,
       },
       required: ['device', 'value'],
     },
@@ -1078,7 +1528,7 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'xr_select',
     description:
-      'Perform a complete select action (press and release). Dispatches selectstart, select, selectend events.',
+      'Perform a full select gesture: selectstart on press, then select and selectend on release, holding `duration` seconds (default 0.15). A hand closes its pinch over 0.1 s before the hold and opens it over 0.1 s after. Requires an active session.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1094,6 +1544,7 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
         },
         duration: {
           type: 'number',
+          exclusiveMinimum: 0,
           description: 'How long to hold in seconds (default: 0.15)',
         },
       },
@@ -1421,7 +1872,7 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'xr_get_device_state',
     description:
-      'Get comprehensive state of the XR device including headset, controllers, hands, and gaze',
+      'Get a full snapshot: headset pose, input mode, controllers, hands (with poseId and pinchValue), gaze, stereo, and FOV. Positions are XR-origin relative.',
     inputSchema: {
       type: 'object',
       properties: {},
@@ -1431,36 +1882,24 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'xr_set_device_state',
     description:
-      'Set device state. When called with no state, resets everything to defaults.',
+      'Apply a partial device state (positions XR-origin; hands also take poseId and pinchValue). Call with no `state` to reset everything to defaults.',
     inputSchema: {
       type: 'object',
+      additionalProperties: false,
       properties: {
         state: {
           type: 'object',
+          additionalProperties: false,
           description:
             'Partial device state to apply. Omit to reset to defaults.',
           properties: {
             headset: {
               type: 'object',
+              additionalProperties: false,
               description: 'Headset transform',
               properties: {
-                position: {
-                  type: 'object',
-                  properties: {
-                    x: { type: 'number' },
-                    y: { type: 'number' },
-                    z: { type: 'number' },
-                  },
-                },
-                orientation: {
-                  type: 'object',
-                  properties: {
-                    x: { type: 'number' },
-                    y: { type: 'number' },
-                    z: { type: 'number' },
-                    w: { type: 'number' },
-                  },
-                },
+                position: XR_POSITION_SCHEMA,
+                orientation: XR_ORIENTATION_SCHEMA,
               },
             },
             inputMode: {
@@ -1478,46 +1917,20 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
             },
             controllers: {
               type: 'object',
+              additionalProperties: false,
               description: 'Controller states',
               properties: {
-                left: {
-                  type: 'object',
-                  properties: {
-                    position: { type: 'object' },
-                    orientation: { type: 'object' },
-                    connected: { type: 'boolean' },
-                  },
-                },
-                right: {
-                  type: 'object',
-                  properties: {
-                    position: { type: 'object' },
-                    orientation: { type: 'object' },
-                    connected: { type: 'boolean' },
-                  },
-                },
+                left: XR_INPUT_STATE_SCHEMA,
+                right: XR_INPUT_STATE_SCHEMA,
               },
             },
             hands: {
               type: 'object',
-              description: 'Hand states',
+              additionalProperties: false,
+              description: 'Hand states, including poseId and pinchValue',
               properties: {
-                left: {
-                  type: 'object',
-                  properties: {
-                    position: { type: 'object' },
-                    orientation: { type: 'object' },
-                    connected: { type: 'boolean' },
-                  },
-                },
-                right: {
-                  type: 'object',
-                  properties: {
-                    position: { type: 'object' },
-                    orientation: { type: 'object' },
-                    connected: { type: 'boolean' },
-                  },
-                },
+                left: XR_HAND_STATE_SCHEMA,
+                right: XR_HAND_STATE_SCHEMA,
               },
             },
             gaze: {
@@ -1526,21 +1939,125 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
               description:
                 'Gaze state. Its origin is derived from the headset and cannot be set independently.',
               properties: {
-                orientation: {
-                  type: 'object',
-                  properties: {
-                    x: { type: 'number' },
-                    y: { type: 'number' },
-                    z: { type: 'number' },
-                    w: { type: 'number' },
-                  },
-                },
                 connected: { type: 'boolean' },
+                orientation: XR_ORIENTATION_SCHEMA,
               },
             },
           },
         },
       },
+    },
+  },
+
+  // =============================================================================
+  // Hands
+  // =============================================================================
+  {
+    name: 'xr_set_hand_pose',
+    description:
+      `Set a named hand pose on a hand device. Poses only shape the hand; to pinch (select), use the pinch value (xr_set_select_value). Poses: ${XR_HAND_POSE_GLOSSES}. ` +
+      'Optionally take individual fingers from other poses, e.g. poseId "open" with fingers {"middle":"fist","ring":"fist","pinky":"fist"}, or blend partway with {"poseId":"fist","weight":0.5}. Setting a pose clears earlier finger overrides. `duration` fades from the hand as shown (easing default minimum-jerk); a hand placed by an anchor keeps the anchor in place.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        device: XR_HAND_DEVICE_SCHEMA,
+        poseId: { type: 'string' },
+        fingers: XR_FINGER_POSES_SCHEMA,
+        duration: { type: 'number', minimum: 0 },
+        easing: XR_EASING_SCHEMA,
+      },
+      required: ['device', 'poseId'],
+    },
+  },
+  {
+    name: 'xr_microgesture',
+    description:
+      'Swipe or tap the thumb on the side of the curled index finger, as on Quest. The app sees the hand gamepad (xr-standard) button pressed for 35 ms when the gesture completes: 5 swipe-left, 6 swipe-right, 7 swipe-forward, 8 swipe-backward, 9 tap; no select events. A hand not in the "microgesture" pose takes it first (0.25 s); a hand that is selecting must let go first. Raise the hand side-on in view first, e.g. xr_set_transform with anchor "wrist" and orientation {fingers:[0,-0.6,-0.8],palm:"left"} (right hand; "right" for the left). Requires an active session and hand input.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        device: XR_HAND_DEVICE_SCHEMA,
+        gesture: XR_MICROGESTURE_SCHEMA,
+      },
+      required: ['device', 'gesture'],
+    },
+  },
+  {
+    name: 'xr_get_hand_state',
+    description:
+      'Read a hand: pose, finger blends, a pose fade in progress, pinch value, whether select is pressed, its anchor pin, and XR-origin positions of the wrist, grip, grasp point, index tip and thumb tip, plus its finger/palm/thumb directions (joints:"all" adds every joint).',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        device: XR_HAND_DEVICE_SCHEMA,
+        joints: { type: 'string', enum: ['key', 'all'] },
+      },
+      required: ['device'],
+    },
+  },
+  {
+    name: 'xr_run_sequence',
+    description: XR_RUN_SEQUENCE_DESCRIPTION,
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        device: XR_HAND_DEVICE_SCHEMA,
+        steps: {
+          type: 'array',
+          items: XR_SEQUENCE_STEP_SCHEMA,
+          minItems: 1,
+        },
+        idleHand: {
+          type: 'string',
+          enum: ['keep', 'rest'],
+          description:
+            'The other hand: rest it by the hip (the default unless it is pinching) or keep it where it is.',
+        },
+        body: {
+          type: 'string',
+          enum: ['auto', 'fixed'],
+          description:
+            'auto (default): lean for low targets and step closer to ones out of reach. fixed: out of reach is an error.',
+        },
+        gaze: {
+          type: 'string',
+          enum: ['follow', 'fixed'],
+          description:
+            'follow (default): the head turns to each target before the hand gets there.',
+        },
+        dryRun: {
+          type: 'boolean',
+          description:
+            'Validate and return the planned steps, walks, durations and warnings without moving anything.',
+        },
+      },
+      required: ['device', 'steps'],
+    },
+  },
+  {
+    name: 'xr_cancel_sequence',
+    description:
+      'Stop the running xr_run_sequence where it is; that call returns with cancelled: true and the steps done. The pinch is left as it is (no select events).',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'xr_list_targets',
+    description:
+      "List the named targets xr_run_sequence steps can use, from the page's target resolver: name, box centre and size (XR-origin). resolver:false means the page has none; use positions.",
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {},
+      required: [],
     },
   },
 
@@ -3346,6 +3863,12 @@ export const RUNTIME_TOOL_TO_METHOD: Record<string, string> = {
   xr_set_gamepad_state: 'set_gamepad_state',
   xr_get_device_state: 'get_device_state',
   xr_set_device_state: 'set_device_state',
+  xr_set_hand_pose: 'set_hand_pose',
+  xr_microgesture: 'microgesture',
+  xr_get_hand_state: 'get_hand_state',
+  xr_run_sequence: 'run_sequence',
+  xr_cancel_sequence: 'cancel_sequence',
+  xr_list_targets: 'list_targets',
   browser_screenshot: 'screenshot',
   browser_snapshot: 'browser_snapshot',
   browser_interact: 'browser_interact',
@@ -3378,6 +3901,12 @@ const ALL_RUNTIME_CLI_PATHS: Record<string, string[]> = {
   browser_profile: ['browser', 'profile'],
   xr_get_device_state: ['xr', 'get-device-state'],
   xr_set_device_state: ['xr', 'set-device-state'],
+  xr_set_hand_pose: ['xr', 'set-hand-pose'],
+  xr_microgesture: ['xr', 'microgesture'],
+  xr_get_hand_state: ['xr', 'get-hand-state'],
+  xr_run_sequence: ['xr', 'run-sequence'],
+  xr_cancel_sequence: ['xr', 'cancel-sequence'],
+  xr_list_targets: ['xr', 'list-targets'],
   browser_get_console_logs: ['browser', 'logs'],
   browser_reload_page: ['browser', 'reload'],
   browser_set_muted: ['browser', 'set-muted'],

@@ -1,12 +1,12 @@
 ---
 name: test-interactions
-description: 'Test XR interactions (ray, poke/touch, dual-mode, audio, UI panel) against the poke example using the iwsdk CLI.'
-argument-hint: '[--suite ray|poke|dual|audio|ui|all]'
+description: 'Test XR interactions (ray, poke/touch, dual-mode, hand poke, audio, UI panel) against the poke example using the iwsdk CLI.'
+argument-hint: '[--suite ray|poke|dual|hand|audio|ui|all]'
 ---
 
 # XR Interaction Test
 
-Test 12 suites covering XR interaction behaviors: entity discovery, ECS registration, ray interaction, poke/touch, dual-mode, cross-entity isolation, input mode switching, rapid poke cycles, audio, UI panel, and stability.
+Test 13 suites covering XR interaction behaviors: entity discovery, ECS registration, ray interaction, poke/touch, dual-mode, cross-entity isolation, input mode switching, rapid poke cycles, audio, UI panel, hand poke, and stability.
 
 **Configuration:**
 
@@ -16,7 +16,7 @@ Test 12 suites covering XR interaction behaviors: entity discovery, ECS registra
 
 - `<JSON>` is a JSON object string. Omit `--input-json` if no arguments are needed.
 - Output is JSON on stdout: `{ok, workspaceRoot, operation, result}`. Parse it to check assertions.
-- Use `--timeout 20000` for operations that may take longer (reload, xr enter, xr animate-to, screenshot).
+- Use `--timeout 20000` for operations that may take longer (reload, xr enter, xr animate-to, screenshot), and `--timeout 45000` for `xr run-sequence`.
 
 **IMPORTANT**: Run each Bash command one at a time. Parse the JSON output and verify assertions before moving to the next command. Do NOT chain multiple CLI commands together.
 
@@ -531,7 +531,69 @@ Assert: returns a `screenshotPath` (PNG file saved to /tmp).
 
 ---
 
-### Suite 12: Stability Check
+### Suite 12: Hand Poke by Target (run_sequence)
+
+The emulated hand presses with its index fingertip, moving like a person, and
+IWSDK resolves the target names the sequence uses.
+
+**Test 12.1: Hand Input and Targets**
+
+```bash
+npx @iwsdk/cli xr set-input-mode --input-json '{"mode":"hand"}' 2>/dev/null
+```
+
+```bash
+npx @iwsdk/cli xr list-targets 2>/dev/null
+```
+
+Assert: `resolver` is `true` and `targets` includes `Robot`, `Welcome Panel`, and
+`counter-button`.
+
+**Test 12.2: Press the Counter Button Once**
+
+```bash
+npx @iwsdk/cli ui inspect --input-json '{"entityIndex":<panel>,"selector":"#counter-button"}' 2>/dev/null
+```
+
+Save the element's `text` (`Click - N`) as `<count-before>`.
+
+```bash
+npx @iwsdk/cli xr run-sequence --input-json '{"device":"hand-right","steps":[{"label":"press","target":"counter-button","press":{}}]}' --timeout 45000 2>/dev/null
+```
+
+Assert: `completed` is `true` and `presses[0].contactMs` is below 800 (a click
+needs the fingertip to leave within 800 ms). If it is 800 or more on a loaded
+machine, save the text again as `<count-before>` and rerun the press once before
+failing. Then `sleep 0.5` and inspect the button again. Assert: its text is
+`Click - N+1`, exactly one more than `<count-before>`.
+
+**Test 12.3: Touch and Leave the Robot**
+
+```bash
+npx @iwsdk/cli xr run-sequence --input-json '{"device":"hand-right","steps":[{"label":"touch","target":"Robot","anchor":"index-tip","poseId":"point"}]}' --timeout 45000 2>/dev/null
+```
+
+```bash
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":<robot>,"components":["Pressed"]}' 2>/dev/null
+```
+
+Assert: `Pressed` present (the fingertip rests on the robot's front face).
+
+```bash
+npx @iwsdk/cli xr run-sequence --input-json '{"device":"hand-right","steps":[{"label":"pull back","target":"Robot","anchor":"index-tip","offset":{"normal":0.15}}]}' --timeout 45000 2>/dev/null
+```
+
+Then query `<robot>` and `<panel>` for `["Pressed"]`. Assert: absent on both.
+
+**Test 12.4: Back to Controllers**
+
+```bash
+npx @iwsdk/cli xr set-input-mode --input-json '{"mode":"controller"}' 2>/dev/null
+```
+
+---
+
+### Suite 13: Stability Check
 
 ```bash
 npx @iwsdk/cli browser logs --input-json '{"since":<test-start-ms>,"count":50,"level":["error","warn"]}' 2>/dev/null
@@ -565,7 +627,8 @@ Output a summary table:
 | 9. Rapid Poke Cycles          | PASS/FAIL |
 | 10. Audio                     | PASS/FAIL |
 | 11. UI Panel                  | PASS/FAIL |
-| 12. Stability                 | PASS/FAIL |
+| 12. Hand Poke                 | PASS/FAIL |
+| 13. Stability                 | PASS/FAIL |
 ```
 
 If any suite fails, include which assertion failed and actual vs expected values.

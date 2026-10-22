@@ -25,6 +25,7 @@ import {
   getRenderStats,
   getSceneHierarchy,
 } from './scene-tools.js';
+import { SceneTargetResolver } from './target-resolver.js';
 import { uiInspect } from './ui-debug-tools.js';
 
 const SUPPORTED_METHODS = [
@@ -54,8 +55,15 @@ type SupportedMethod = (typeof SUPPORTED_METHODS)[number];
  * @category Runtime
  */
 export class MCPRuntime {
+  /**
+   * Resolves the target names of emulated hand sequences to scene objects.
+   * vite-plugin-dev registers it with IWER (`remote.setTargetResolver`).
+   */
+  readonly targetResolver: SceneTargetResolver;
+
   constructor(private world: World) {
     installDebugHook(world);
+    this.targetResolver = new SceneTargetResolver(world);
   }
 
   /** Release native XR before the development bridge navigates this page. */

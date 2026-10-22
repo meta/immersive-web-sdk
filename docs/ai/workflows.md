@@ -22,6 +22,8 @@ Common equivalents:
 ```text
 xr_get_session_status  <-> iwsdk xr status
 xr_accept_session      <-> iwsdk xr enter
+xr_run_sequence        <-> iwsdk xr run-sequence
+xr_list_targets        <-> iwsdk xr list-targets
 browser_screenshot     <-> iwsdk browser screenshot
 browser_snapshot       <-> iwsdk browser snapshot
 browser_interact       <-> iwsdk browser interact
@@ -248,6 +250,51 @@ Use `ecs_list_components` before reading or writing component fields, and
 ```
 
 Do not use XR availability as a dev-server or editor-readiness signal.
+
+## Hand Interaction
+
+Press, grab, and gesture with emulated hands through the application's real
+interaction code:
+
+```text
+1. xr_get_session_status, xr_accept_session when needed
+2. xr_set_input_mode(mode="hand")
+3. xr_list_targets
+4. xr_run_sequence(dryRun=true), then the same steps without dryRun
+5. ECS or UI observation: Pressed / Grabbed tags, ui_inspect text, transforms
+```
+
+Press a button with `press`, not a pinch. To pick something up, target it with
+`pinch: {"value": 1, "at": "arrival"}`; let go with `pinch: 0`. While the hand
+holds something, a step `position` is where the object's base goes. Target names
+come from `xr_list_targets`; these are from the poke and grab examples:
+
+```json
+{
+  "device": "hand-right",
+  "steps": [
+    { "label": "press", "target": "counter-button", "press": {} },
+    {
+      "label": "grab",
+      "target": "Map Pin 1",
+      "approach": { "distance": 0.06 },
+      "pinch": { "value": 1, "at": "arrival" }
+    },
+    {
+      "label": "carry",
+      "position": { "x": 0.3, "y": 1.0, "z": -1.3 },
+      "depart": { "distance": 0.08 }
+    },
+    { "label": "release", "pinch": 0, "duration": 0.15 }
+  ]
+}
+```
+
+The result's `presses` gives each press's contact time; a UIKit click needs the
+fingertip to leave again within 800 ms. Slow headless frames can stretch a press
+past that, so press again when `contactMs` is 800 or more. Near grabs need
+`OneHandGrabbable` or `TwoHandsGrabbable` and `grabbing.useHandPinchForGrab` (on by
+default), so a hand's pinch grabs instead of a controller's squeeze.
 
 ## Final Review
 

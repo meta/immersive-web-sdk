@@ -1,7 +1,7 @@
 packages:
   - 'packages/*'
 minimumReleaseAgeExclude:
-  - '@iwer/devui@2.5.0'
-  - '@iwer/sem@2.5.0'
-  - iwer@2.5.0
+  - '@iwer/devui@2.7.0'
+  - '@iwer/sem@2.7.0'
+  - iwer@2.7.0
   - lucide-react@1.26.0

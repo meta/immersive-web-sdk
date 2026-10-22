@@ -271,6 +271,18 @@ describe('runtime command transport', () => {
         Date.now() + defaultTimeoutMs,
       );
 
+      // IWER replies to a pose fade when it ends, so its duration counts.
+      received.length = 0;
+      before = Date.now();
+      await sendRuntimeCommand({
+        port,
+        method: 'set_hand_pose',
+        params: { device: 'hand-right', poseId: 'point', duration: 45 },
+        runtimeSession: createTestRuntimeSession(port),
+      });
+      expect(received[0].deadline).toBeGreaterThanOrEqual(before + 75_000);
+      expect(received[0].deadline).toBeLessThanOrEqual(Date.now() + 75_000);
+
       received.length = 0;
       before = Date.now();
       await sendRuntimeCommand({

@@ -16,13 +16,13 @@ Each test gets its own example directory and dev server. Sub-agents read the ski
 
 | Agent             | Example Dir               | Suites | Skill File                 |
 | ----------------- | ------------------------- | ------ | -------------------------- |
-| test-interactions | examples/poke             | 12     | test-interactions/SKILL.md |
+| test-interactions | examples/poke             | 13     | test-interactions/SKILL.md |
 | test-ecs-core     | examples/poke-ecs         | 8      | test-ecs-core/SKILL.md     |
 | test-environment  | examples/poke-environment | 6      | test-environment/SKILL.md  |
 | test-level        | examples/poke-level       | 5      | test-level/SKILL.md        |
 | test-ui           | examples/poke-ui          | 5      | test-ui/SKILL.md           |
 | test-audio        | examples/audio            | 6      | test-audio/SKILL.md        |
-| test-grab         | examples/grab             | 5      | test-grab/SKILL.md         |
+| test-grab         | examples/grab             | 6      | test-grab/SKILL.md         |
 | test-locomotion   | examples/locomotion       | 6      | test-locomotion/SKILL.md   |
 | test-physics      | examples/physics          | 5      | test-physics/SKILL.md      |
 
@@ -181,17 +181,17 @@ Collect each agent's summary table from its output file. Print a grand summary:
 
 | Test              | Suites | Result  |
 |-------------------|--------|---------|
-| test-interactions | 12/12  | PASS    |
+| test-interactions | 13/13  | PASS    |
 | test-ecs-core     |  8/8   | PASS    |
 | test-environment  |  6/6   | PASS    |
 | test-level        |  5/5   | PASS    |
 | test-ui           |  5/6   | PASS    |
 | test-audio        |  6/6   | PASS    |
-| test-grab         |  5/5   | PASS    |
+| test-grab         |  6/6   | PASS    |
 | test-locomotion   |  6/6   | PASS    |
 | test-physics      |  5/5   | PASS    |
 |-------------------|--------|---------|
-| TOTAL             | 58/59  | 9/9 PASS|
+| TOTAL             | 60/61  | 9/9 PASS|
 
 ========================================
 ```
