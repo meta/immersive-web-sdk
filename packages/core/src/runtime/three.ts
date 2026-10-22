@@ -22,6 +22,16 @@ THREE.BatchedMesh.prototype.computeBoundsTree = computeBatchedBoundsTree;
 THREE.BatchedMesh.prototype.disposeBoundsTree = disposeBatchedBoundsTree;
 THREE.BatchedMesh.prototype.raycast = acceleratedRaycast;
 
+// super-three's multiview mode (Quest in XR) `#define`s viewMatrix as
+// viewMatrices[VIEW_ID]. r185's transform*ByInverseViewMatrix helpers in the
+// common chunk take a parameter named viewMatrix, which that define turns into
+// an array of non-constant size, so every shader fails to compile in XR.
+// Rename the parameter; callers still pass viewMatrix.
+THREE.ShaderChunk.common = THREE.ShaderChunk.common.replace(
+  /(vec3 transform(?:Normal|Direction)ByInverseViewMatrix\(\s*in vec3 \w+,\s*in mat4 )viewMatrix(\s*\)\s*\{[^}]*?)viewMatrix/g,
+  '$1inverseView$2inverseView',
+);
+
 export * from 'three';
 
 // export * as Addons from 'three/examples/jsm/Addons.js';
