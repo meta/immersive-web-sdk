@@ -946,6 +946,11 @@ describe('runtime introspection and raw output', () => {
     const ecsStepHelp = await runCli(['ecs', 'step', '--help'], appA);
     expect(ecsStepHelp.stdout).toContain('--frames <count>');
 
+    const muteHelp = await runCli(['browser', 'set-muted', '--help'], appA);
+    expect(muteHelp.exitCode).toBe(0);
+    expect(muteHelp.stdout).toContain('muted (required)');
+    expect(muteHelp.stdout).toContain('--muted <true|false>');
+
     const renderFileHelp = await runCli(
       ['scene', 'render-file', '--help'],
       appA,
@@ -1004,6 +1009,27 @@ describe('runtime introspection and raw output', () => {
         count: 2,
         delta: 0.01,
       });
+
+      for (const [flags, muted] of [
+        [['--muted'], true],
+        [['--muted', 'true'], true],
+        [['--muted', 'false'], false],
+      ] as const) {
+        const mute = await runCli(['browser', 'set-muted', ...flags], appA);
+        expect(mute.exitCode).toBe(0);
+        expect(JSON.parse(mute.stdout).data.result).toMatchObject({
+          method: 'browser_set_muted',
+          params: { muted },
+        });
+      }
+      const invalidMute = await runCli(
+        ['browser', 'set-muted', '--muted', 'off'],
+        appA,
+      );
+      expect(invalidMute.exitCode).toBe(1);
+      expect(JSON.parse(invalidMute.stderr).error.message).toContain(
+        '--muted must be true or false',
+      );
     } finally {
       await runtime.close();
     }

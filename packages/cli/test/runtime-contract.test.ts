@@ -76,6 +76,7 @@ test('allows managed browser host operations time to queue and execute', () => {
   for (const method of [
     'browser_interact',
     'browser_profile',
+    'browser_set_muted',
     'browser_snapshot',
     'get_console_logs',
     'reload_page',
@@ -237,12 +238,31 @@ describe('runtime contract scene tools', () => {
       'browser_profile',
       'browser_get_console_logs',
       'browser_reload_page',
+      'browser_set_muted',
     ]);
     for (const toolName of browserTools) {
       expect(getRuntimeOperationByToolName(toolName)).toMatchObject({
         target: { role: 'app' },
       });
     }
+
+    const mute = getRuntimeOperationByToolName('browser_set_muted')!;
+    expect(mute).toMatchObject({
+      cliPath: ['browser', 'set-muted'],
+      execution: 'host',
+      physical: false,
+      wsMethod: 'browser_set_muted',
+    });
+    expect(resolveRuntimeOperationRequest(mute, { muted: true })).toEqual({
+      params: { muted: true },
+      target: { role: 'app' },
+    });
+    expect(() => resolveRuntimeOperationRequest(mute, {})).toThrow(
+      'browser_set_muted requires parameter: muted',
+    );
+    expect(() =>
+      resolveRuntimeOperationRequest(mute, { muted: 'true' }),
+    ).toThrow();
 
     const screenshot = getRuntimeOperationByToolName('browser_screenshot')!;
     expect(

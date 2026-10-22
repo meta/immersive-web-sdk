@@ -45,15 +45,20 @@ const COMMON_RUNTIME_OPTIONS = new Set([
   'timeout',
   'workspace',
 ]);
+type DirectOptionType = 'boolean' | 'number' | 'string' | 'levels';
+
 const DIRECT_OPTION_ALIASES: Record<
   string,
-  Record<string, { parameter: string; type: 'number' | 'string' | 'levels' }>
+  Record<string, { parameter: string; type: DirectOptionType }>
 > = {
   browser_get_console_logs: {
     count: { parameter: 'count', type: 'number' },
     level: { parameter: 'level', type: 'levels' },
     pattern: { parameter: 'pattern', type: 'string' },
     since: { parameter: 'since', type: 'number' },
+  },
+  browser_set_muted: {
+    muted: { parameter: 'muted', type: 'boolean' },
   },
   ecs_step: {
     count: { parameter: 'count', type: 'number' },
@@ -65,8 +70,17 @@ const DIRECT_OPTION_ALIASES: Record<
 function parseDirectValue(
   value: string | boolean,
   option: string,
-  type: 'number' | 'string' | 'levels',
+  type: DirectOptionType,
 ): unknown {
+  if (type === 'boolean') {
+    if (value === true || value === 'true') {
+      return true;
+    }
+    if (value === 'false') {
+      return false;
+    }
+    throw new Error(`--${option} must be true or false`);
+  }
   if (typeof value !== 'string') {
     throw new Error(`--${option} requires a value`);
   }

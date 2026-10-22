@@ -210,6 +210,8 @@ describe('file-first scene authoring', () => {
         .locator('[data-workspace-open-browser-button]')
         .getAttribute('aria-label'),
     ).toBe('Open runtime in default browser');
+    // Tab muting needs the managed browser's binding, which this page lacks.
+    expect(await page.locator('[data-workspace-mute-button]').count()).toBe(0);
     expect(new URL(page.url()).hash).toBe('');
     await expect
       .poll(() =>

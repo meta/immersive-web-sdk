@@ -15,6 +15,7 @@ export const BROWSER_RUNTIME_COMMAND_TIMEOUT_MS = 60_000;
 const BROWSER_RUNTIME_METHODS = new Set([
   'browser_interact',
   'browser_profile',
+  'browser_set_muted',
   'browser_snapshot',
   'get_console_logs',
   'reload_page',
@@ -317,6 +318,8 @@ export interface RuntimeBrowserState {
   lastBridgeConnectedAt?: string;
   lastCommandReadyAt?: string;
   lastError?: RuntimeIssueInfo;
+  /** Dev-session tab mute state; it survives reloads and browser relaunches. */
+  audioMuted?: boolean;
 }
 
 export interface RuntimeBrowserProbeResult {
@@ -1593,6 +1596,22 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
     inputSchema: {
       type: 'object',
       properties: {},
+    },
+  },
+  {
+    name: 'browser_set_muted',
+    description:
+      'Mute or unmute all audio in the managed browser tab, whose app-mode window hides the browser mute control. The state is shared with the workspace mute button and persists across reloads and browser relaunches for the dev session.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        muted: {
+          type: 'boolean',
+          description: 'true mutes the tab; false unmutes it',
+        },
+      },
+      required: ['muted'],
     },
   },
 
@@ -3361,6 +3380,7 @@ const ALL_RUNTIME_CLI_PATHS: Record<string, string[]> = {
   xr_set_device_state: ['xr', 'set-device-state'],
   browser_get_console_logs: ['browser', 'logs'],
   browser_reload_page: ['browser', 'reload'],
+  browser_set_muted: ['browser', 'set-muted'],
   workspace_get_state: ['workspace', 'state'],
   workspace_set_view: ['workspace', 'set-view'],
   workspace_open_scene: ['workspace', 'open-scene'],
@@ -3480,6 +3500,7 @@ const HOST_BROWSER_MCP_TOOL_NAME_SET = new Set<string>([
   'browser_profile',
   'browser_get_console_logs',
   'browser_reload_page',
+  'browser_set_muted',
 ]);
 
 const APP_TARGET_MCP_TOOL_NAME_SET = new Set<string>([

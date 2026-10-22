@@ -28,6 +28,7 @@ browser_interact       <-> iwsdk browser interact
 browser_profile        <-> iwsdk browser profile
 browser_get_console_logs <-> iwsdk browser logs
 browser_reload_page    <-> iwsdk browser reload
+browser_set_muted      <-> iwsdk browser set-muted --muted <true|false>
 scene_render_file      <-> iwsdk scene render-file
 scene_flatten_file     <-> iwsdk scene flatten
 scene_get_state        <-> iwsdk scene state
@@ -89,7 +90,7 @@ For application code:
 8. Compare the visible and semantic result against the requirement
 ```
 
-The six browser MCP tools always target the current application automatically. They
+The seven browser MCP tools always target the current application automatically. They
 do not accept a runtime/editor/workspace selector and do not provide arbitrary common
 navigation. Snapshot refs make DOM interactions compact and rerender-aware; capture a
 new snapshot when a ref becomes stale after an application reload. For 2D canvas
@@ -154,7 +155,7 @@ grants browser-level authority to any local process that can reach the loopback 
 endpoint for that dev session, including page contents, storage, cookies, network
 controls, and arbitrary script execution in the managed page. Review the script before
 running it, enable the endpoint only in a trusted local environment, disable the opt-in
-for ordinary sessions, and prefer the six bounded browser tools for routine
+for ordinary sessions, and prefer the seven bounded browser tools for routine
 inspection, interaction, screenshots, diagnostics, reloads, and profiling.
 
 ## Selected-Object Collaboration

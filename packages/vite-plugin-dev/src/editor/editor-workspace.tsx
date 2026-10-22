@@ -30,6 +30,8 @@ import {
   Rotate3D,
   Scale3D,
   Undo2,
+  Volume2,
+  VolumeX,
 } from 'lucide';
 import { h, render, type ComponentChildren, type VNode } from 'preact';
 import { useEffect, useMemo, useState } from 'preact/hooks';
@@ -61,6 +63,8 @@ export interface EditorWorkspaceSnapshot {
   selectedNodeIds: string[];
   soloNodeId: string | null;
   statusStrip: string;
+  tabAudioAvailable: boolean;
+  tabAudioMuted: boolean;
   transformMode: 'translate' | 'rotate' | 'scale';
   transformSnapEnabled: boolean;
   transformSnapRotationDeg: number;
@@ -89,6 +93,7 @@ export interface EditorWorkspaceController {
   ): void;
   selectBuiltin?(target: string): void;
   selectRoot?(): void;
+  setTabAudioMuted?(muted: boolean): void;
   setTransformMode?(mode: 'translate' | 'rotate' | 'scale'): void;
   setTransformSnap?(
     mode: 'translate' | 'rotate' | 'scale',
@@ -128,6 +133,8 @@ const DEFAULT_SNAPSHOT: EditorWorkspaceSnapshot = {
   selectedNodeIds: [],
   soloNodeId: null,
   statusStrip: 'Scene loading...',
+  tabAudioAvailable: false,
+  tabAudioMuted: false,
   transformMode: 'translate',
   transformSnapEnabled: false,
   transformSnapRotationDeg: 15,
@@ -162,6 +169,8 @@ const ICONS = {
   Rotate3D,
   Scale3D,
   Undo2,
+  Volume2,
+  VolumeX,
 } satisfies Record<string, IconNode>;
 
 export function mountEditorWorkspace(
@@ -311,7 +320,36 @@ function WorkspaceViewSwitcher({
       >
         <Icon name="ExternalLink" />
       </button>
+      {snapshot.tabAudioAvailable ? (
+        <TabAudioButton
+          muted={snapshot.tabAudioMuted}
+          onToggle={(muted) => controller.setTabAudioMuted?.(muted)}
+        />
+      ) : null}
     </div>
+  );
+}
+
+function TabAudioButton({
+  muted,
+  onToggle,
+}: {
+  muted: boolean;
+  onToggle(muted: boolean): void;
+}) {
+  const label = muted ? 'Unmute tab audio' : 'Mute tab audio';
+  return (
+    <button
+      type="button"
+      class="workspace-icon-button"
+      data-active={muted || undefined}
+      data-workspace-mute-button
+      title={label}
+      aria-label={label}
+      onClick={() => onToggle(!muted)}
+    >
+      <Icon name={muted ? 'VolumeX' : 'Volume2'} />
+    </button>
   );
 }
 

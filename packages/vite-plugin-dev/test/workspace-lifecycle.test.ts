@@ -282,6 +282,7 @@ describe('managed workspace lifecycle', () => {
       '/tmp/iwsdk-ai-default-collaborate',
       false,
       expect.any(AbortSignal),
+      { muted: false, onMutedChange: expect.any(Function) },
     );
     expect(mocks.registerRuntimeSession).toHaveBeenCalledWith(
       expect.objectContaining({ aiMode: 'collaborate' }),
@@ -344,6 +345,7 @@ describe('managed workspace lifecycle', () => {
       '/tmp/iwsdk-ai-agent',
       false,
       expect.any(AbortSignal),
+      { muted: false, onMutedChange: expect.any(Function) },
     );
     expect(mocks.registerRuntimeSession).toHaveBeenCalledWith(
       expect.objectContaining({ aiMode: 'agent' }),
@@ -408,6 +410,7 @@ describe('managed workspace lifecycle', () => {
       '/tmp/iwsdk-workspace-clean-root',
       false,
       expect.any(AbortSignal),
+      { muted: false, onMutedChange: expect.any(Function) },
     );
 
     await Promise.resolve();

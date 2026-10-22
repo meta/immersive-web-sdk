@@ -866,6 +866,16 @@ const SMOKE_STEPS = [
     args: () => ({}),
     expectTabMetadata: true,
   },
+  {
+    name: 'browser_set_muted',
+    args: () => ({ muted: true }),
+    expectTabMetadata: true,
+  },
+  {
+    name: 'browser_set_muted',
+    args: () => ({ muted: false }),
+    expectTabMetadata: true,
+  },
   { name: 'browser_screenshot', args: () => ({}) },
   { name: 'browser_reload_page', args: () => ({}) },
 ];

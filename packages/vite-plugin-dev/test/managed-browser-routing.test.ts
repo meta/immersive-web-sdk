@@ -84,8 +84,17 @@ vi.mock('ws', () => {
 function createManagedBrowser() {
   let closed = false;
   let onClose = () => {};
+  let audioMuted = false;
   return {
     browser: {
+      // A real browser reports changes through the onMutedChange launch option.
+      setAudioMuted: vi.fn(async (muted: boolean) => {
+        if (muted !== audioMuted) {
+          audioMuted = muted;
+          launchTabAudioOptions()?.onMutedChange?.(muted);
+        }
+        return muted;
+      }),
       captureRuntimeScreenshot: vi.fn().mockResolvedValue({
         bytes: Buffer.from('png'),
         metadata: {
@@ -131,6 +140,12 @@ function createManagedBrowser() {
       onClose();
     },
   };
+}
+
+function launchTabAudioOptions():
+  | { muted: boolean; onMutedChange?: (muted: boolean) => void }
+  | undefined {
+  return mocks.launchManagedBrowser.mock.calls.at(-1)?.at(-1);
 }
 
 const harnessCleanup: Array<() => Promise<void>> = [];
@@ -475,6 +490,58 @@ describe('managed browser WebSocket routing', () => {
       bridge.emit('close', 1000, Buffer.from('done'));
     },
   );
+
+  test('mutes the managed tab and publishes the dev-session state', async () => {
+    const managed = createManagedBrowser();
+    const { socket } = await createHarness(managed.browser);
+    expect(
+      mocks.setRuntimeSessionBrowserState.mock.calls.at(-1)?.[2]?.audioMuted,
+    ).toBe(false);
+
+    sendJson(socket, {
+      id: 'mute',
+      method: 'browser_set_muted',
+      params: { muted: true },
+    });
+
+    await vi.waitFor(() => expect(socket.send).toHaveBeenCalledOnce());
+    expect(managed.browser.setAudioMuted).toHaveBeenCalledWith(true);
+    expect(managed.browser.runCommandExclusive).toHaveBeenCalled();
+    expect(responses(socket)[0]).toEqual({
+      id: 'mute',
+      result: { muted: true },
+      _tabId: 'app-page',
+      _tabGeneration: 3,
+    });
+    expect(
+      mocks.setRuntimeSessionBrowserState.mock.calls.at(-1)?.[2]?.audioMuted,
+    ).toBe(true);
+  });
+
+  test('relaunches the managed browser with the dev-session mute state', async () => {
+    const managed = createManagedBrowser();
+    const replacement = createManagedBrowser();
+    const { socket } = await createHarness(managed.browser);
+    expect(launchTabAudioOptions()?.muted).toBe(false);
+    await managed.browser.setAudioMuted(true);
+
+    mocks.launchManagedBrowser.mockResolvedValueOnce(replacement.browser);
+    managed.closeUnexpectedly();
+    await vi.waitFor(() =>
+      expect(
+        mocks.setRuntimeSessionBrowserState.mock.calls.at(-1)?.[2]?.lifecycle
+          ?.state,
+      ).toBe('failed'),
+    );
+    sendJson(socket, { id: 'relaunch', method: 'browser_snapshot' });
+
+    await vi.waitFor(() => expect(socket.send).toHaveBeenCalledOnce());
+    expect(mocks.launchManagedBrowser).toHaveBeenCalledTimes(2);
+    expect(launchTabAudioOptions()?.muted).toBe(true);
+    expect(
+      mocks.setRuntimeSessionBrowserState.mock.calls.at(-1)?.[2]?.audioMuted,
+    ).toBe(true);
+  });
 
   test('reports a lazy relaunch before routing the next host command', async () => {
     const managed = createManagedBrowser();

@@ -7,6 +7,10 @@
 
 import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
+import {
+  TAB_AUDIO_BINDING,
+  TAB_AUDIO_CHANGE_EVENT,
+} from '../managed-browser/tab-audio.js';
 
 export function getEditorSessionModuleImport(): string {
   const candidates = [
@@ -500,6 +504,8 @@ const EDITOR_TRANSFORM_SNAP_LIMITS = Object.freeze({
   translation: { max: 10000, min: 0.001 },
 });
 const EDITOR_TRANSFORM_SNAP_STORAGE_KEY = 'iwsdk-editor-transform-snap';
+const TAB_AUDIO_BINDING = ${JSON.stringify(TAB_AUDIO_BINDING)};
+const TAB_AUDIO_CHANGE_EVENT = ${JSON.stringify(TAB_AUDIO_CHANGE_EVENT)};
 
 async function loadEditorRuntimeDependencies() {
   const [
@@ -1350,9 +1356,23 @@ function attachWorkspaceViewControls() {
   }
   window.addEventListener('hashchange', applyWorkspaceLocation);
   window.addEventListener('popstate', applyWorkspaceLocation);
+  window.addEventListener(TAB_AUDIO_CHANGE_EVENT, () => {
+    workspaceUi?.update(workspaceTabAudioState());
+  });
   void setWorkspaceView(window.__IWSDK_WORKSPACE_VIEW || 'runtime', {
     syncRoute: false,
   });
+}
+
+// The managed browser installs the tab audio controller and host binding;
+// the mute control stays hidden in any other browser.
+function workspaceTabAudioState() {
+  const tabAudio = window.__IWSDK_TAB_AUDIO;
+  return {
+    tabAudioAvailable:
+      tabAudio != null && typeof window[TAB_AUDIO_BINDING] === 'function',
+    tabAudioMuted: tabAudio?.muted === true,
+  };
 }
 
 async function waitForWorkspaceRuntimeFrame(timeoutMs = 10000) {
@@ -2866,6 +2886,15 @@ function editorWorkspaceController() {
     reloadPage() {
       window.location.reload();
     },
+    setTabAudioMuted(muted) {
+      const setMuted = window[TAB_AUDIO_BINDING];
+      if (typeof setMuted !== 'function') {
+        return;
+      }
+      void setMuted(muted).catch((error) => {
+        console.error('[IWSDK] Failed to change tab audio:', error);
+      });
+    },
     openRuntimeInBrowser() {
       void fetch('/__iwsdk/workspace/open-runtime', {
         method: 'POST',
@@ -2973,6 +3002,7 @@ function createEditorFrame() {
   workspaceUi?.unmount?.();
   workspaceUi = mountEditorWorkspace(root, editorWorkspaceController(), {
     ...editorStartupState,
+    ...workspaceTabAudioState(),
     view: window.__IWSDK_WORKSPACE_VIEW || 'runtime',
   });
 }

@@ -221,7 +221,7 @@ invalid modules fail before rendering.
 
 ## Browser
 
-The browser surface contains exactly six MCP tools. They automatically resolve the
+The browser surface contains exactly seven MCP tools. They automatically resolve the
 current application, whether it is the top-level page or the runtime frame inside the
 managed workspace. There is no target selector, and the common tools do not navigate
 to arbitrary URLs. Use `browser_reload_page` to reload the current application; use
@@ -348,7 +348,27 @@ Reload only the current application surface when applying code changes or recove
 from an unrecoverable state. The result identifies the reloaded application URL, page
 ID, and tab generation.
 
-These six host-browser tools operate through IWSDK's Playwright owner and remain
+### `browser_set_muted`
+
+Mute or unmute all audio in the managed browser tab. Its app-mode window hides
+Chromium's own tab mute control, so this tool and the speaker button in the
+workspace's Runtime/Editor bar share one dev-session state:
+
+| Parameter | Type      | Required | Description                              |
+| --------- | --------- | -------- | ---------------------------------------- |
+| `muted`   | `boolean` | Yes      | `true` mutes the tab; `false` unmutes it |
+
+Muting covers Web Audio output and media elements in every frame, including the
+runtime frame and the editor. Applications keep running: audio contexts keep their
+state and clock, and an element's `muted` property still reports the value page code
+set. The state persists across reloads and managed-browser relaunches for the dev
+session, and `runtime_get_status` reports it as `browser.audioMuted`. Two rare cases
+are not covered: autoplaying media inside a declarative shadow root, and a detached
+media element that autoplays a `srcObject` stream. The result is
+`{ "muted": <boolean> }`. The equivalent CLI command is
+`iwsdk browser set-muted --muted <true|false>`.
+
+These seven host-browser tools operate through IWSDK's Playwright owner and remain
 available for browser-first applications without an IWER runtime bridge. XR, ECS, and
 other runtime-dispatched tools still require their corresponding in-page bridge.
 

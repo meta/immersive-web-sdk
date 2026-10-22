@@ -1312,6 +1312,8 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       const browserClientMetadata = new Map<WebSocket, RuntimeBrowserClient>();
       let serverShuttingDown = false;
       let browserUrl = '';
+      // Tab mute is a dev-session preference, so relaunches inherit it.
+      let managedBrowserAudioMuted = false;
       let currentBrowserState: RuntimeBrowserState | null = null;
       let lastBridgeConnectedAt: string | undefined;
       let lastCommandReadyAt: string | undefined;
@@ -1426,6 +1428,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
             lifecycle.state === 'running' && isBrowserCommandPathReady(),
           connectedClientCount: managed.length,
           lastTransitionAt: lifecycle.stateEnteredAt,
+          audioMuted: managedBrowserAudioMuted,
           ...(lifecycle.issue
             ? {
                 lastError: createBrowserIssue(
@@ -1517,6 +1520,13 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
             config.root,
             pluginOptions.workspace!.browserAutomation,
             signal,
+            {
+              muted: managedBrowserAudioMuted,
+              onMutedChange: (muted) => {
+                managedBrowserAudioMuted = muted;
+                publishBrowserState();
+              },
+            },
           );
         },
       });
@@ -2753,6 +2763,27 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
                     url: result.url,
                   }),
                   unavailableContext: 'reload_unavailable',
+                },
+              );
+              return;
+            }
+
+            if (
+              parsed.method === 'browser_set_muted' &&
+              typeof parsed.id === 'string'
+            ) {
+              intercepted = true;
+              await handleManagedBrowserRequest(
+                ws,
+                parsed as ManagedBrowserRpcRequest,
+                {
+                  command: 'browser_set_muted',
+                  errorContext: 'set_muted_error',
+                  execute: (browser) =>
+                    browser.setAudioMuted(parsed.params?.muted as boolean),
+                  resultContext: 'set_muted_result',
+                  serialize: (muted: boolean) => ({ muted }),
+                  unavailableContext: 'set_muted_unavailable',
                 },
               );
               return;

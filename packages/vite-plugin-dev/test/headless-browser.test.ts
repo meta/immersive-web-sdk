@@ -906,6 +906,18 @@ describe('launchManagedBrowser', () => {
       expect.any(Function),
       '__iwsdkManagedWorkspace',
     );
+    // Tab audio must be in place before the first managed document loads.
+    expect(context.addInitScript).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({ initialMuted: false }),
+    );
+    expect(context.exposeBinding).toHaveBeenCalledWith(
+      '__IWSDK_SET_TAB_AUDIO_MUTED',
+      expect.any(Function),
+    );
+    expect(context.exposeBinding.mock.invocationCallOrder[0]!).toBeLessThan(
+      page.goto.mock.invocationCallOrder[0]!,
+    );
 
     expect(browser.newContext).toHaveBeenCalledWith({
       ignoreHTTPSErrors: true,
@@ -1033,7 +1045,9 @@ function createMockBrowser(page: ReturnType<typeof createMockPage>) {
     addInitScript: vi.fn(),
     browser: vi.fn(),
     close: vi.fn(),
+    exposeBinding: vi.fn(),
     newPage: vi.fn().mockResolvedValue(page),
+    on: vi.fn(),
     pages: vi.fn(() => [] as ReturnType<typeof createMockPage>[]),
     route: vi.fn(),
   };

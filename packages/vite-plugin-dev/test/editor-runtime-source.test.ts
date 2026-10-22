@@ -27,6 +27,10 @@ import {
   createEditorRuntimeModuleSource,
   createEditorShellHtml,
 } from '../src/editor/editor-runtime-source.js';
+import {
+  TAB_AUDIO_BINDING,
+  TAB_AUDIO_CHANGE_EVENT,
+} from '../src/managed-browser/tab-audio.js';
 
 const workspaceSource = readFileSync(
   new URL('../src/editor/editor-workspace.tsx', import.meta.url),
@@ -175,6 +179,46 @@ describe('editor runtime source', () => {
     expect(controller).toContain("fetch('/__iwsdk/workspace/open-runtime', {");
     expect(controller).toContain("method: 'POST'");
     expect(workspaceSource).not.toContain("'split'");
+  });
+
+  test('shows the tab mute control only when the managed browser provides it', () => {
+    const source = createRuntimeSource();
+    const frame = section(
+      source,
+      'function createEditorFrame',
+      'function getViewportHost',
+    );
+    const controller = section(
+      source,
+      'function editorWorkspaceController',
+      'function createEditorFrame',
+    );
+    const tabAudioState = section(
+      source,
+      'function workspaceTabAudioState',
+      'async function waitForWorkspaceRuntimeFrame',
+    );
+
+    expect(source).toContain(
+      `const TAB_AUDIO_BINDING = ${JSON.stringify(TAB_AUDIO_BINDING)};`,
+    );
+    expect(source).toContain(
+      `const TAB_AUDIO_CHANGE_EVENT = ${JSON.stringify(TAB_AUDIO_CHANGE_EVENT)};`,
+    );
+    expect(source).toContain(
+      'window.addEventListener(TAB_AUDIO_CHANGE_EVENT, () => {\n    workspaceUi?.update(workspaceTabAudioState());',
+    );
+    expect(tabAudioState).toContain(
+      "tabAudio != null && typeof window[TAB_AUDIO_BINDING] === 'function'",
+    );
+    expect(frame).toContain('...workspaceTabAudioState(),');
+    expect(controller).toContain('const setMuted = window[TAB_AUDIO_BINDING];');
+    expect(workspaceSource).toContain('{snapshot.tabAudioAvailable ? (');
+    expect(workspaceSource).toContain('data-workspace-mute-button');
+    expect(workspaceSource).toContain(
+      "muted ? 'Unmute tab audio' : 'Mute tab audio'",
+    );
+    expect(workspaceSource).toContain('controller.setTabAudioMuted?.(muted)');
   });
 
   test('does not turn a slow initial runtime frame into an unhandled view transition', () => {

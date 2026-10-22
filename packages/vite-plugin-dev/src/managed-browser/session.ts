@@ -49,6 +49,7 @@ import {
   type ManagedRuntimePublishEvidence,
   type ManagedRuntimePublishRequest,
 } from './runtime-evidence.js';
+import { ManagedTabAudio, type ManagedTabAudioOptions } from './tab-audio.js';
 
 export { describeElements, summarizeFrameTimes } from './page-probes.js';
 export type { BrowserEnvironmentDescriptor } from './page-probes.js';
@@ -80,6 +81,7 @@ export type {
   ManagedBrowserAccess,
   ManagedBrowserReadiness,
 } from './launch.js';
+export type { ManagedTabAudioOptions } from './tab-audio.js';
 export {
   collectRuntimePreflightEvidence,
   collectRuntimePublishEvidence,
@@ -123,6 +125,8 @@ export interface ManagedBrowser {
   profileApplication(
     request: BrowserProfileRequest,
   ): Promise<BrowserProfileResult>;
+  /** Mute or unmute every frame in the managed tab, across reloads. */
+  setAudioMuted(muted: boolean): Promise<boolean>;
   /** Reload only the managed application surface. */
   reloadApplication(): Promise<{
     id: string | null;
@@ -166,6 +170,7 @@ export async function launchManagedBrowser(
   workspaceRoot: string = process.cwd(),
   browserAutomation = false,
   signal?: AbortSignal,
+  tabAudioOptions: ManagedTabAudioOptions = { muted: false },
 ): Promise<ManagedBrowser> {
   const launchUrl = new URL(url);
   if (launchUrl.protocol !== 'http:' && launchUrl.protocol !== 'https:') {
@@ -211,7 +216,9 @@ export async function launchManagedBrowser(
   );
   browserConsole.attach(profiler);
 
+  let tabAudio: ManagedTabAudio;
   try {
+    tabAudio = await ManagedTabAudio.install(context, page, tabAudioOptions);
     browserAutomationTarget = await navigateAndVerifyManagedPage({
       browserAutomationEndpoint,
       context,
@@ -353,6 +360,10 @@ export async function launchManagedBrowser(
         options?.timeoutMs,
         options?.queueTimeoutMs,
       ),
+    // Agent requests queue in the plugin's command runner for their tab
+    // preconditions. The workspace button calls the page binding instead, so
+    // it never waits behind a long browser command.
+    setAudioMuted: (muted) => tabAudio.setMuted(muted),
     reloadApplication: () =>
       commandCoordinator.runExclusive(async () => {
         await profiler.stopIfActive('reload');

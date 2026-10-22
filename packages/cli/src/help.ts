@@ -171,6 +171,9 @@ export function buildRuntimeCommandHelp(
       '  --delta <seconds>     Alias for input delta',
     );
   }
+  if (operation.mcpName === 'browser_set_muted') {
+    lines.push('  --muted <true|false>  Alias for input muted');
+  }
   if (operation.mcpName === 'browser_get_console_logs') {
     lines.push(
       '  --level <levels>      Comma-separated log-level alias',
