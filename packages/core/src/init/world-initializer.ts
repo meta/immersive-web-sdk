@@ -602,8 +602,10 @@ function setupInputManagement(
  * Manage offering XR sessions according to the configured offer policy.
  * - 'once': offer after init; no re-offer on end
  * - 'always': offer after init and re-offer whenever the session ends
+ *
+ * @internal Exported for focused policy tests; not part of the package barrel.
  */
-function manageOfferFlow(world: World, mode: 'once' | 'always') {
+export function manageOfferFlow(world: World, mode: 'once' | 'always') {
   let offering = false;
   const offer = async () => {
     if (offering || world.session) {
@@ -625,6 +627,11 @@ function manageOfferFlow(world: World, mode: 'once' | 'always') {
         return;
       }
       await adoptXRSession(world, session, opts as XROptions, onEnd);
+    } catch (error) {
+      // offerSession rejects when the runtime cannot grant the offered
+      // session, e.g. the device (or IWER's emulated device) lacks a required
+      // feature. Don't re-offer: an immediate rejection would spin.
+      console.error('[XR] Failed to start offered XR session:', error);
     } finally {
       offering = false;
     }

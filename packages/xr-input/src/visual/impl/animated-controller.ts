@@ -103,9 +103,15 @@ export class AnimatedController extends BaseControllerVisual {
     if (this.enabled && this.gamepad) {
       this.animatedComponents.forEach((animComponent) => {
         const { isButton, node, gamepadIndex, transformRange } = animComponent;
-        const alpha = isButton
-          ? this.gamepad!.buttons[gamepadIndex].value
-          : (this.gamepad!.axes[gamepadIndex] + 1) / 2;
+        // Some devices report fewer buttons or axes than their input profile
+        // maps (e.g. Samsung Galaxy XR); leave those components at rest.
+        const value = isButton
+          ? this.gamepad!.buttons[gamepadIndex]?.value
+          : this.gamepad!.axes[gamepadIndex];
+        if (value === undefined) {
+          return;
+        }
+        const alpha = isButton ? value : (value + 1) / 2;
         node.position.lerpVectors(
           transformRange.min.position,
           transformRange.max.position,

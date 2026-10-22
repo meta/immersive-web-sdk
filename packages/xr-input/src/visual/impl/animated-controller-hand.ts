@@ -440,8 +440,8 @@ export class AnimatedControllerHand extends BaseControllerVisual {
         if (bone) {
           const { buttonIndex, defaultTransform, pressedTransform, alpha } =
             bone.userData;
-          const button = this.gamepad!.buttons[buttonIndex];
-          const newAlpha = lerp(alpha, button.value, delta * 20);
+          const value = this.gamepad!.buttons[buttonIndex]?.value ?? 0;
+          const newAlpha = lerp(alpha, value, delta * 20);
           bone.position.lerpVectors(
             defaultTransform.position,
             pressedTransform.position,

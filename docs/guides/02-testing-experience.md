@@ -151,6 +151,9 @@ iwsdkDev();
 - **`activation`**: Controls when IWER activates. The default `'localhost'` is smart - it activates IWER when you access the site from localhost (typically your computer, which needs emulation), but not when accessing via IP address (typically from a headset with native WebXR support).
 - **`userAgentException`**: Adds an extra layer of protection by skipping IWER activation if the browser's user agent matches a pattern (like `OculusBrowser`). This ensures IWER won't activate on headsets even when using ADB port forwarding with localhost.
 - **`environment`**: The room for AR scene-understanding testing: one of IWER's built-in rooms (`sunlit_living_room`, `home_office`, `conference_room`, `open_office`, `kitchen`, `bedroom`, `music_studio`, `open_studio`). Each reports planes, meshes and a global mesh like a Quest room scan, and you can switch rooms from the DevUI environment menu. The legacy capture room ids (`living_room`, `meeting_room`, `music_room`, `office_large`, `office_small`) still work but load the room that replaces them, with a warning.
+- **`iwer`**: Set to `false` to stop injecting IWER entirely and test only against the browser's native WebXR. Defaults to `true`.
+
+> IWER rejects a session that requires a feature its emulated device doesn't support. It does not emulate WebXR Layers, so keep `layers` optional (the default) when testing with IWER. A rejected session is logged to the console as an `[XR] Failed to start ...` error.
 
 To test with IWER, open the Local URL reported by Vite or `npx @iwsdk/cli dev status` in your desktop browser and click "Enter XR". Here's what the emulated experience looks like:
 

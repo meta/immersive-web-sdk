@@ -71,7 +71,7 @@ and XR rays. Grab components: `OneHandGrabbable` and `TwoHandsGrabbable` are
 proximity-based and respond to **squeeze**, while `DistanceGrabbable` is
 ray-based and responds to **trigger**. `Grabbed` is a transient tag managed by
 `GrabSystem` — read it, never add or remove it. `GrabSystem.useHandPinchForGrab`
-defaults to **false**, so hand pinch does not grab unless you enable it.
+defaults to **true**, so a hand pinch grabs; set it to `false` to require squeeze.
 
 `DistanceGrabbable` fields: `movementMode` (`MoveTowardsTarget`, `MoveFromTarget`,
 `MoveAtSource`, `RotateAtSource`), `returnToOrigin`, `moveSpeedFactor`,

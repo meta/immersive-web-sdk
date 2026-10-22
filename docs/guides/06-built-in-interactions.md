@@ -97,7 +97,7 @@ world
   });
 ```
 
-> Note that hand tracking is by default not working with OneHandGrabbable and TwoHandsGrabbable as the hand pinch is mapped to the trigger button instead of the squeeze button. To use hand tracking for OneHandGrabbable and TwoHandsGrabbable, you will need to enable `useHandPinchForGrab` in the grab system. For example,
+> With hand tracking, a pinch grabs OneHandGrabbable and TwoHandsGrabbable objects: the grab system forwards hand pinch to the squeeze action it uses for controllers. This is on by default. To require the physical squeeze button instead, set `useHandPinchForGrab` to `false`:
 
 ```javascript
 // Update your existing World.create() call in src/index.ts
@@ -108,7 +108,7 @@ World.create(document.getElementById('scene-container'), {
     features: { handTracking: true },
   },
   features: {
-    grabbing: { useHandPinchForGrab: true }, // Enable grab system with hand pinch grabbing
+    grabbing: { useHandPinchForGrab: false }, // Only the squeeze button grabs
     // ... other existing features
   },
 }).then((world) => {

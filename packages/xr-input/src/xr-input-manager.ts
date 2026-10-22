@@ -412,6 +412,16 @@ export class XRInputManager {
     return this.primaryInputSources[handedness];
   }
 
+  /**
+   * Get this frame's select state for the primary input source of a given
+   * handedness, as the hand and gaze pointers see it. Unlike
+   * `gamepads[handedness]`, this also covers hand sources that expose no
+   * Gamepad, whose pinch edges come from the session's select events.
+   */
+  getSelectState(handedness: 'left' | 'right'): Readonly<HandSelectState> {
+    return this.handSelectFrameState[handedness];
+  }
+
   private resetActiveInputSources(): void {
     this.activeInputSources.controller.left = undefined;
     this.activeInputSources.controller.right = undefined;

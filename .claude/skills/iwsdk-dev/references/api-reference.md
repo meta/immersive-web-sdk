@@ -864,7 +864,7 @@ const world = await World.create(container, {
     //   enableJumping: true,
     // },
     grabbing: true, // Only if objects are grabbable
-    // OR object form: grabbing: { useHandPinchForGrab: true },
+    // OR object form: grabbing: { useHandPinchForGrab: false }, // pinch grabs by default
     physics: true, // Only if using dynamic physics
     sceneUnderstanding: true, // OR: { showWireFrame: true }
     environmentRaycast: true, // AR hit-test against real-world surfaces

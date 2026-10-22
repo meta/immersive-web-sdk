@@ -7,11 +7,13 @@
 
 import { GazeConecaster, GazePointer, XROrigin } from '@iwsdk/xr-input';
 import type { HandleStore } from '@pmndrs/handle';
+import { signal } from '@preact/signals-core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   cancelGrabHandle,
   findHolderHand,
 } from '../../src/grab/grab-helpers.js';
+import { GrabSystem } from '../../src/grab/grab-system.js';
 import {
   hasRaycastableMesh,
   resetGrabWarningStateForTests,
@@ -153,6 +155,105 @@ describe('findHolderHand (backs GrabSystem.getHolderHand)', () => {
         'right',
       ),
     ).toBe('right');
+  });
+});
+
+type Handedness = 'left' | 'right';
+
+// Runs GrabSystem.update() against a fake input manager whose left input
+// source reports one select edge this frame.
+function runPinchForwarding(options: {
+  deviceType: 'controller' | 'hand';
+  edge: 'start' | 'end';
+  hasGamepad: boolean;
+  useHandPinchForGrab?: boolean;
+}) {
+  const routed: string[] = [];
+  const select = {
+    start: options.edge === 'start',
+    end: options.edge === 'end',
+    active: options.edge === 'start',
+  };
+  const idle = { start: false, end: false, active: false };
+  const createMultiPointer = (handedness: Handedness) => ({
+    routeDown: (kind: string, target: string, event: { timeStamp: number }) =>
+      routed.push(`${handedness}:down:${kind}->${target}@${event.timeStamp}`),
+    routeUp: (kind: string, target: string, event: { timeStamp: number }) =>
+      routed.push(`${handedness}:up:${kind}->${target}@${event.timeStamp}`),
+  });
+  const system = {
+    config: {
+      useHandPinchForGrab: signal(
+        options.useHandPinchForGrab ??
+          GrabSystem.schema.useHandPinchForGrab.default,
+      ),
+    },
+    input: {
+      xr: {
+        // Hand sources that follow WebXR Hand Input expose no Gamepad; their
+        // select edges come from session select events.
+        gamepads: {
+          left: options.hasGamepad
+            ? {
+                getSelectStart: () => select.start,
+                getSelectEnd: () => select.end,
+              }
+            : undefined,
+          right: undefined,
+        },
+        getSelectState: (handedness: Handedness) =>
+          handedness === 'left' ? select : idle,
+        isPrimary: (deviceType: string, handedness: Handedness) =>
+          deviceType === options.deviceType && handedness === 'left',
+        multiPointers: {
+          left: createMultiPointer('left'),
+          right: createMultiPointer('right'),
+        },
+      },
+    },
+    queries: { handles: { entities: [] } },
+  };
+  GrabSystem.prototype.update.call(system as any, 1 / 60, 2);
+  return routed;
+}
+
+describe('GrabSystem hand pinch forwarding', () => {
+  it.each([true, false])(
+    'routes hand pinch to the grab pointer by default (hand has Gamepad: %s)',
+    (hasGamepad) => {
+      expect(
+        runPinchForwarding({ deviceType: 'hand', edge: 'start', hasGamepad }),
+      ).toEqual(['left:down:squeeze->grab@2000']);
+      expect(
+        runPinchForwarding({ deviceType: 'hand', edge: 'end', hasGamepad }),
+      ).toEqual(['left:up:squeeze->grab@2000']);
+    },
+  );
+
+  it('does not route hand pinch when useHandPinchForGrab is false', () => {
+    for (const hasGamepad of [true, false]) {
+      for (const edge of ['start', 'end'] as const) {
+        expect(
+          runPinchForwarding({
+            deviceType: 'hand',
+            edge,
+            hasGamepad,
+            useHandPinchForGrab: false,
+          }),
+        ).toEqual([]);
+      }
+    }
+  });
+
+  it('does not route controller trigger presses to the grab pointer', () => {
+    expect(
+      runPinchForwarding({
+        deviceType: 'controller',
+        edge: 'start',
+        hasGamepad: true,
+        useHandPinchForGrab: true,
+      }),
+    ).toEqual([]);
   });
 });
 

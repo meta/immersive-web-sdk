@@ -336,16 +336,23 @@ describe('XRInputManager native hand selection', () => {
     );
     internal.primaryInputSources.right = hand;
     internal.syncSelectEventSession(session);
+    const selectStates: Array<{
+      start: boolean;
+      end: boolean;
+      active: boolean;
+    }> = [];
     const updateFrame = (time: number) => {
       internal.updateHandSelectFrameState();
       internal.updatePointers(1 / 60, time);
       internal.updateGazePointer(1 / 60, time);
+      selectStates.push({ ...manager.getSelectState('right') });
     };
 
     // Give gaze an idle baseline before the first gesture.
     updateFrame(0);
     updates.length = 0;
     pointerUpdates.length = 0;
+    selectStates.length = 0;
 
     session.dispatchEvent(
       Object.assign(new Event('selectstart'), { inputSource: hand }),
@@ -367,6 +374,8 @@ describe('XRInputManager native hand selection', () => {
       { connected: true, start: false, end: true },
       { connected: true, start: false, end: false },
     ]);
+    // GrabSystem reads the same edges to forward hand pinch to grabbing.
+    expect(selectStates).toEqual(updates);
   });
 
   it('ignores stale hand events after the XR session changes', () => {

@@ -78,9 +78,9 @@ export class GrabSystem extends createSystem(
     /**
      * Controls whether hand pinch gestures are forwarded as squeeze events for grab interactions.
      * Set to `false` to disable pinch-to-grab and require the physical squeeze button instead.
-     * @default false
+     * @default true
      */
-    useHandPinchForGrab: { type: Types.Boolean, default: false },
+    useHandPinchForGrab: { type: Types.Boolean, default: true },
   },
 ) {
   init() {
@@ -137,11 +137,14 @@ export class GrabSystem extends createSystem(
   update(delta: number, time: number): void {
     // Forward hand pinch events to squeeze for grab interactions
     // Only forward if the system-level useHandPinchForGrab flag is enabled
-    if (this.config.useHandPinchForGrab) {
+    if (this.config.useHandPinchForGrab.value) {
       (['left', 'right'] as const).forEach((handedness) => {
         if (this.input.xr.isPrimary('hand', handedness)) {
           const timeStamp = time * 1000;
-          if (this.input.xr.gamepads[handedness]?.getSelectStart()) {
+          // Hand sources without a Gamepad report pinch through session
+          // select events, which the input manager folds into this state.
+          const select = this.input.xr.getSelectState(handedness);
+          if (select.start) {
             this.input.xr.multiPointers[handedness].routeDown(
               'squeeze',
               'grab',
@@ -150,7 +153,7 @@ export class GrabSystem extends createSystem(
               },
             );
           }
-          if (this.input.xr.gamepads[handedness]?.getSelectEnd()) {
+          if (select.end) {
             this.input.xr.multiPointers[handedness].routeUp('squeeze', 'grab', {
               timeStamp,
             });
