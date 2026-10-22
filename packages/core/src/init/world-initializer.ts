@@ -72,6 +72,7 @@ import { MCPRuntime } from '../mcp/index.js';
 // the static-graph level. Load it lazily in `registerFeatureSystems` only
 // when `features.physics` is enabled so non-physics projects don't pay the
 // bundle-size tax.
+import { createWebGLRenderer } from '../runtime/deferred-texture-uploads.js';
 import {
   PerspectiveCamera,
   SRGBColorSpace,
@@ -463,11 +464,10 @@ function setupRendering(sceneContainer: HTMLElement, config: any) {
   }
 
   // Renderer Setup
-  const renderer = new WebGLRenderer({
+  const renderer = createWebGLRenderer({
     antialias: true,
     alpha:
       config.xr.enabled && config.xr.sessionMode === SessionMode.ImmersiveAR,
-    // @ts-ignore
     multiviewStereo: true,
     stencil: config.stencil,
   });
