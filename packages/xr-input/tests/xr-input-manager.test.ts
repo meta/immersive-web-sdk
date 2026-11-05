@@ -481,6 +481,70 @@ describe('XRInputManager native hand selection', () => {
   });
 });
 
+describe('XRInputManager untracked input sources', () => {
+  it('keeps the pointers of a hand without a tracked wrist disconnected, whatever its target ray says', () => {
+    const { manager, xrManager, frameState, hand } = createTrackingScene();
+    const connected = recordPointerConnection(manager, 'right');
+    const visualUpdate = vi.mocked(manager.visualAdapters.hand.right.update);
+
+    // The runtime still reports an aim pose, but no joints.
+    frameState.rayPose = true;
+    frameState.wristPose = false;
+    manager.update(xrManager, 1 / 72, 1);
+
+    expect(connected).toEqual([false]);
+    expect(visualUpdate).not.toHaveBeenCalled();
+    expect(manager.getPrimaryInputSource('right')).toBe(hand);
+  });
+
+  it('connects the hand pointers again once the wrist is tracked', () => {
+    const { manager, xrManager, frameState } = createTrackingScene();
+    const connected = recordPointerConnection(manager, 'right');
+    const visualUpdate = vi.mocked(manager.visualAdapters.hand.right.update);
+
+    frameState.rayPose = true;
+    frameState.wristPose = false;
+    manager.update(xrManager, 1 / 72, 1);
+    frameState.wristPose = true;
+    manager.update(xrManager, 1 / 72, 2);
+
+    expect(connected).toEqual([false, true]);
+    expect(visualUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the pointers of a controller without a target ray pose disconnected', () => {
+    const { manager, xrManager, frameState, session } = createTrackingScene();
+    const internal = manager as any;
+    const controller = {
+      handedness: 'left',
+      hand: undefined,
+      gamepad: { buttons: [], axes: [] },
+      targetRaySpace: frameState.raySpace,
+      gripSpace: undefined,
+      profiles: [],
+    } as unknown as XRInputSource;
+    (session as any).inputSources = [controller];
+    // A stateful gamepad for this source, so only the pose decides.
+    internal.gamepads.left = {
+      inputSource: controller,
+      update: vi.fn(),
+      getSelectStart: () => false,
+      getSelectEnd: () => false,
+      getSelecting: () => false,
+      getButtonDown: () => false,
+      getButtonUp: () => false,
+    };
+    const connected = recordPointerConnection(manager, 'left');
+
+    frameState.rayPose = false;
+    manager.update(xrManager, 1 / 72, 1);
+    frameState.rayPose = true;
+    manager.update(xrManager, 1 / 72, 2);
+
+    expect(connected).toEqual([false, true]);
+  });
+});
+
 describe('XRInputManager touch hand visual offset', () => {
   it('only reports a touch surface visual offset while touch is selecting', () => {
     const manager = createManager();
@@ -635,6 +699,74 @@ function getOnlyMesh(children: Array<unknown>): Mesh {
   );
   expect(meshes).toHaveLength(1);
   return meshes[0];
+}
+
+/**
+ * A session with one right hand whose target ray and wrist poses each frame
+ * reports per `frameState`. The visual adapters' connect and update are
+ * stubbed so no model loads.
+ */
+function createTrackingScene() {
+  const manager = createManager();
+  for (const adapter of [
+    manager.visualAdapters.hand.left,
+    manager.visualAdapters.hand.right,
+    manager.visualAdapters.controller.left,
+    manager.visualAdapters.controller.right,
+  ]) {
+    vi.spyOn(adapter, 'connect').mockImplementation(() => {});
+    vi.spyOn(adapter, 'update').mockImplementation(() => {});
+  }
+  const raySpace = {} as XRSpace;
+  const wrist = {} as XRJointSpace;
+  const frameState = { rayPose: true, wristPose: true, raySpace };
+  const pose = {
+    transform: {
+      matrix: new Float32Array([
+        1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1.2, -0.3, 1,
+      ]),
+    },
+  };
+  const hand = {
+    handedness: 'right',
+    hand: new Map([['wrist', wrist]]),
+    gamepad: null,
+    targetRaySpace: raySpace,
+    gripSpace: undefined,
+    profiles: [],
+  } as unknown as XRInputSource;
+  const session = Object.assign(new EventTarget(), {
+    inputSources: [hand],
+  }) as unknown as XRSession;
+  const frame = {
+    session,
+    getPose: (space: XRSpace) =>
+      space === raySpace && frameState.rayPose ? pose : null,
+    getJointPose: (joint: XRJointSpace) =>
+      joint === wrist && frameState.wristPose
+        ? { ...pose, radius: 0.02 }
+        : null,
+    getViewerPose: () => null,
+  } as unknown as XRFrame;
+  const xrManager = {
+    getSession: () => session,
+    getReferenceSpace: () => ({}) as XRReferenceSpace,
+    getFrame: () => frame,
+  } as unknown as WebXRManager;
+  return { manager, xrManager, frameState, hand, session };
+}
+
+function recordPointerConnection(
+  manager: XRInputManagerInstance,
+  handedness: 'left' | 'right',
+): boolean[] {
+  const connected: boolean[] = [];
+  vi.spyOn(manager.multiPointers[handedness], 'update').mockImplementation(
+    (isConnected) => {
+      connected.push(isConnected);
+    },
+  );
+  return connected;
 }
 
 function createNoSessionXRManager(): WebXRManager {

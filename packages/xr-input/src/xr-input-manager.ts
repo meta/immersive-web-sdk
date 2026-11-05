@@ -171,6 +171,14 @@ export class XRInputManager {
     right: undefined,
   } as Record<'left' | 'right', XRInputSource | undefined>;
 
+  /**
+   * Sides whose primary source has no pose this frame: a hand whose wrist is
+   * not tracked, or a controller without a target ray pose. Their pointers
+   * stay disconnected (no raycasts) and their visuals hidden until tracking
+   * returns. Cleared every frame with the active sources.
+   */
+  private readonly untrackedPrimary = { left: false, right: false };
+
   private scene: Scene;
   private hadSession = false;
   private readonly touchSurfaceVisualOffsets = {
@@ -429,6 +437,8 @@ export class XRInputManager {
     this.activeInputSources.hand.right = undefined;
     this.primaryInputSources.left = undefined;
     this.primaryInputSources.right = undefined;
+    this.untrackedPrimary.left = false;
+    this.untrackedPrimary.right = false;
   }
 
   private syncSelectEventSession(session: XRSession | undefined): void {
@@ -639,7 +649,21 @@ export class XRInputManager {
             : this.xrOrigin.secondaryGripSpaces[handedness];
           visualAdapter.raySpace = raySpace;
           visualAdapter.gripSpace = gripSpace;
-          updatePose(frame, inputSource.targetRaySpace, refSpace, raySpace);
+          const rayTracked = updatePose(
+            frame,
+            inputSource.targetRaySpace,
+            refSpace,
+            raySpace,
+          );
+          // WebXR Hand Input: a hand whose wrist has no pose is not tracked,
+          // whatever its target ray says. A runtime can keep listing a hand,
+          // with an aim pose, while it sees no hand at all.
+          const tracked = inputSource.hand
+            ? hasWristPose(frame, inputSource.hand, refSpace)
+            : rayTracked;
+          if (isPrimary && !tracked) {
+            this.untrackedPrimary[handedness] = true;
+          }
           if (inputSource.gripSpace) {
             updatePose(frame, inputSource.gripSpace, refSpace, gripSpace);
           } else {
@@ -651,17 +675,20 @@ export class XRInputManager {
           if (visualAdapter.inputSource !== inputSourceData.inputSource) {
             visualAdapter.connect(inputSourceData.inputSource);
           }
-          visualAdapter.update(frame, delta);
+          if (tracked) {
+            visualAdapter.update(frame, delta);
+          }
           visualAdapter.isPrimary = inputSourceData.isPrimary;
           if (visualAdapter.isPrimary) {
             this.visualAdapters[handedness].value = visualAdapter;
           }
           if (visualAdapter.visual) {
-            visualAdapter.visual.model.visible = inputSourceData.isPrimary;
+            visualAdapter.visual.model.visible =
+              inputSourceData.isPrimary && tracked;
           }
 
           // Update index tip space for hands (used by TouchPointer)
-          if (key === 'hand' && isPrimary) {
+          if (key === 'hand' && isPrimary && tracked) {
             const handAdapter = this.visualAdapters.hand[handedness];
             const indexTipXRSpace = handAdapter.getIndexTipSpace();
             if (indexTipXRSpace) {
@@ -722,8 +749,12 @@ export class XRInputManager {
       const inputSource = this.primaryInputSources[handedness];
       const gp = this.gamepads[handedness];
       // WebXR Hand Input requires hand sources to expose no Gamepad. Their
-      // select edges come from the session-level event snapshot above.
-      const connected = !!(inputSource && (gp || inputSource.hand));
+      // select edges come from the session-level event snapshot above. A
+      // source without a pose this frame has nothing to aim with: its pointers
+      // stay disconnected, so no ray, grab or touch pointer raycasts the scene.
+      const connected =
+        !!(inputSource && (gp || inputSource.hand)) &&
+        !this.untrackedPrimary[handedness];
       const select = this.handSelectFrameState[handedness];
       const selectStart = connected ? select.start : false;
       const selectEnd = connected ? select.end : false;
@@ -793,15 +824,35 @@ export class XRInputManager {
   }
 }
 
+/** Copies the space's pose into the group; false (group untouched) without one. */
 function updatePose(
   frame: XRFrame,
   xrSpace: XRSpace,
   refSpace: XRReferenceSpace,
   group: Group,
-) {
+): boolean {
   const xrPose = frame.getPose(xrSpace, refSpace);
   if (xrPose) {
     group.matrix.fromArray(xrPose.transform.matrix);
     group.matrix.decompose(group.position, group.quaternion, group.scale);
+    return true;
   }
+  return false;
+}
+
+/**
+ * Whether the hand's wrist has a pose this frame. A frame without
+ * getJointPose, or a hand without a wrist joint, counts as tracked: this
+ * check only withholds work when the runtime says the hand is not tracked.
+ */
+function hasWristPose(
+  frame: XRFrame,
+  hand: XRHand,
+  refSpace: XRReferenceSpace,
+): boolean {
+  const wrist = hand.get('wrist');
+  if (!wrist || typeof frame.getJointPose !== 'function') {
+    return true;
+  }
+  return frame.getJointPose(wrist, refSpace) !== null;
 }
