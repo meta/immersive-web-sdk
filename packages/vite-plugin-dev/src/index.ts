@@ -2963,6 +2963,34 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
             }
 
             if (
+              parsed.method === 'browser_filmstrip' &&
+              typeof parsed.id === 'string'
+            ) {
+              intercepted = true;
+              await handleManagedBrowserRequest(
+                ws,
+                parsed as ManagedBrowserRpcRequest,
+                {
+                  command: 'browser_filmstrip',
+                  errorContext: 'browser_filmstrip_error',
+                  execute: (browser) =>
+                    browser.captureRuntimeFilmstrip(parsed.params ?? {}),
+                  resultContext: 'browser_filmstrip_result',
+                  serialize: (
+                    capture: Awaited<
+                      ReturnType<ManagedBrowser['captureRuntimeFilmstrip']>
+                    >,
+                  ) => ({
+                    ...capture.metadata,
+                    imageData: capture.bytes.toString('base64'),
+                  }),
+                  unavailableContext: 'browser_filmstrip_unavailable',
+                },
+              );
+              return;
+            }
+
+            if (
               intercepted &&
               typeof parsed.id === 'string' &&
               typeof parsed.method === 'string'

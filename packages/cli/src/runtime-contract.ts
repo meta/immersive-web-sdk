@@ -29,6 +29,7 @@ const TIMED_RUNTIME_METHODS = new Set([
 ]);
 
 const BROWSER_RUNTIME_METHODS = new Set([
+  'browser_filmstrip',
   'browser_interact',
   'browser_profile',
   'browser_set_muted',
@@ -1672,6 +1673,37 @@ const ALL_RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
           type: 'string',
           description:
             'Capture one fully visible element ref returned by browser_snapshot. Targets larger than the application viewport are rejected as non-retryable.',
+        },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'browser_filmstrip',
+    description:
+      'Capture a frame-accurate sequence of the application: pause the ECS, capture the current frame, then step `every` simulation frames and capture again until `count` frames are taken, and return one contact-sheet image (screenshotPath) with each panel labeled by its frame offset. Restores the previous pause state. Use it to see motion (physics, animation, locomotion) independently of how fast the browser renders.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        count: {
+          type: 'integer',
+          minimum: 2,
+          maximum: 12,
+          description:
+            'Frames to capture, including the current one. Defaults to 6.',
+        },
+        every: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 120,
+          description:
+            'Simulation frames to step between captures (fixed 1/72 s timestep). Defaults to 5.',
+        },
+        format: {
+          type: 'string',
+          enum: ['png', 'jpeg'],
+          description: 'Image format of the contact sheet. Defaults to png.',
         },
       },
       required: [],
@@ -3890,6 +3922,7 @@ export const RUNTIME_TOOL_TO_METHOD: Record<string, string> = {
   xr_cancel_sequence: 'cancel_sequence',
   xr_list_targets: 'list_targets',
   browser_screenshot: 'screenshot',
+  browser_filmstrip: 'browser_filmstrip',
   browser_snapshot: 'browser_snapshot',
   browser_interact: 'browser_interact',
   browser_profile: 'browser_profile',
@@ -3916,6 +3949,7 @@ const ALL_RUNTIME_CLI_PATHS: Record<string, string[]> = {
   xr_get_gamepad_state: ['xr', 'get-gamepad-state'],
   xr_set_gamepad_state: ['xr', 'set-gamepad-state'],
   browser_screenshot: ['browser', 'screenshot'],
+  browser_filmstrip: ['browser', 'filmstrip'],
   browser_snapshot: ['browser', 'snapshot'],
   browser_interact: ['browser', 'interact'],
   browser_profile: ['browser', 'profile'],
@@ -4044,6 +4078,7 @@ const EDITOR_TARGET_MCP_TOOL_NAME_SET = new Set<string>([
 
 const HOST_BROWSER_MCP_TOOL_NAME_SET = new Set<string>([
   'browser_screenshot',
+  'browser_filmstrip',
   'browser_snapshot',
   'browser_interact',
   'browser_profile',

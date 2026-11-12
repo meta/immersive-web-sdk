@@ -223,7 +223,7 @@ invalid modules fail before rendering.
 
 ## Browser
 
-The browser surface contains exactly seven MCP tools. They automatically resolve the
+The browser surface contains exactly eight MCP tools. They automatically resolve the
 current application, whether it is the top-level page or the runtime frame inside the
 managed workspace. There is no target selector, and the common tools do not navigate
 to arbitrary URLs. Use `browser_reload_page` to reload the current application; use
@@ -241,6 +241,32 @@ returned from `browser_snapshot`. Results include application identity and URL,
 whether the application is workspace-framed, image dimensions and MIME type, and
 whether an oversized browser capture was downscaled to the configured screenshot
 bounds.
+
+### `browser_filmstrip`
+
+Capture a frame-accurate sequence as one contact-sheet image. The tool pauses the
+ECS (unless it is already paused), captures the current frame, then steps `every`
+simulation frames at the fixed 1/72 s debug timestep and captures again until `count`
+frames are taken. Panels are laid out in up to four columns, each labeled with its
+frame offset (`+0`, `+5`, ...), and the sheet is written to a local temporary file
+returned as `screenshotPath`. `count` is 2–12 (default 6), `every` is 1–120 (default
+5), and `format` is `png` or `jpeg`. The previous pause state is restored afterwards,
+even when a capture fails, and the filmstrip owns the ECS pause state while it runs.
+
+Panels are chosen by simulation step, not wall-clock time: each panel is exactly
+`every` fixed 1/72 s steps after the previous one, however fast the browser renders.
+Systems that advance by the step's `delta` (physics, animation mixers, most gameplay)
+therefore produce the same panels from run to run; systems that read wall-clock time
+or the frame timestamp do not. That makes the tool the right check for motion such as
+physics, animation, and locomotion.
+
+Each simulation step waits for an animation frame, and the managed browser animates
+at most 60 frames per second, so a filmstrip takes at least `(count - 1) × every / 60`
+seconds. Requests that cannot finish within one command's budget (about 24 s of
+stepping and capturing) fail up front with a non-retryable error; lower `count` or
+`every`. The tool needs an `@iwsdk/core` that reports ECS pause state (the version
+that ships with this tool) and fails clearly with an older core rather than guessing.
+The equivalent CLI command is `iwsdk browser filmstrip --count 6 --every 5`.
 
 ### `browser_snapshot`
 
@@ -370,8 +396,9 @@ media element that autoplays a `srcObject` stream. The result is
 `{ "muted": <boolean> }`. The equivalent CLI command is
 `iwsdk browser set-muted --muted <true|false>`.
 
-These seven host-browser tools operate through IWSDK's Playwright owner and remain
-available for browser-first applications without an IWER runtime bridge. XR, ECS, and
+These eight host-browser tools operate through IWSDK's Playwright owner. All but
+`browser_filmstrip`, which steps the ECS, remain available for browser-first
+applications without an IWER runtime bridge. XR, ECS, and
 other runtime-dispatched tools still require their corresponding in-page bridge.
 
 ## WebXR Session

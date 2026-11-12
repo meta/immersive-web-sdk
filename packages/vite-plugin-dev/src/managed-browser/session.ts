@@ -21,8 +21,10 @@ import {
   type CapturedLog,
   type LogQuery,
 } from './console-capture.js';
+import type { BrowserFilmstripOptions } from './filmstrip.js';
 import {
   ManagedInteractionSurface,
+  type BrowserFilmstripCapture,
   type BrowserInteractionRequest,
   type BrowserInteractionResult,
   type BrowserScreenshotOptions,
@@ -114,6 +116,10 @@ export interface ManagedBrowser {
       width: number;
     };
   }>;
+  /** Pause, step and capture a labeled contact sheet of simulation frames. */
+  captureRuntimeFilmstrip(
+    options?: BrowserFilmstripOptions,
+  ): Promise<BrowserFilmstripCapture>;
   /** Return a bounded semantic snapshot of the current application. */
   snapshotApplication(
     request?: BrowserSnapshotRequest,
@@ -302,6 +308,10 @@ export async function launchManagedBrowser(
     captureRuntimeScreenshot: (options = {}) =>
       commandCoordinator.runExclusive(() =>
         interactionSurface.captureRuntimeScreenshot(options),
+      ),
+    captureRuntimeFilmstrip: (options = {}) =>
+      commandCoordinator.runExclusive(() =>
+        interactionSurface.captureRuntimeFilmstrip(options),
       ),
     snapshotApplication: (request = {}) =>
       commandCoordinator.runExclusive(() =>

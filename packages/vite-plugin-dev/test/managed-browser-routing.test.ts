@@ -95,6 +95,19 @@ function createManagedBrowser() {
         }
         return muted;
       }),
+      captureRuntimeFilmstrip: vi.fn().mockResolvedValue({
+        bytes: Buffer.from('sheet'),
+        metadata: {
+          columns: 2,
+          count: 2,
+          every: 5,
+          frameOffsets: [0, 5],
+          generation: 3,
+          id: 'app-page',
+          mimeType: 'image/png',
+          url: 'http://localhost:4173/',
+        },
+      }),
       captureRuntimeScreenshot: vi.fn().mockResolvedValue({
         bytes: Buffer.from('png'),
         metadata: {
@@ -346,6 +359,34 @@ describe('managed browser WebSocket routing', () => {
       method: 'reload_page',
     });
     expect(managed.browser.reloadApplication).not.toHaveBeenCalled();
+  });
+
+  test('routes browser_filmstrip to the managed browser and returns the sheet as base64', async () => {
+    const managed = createManagedBrowser();
+    const { socket } = await createHarness(managed.browser);
+
+    sendJson(socket, {
+      id: 'strip',
+      method: 'browser_filmstrip',
+      params: { count: 2, every: 5 },
+    });
+
+    await vi.waitFor(() => expect(socket.send).toHaveBeenCalledOnce());
+    expect(managed.browser.runCommandExclusive).toHaveBeenCalled();
+    expect(managed.browser.captureRuntimeFilmstrip).toHaveBeenCalledWith({
+      count: 2,
+      every: 5,
+    });
+    expect(responses(socket)[0]).toMatchObject({
+      id: 'strip',
+      result: {
+        frameOffsets: [0, 5],
+        imageData: Buffer.from('sheet').toString('base64'),
+        mimeType: 'image/png',
+      },
+      _tabId: 'app-page',
+      _tabGeneration: 3,
+    });
   });
 
   test('does not combine a new application id with a stale generation', async () => {

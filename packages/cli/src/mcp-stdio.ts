@@ -353,6 +353,7 @@ export async function startRuntimeMcpStdioServer({
       const result = normalizedResponse.result ?? normalizedResponse;
       if (
         (name === 'browser_screenshot' ||
+          name === 'browser_filmstrip' ||
           name === 'scene_screenshot' ||
           name === 'scene_render_file' ||
           name === 'asset_render_preview' ||

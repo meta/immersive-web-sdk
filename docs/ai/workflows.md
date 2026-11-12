@@ -25,6 +25,7 @@ xr_accept_session      <-> iwsdk xr enter
 xr_run_sequence        <-> iwsdk xr run-sequence
 xr_list_targets        <-> iwsdk xr list-targets
 browser_screenshot     <-> iwsdk browser screenshot
+browser_filmstrip      <-> iwsdk browser filmstrip
 browser_snapshot       <-> iwsdk browser snapshot
 browser_interact       <-> iwsdk browser interact
 browser_profile        <-> iwsdk browser profile
@@ -92,7 +93,7 @@ For application code:
 8. Compare the visible and semantic result against the requirement
 ```
 
-The seven browser MCP tools always target the current application automatically. They
+The eight browser MCP tools always target the current application automatically. They
 do not accept a runtime/editor/workspace selector and do not provide arbitrary common
 navigation. Snapshot refs make DOM interactions compact and rerender-aware; capture a
 new snapshot when a ref becomes stale after an application reload. For 2D canvas
@@ -157,7 +158,7 @@ grants browser-level authority to any local process that can reach the loopback 
 endpoint for that dev session, including page contents, storage, cookies, network
 controls, and arbitrary script execution in the managed page. Review the script before
 running it, enable the endpoint only in a trusted local environment, disable the opt-in
-for ordinary sessions, and prefer the seven bounded browser tools for routine
+for ordinary sessions, and prefer the eight bounded browser tools for routine
 inspection, interaction, screenshots, diagnostics, reloads, and profiling.
 
 ## Selected-Object Collaboration

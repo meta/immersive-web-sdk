@@ -17,6 +17,14 @@ import {
   withRuntimeView,
   type BrowserApplicationMetadata,
 } from './application-surface.js';
+import {
+  composeContactSheet,
+  normalizeFilmstripOptions,
+  pageFilmstripEcsControl,
+  runFilmstrip,
+  type BrowserFilmstripOptions,
+  type NormalizedFilmstripOptions,
+} from './filmstrip.js';
 import { errorMessage, parseUrl } from './internals.js';
 import { describeElements, readApplicationIdentity } from './page-probes.js';
 import { captureFreshApplicationFrame } from './render-mode.js';
@@ -550,6 +558,22 @@ export interface BrowserScreenshotCapture {
   };
 }
 
+export interface BrowserFilmstripCapture {
+  bytes: Buffer;
+  metadata: BrowserApplicationMetadata & {
+    columns: number;
+    count: number;
+    every: number;
+    frameOffsets: number[];
+    height: number;
+    mimeType: 'image/jpeg' | 'image/png';
+    panelHeight: number;
+    panelWidth: number;
+    rows: number;
+    width: number;
+  };
+}
+
 interface BrowserSnapshotRecipe {
   applicationId: string | null;
   documentTimeOrigin: number;
@@ -602,6 +626,17 @@ export class ManagedInteractionSurface {
     );
   }
 
+  captureRuntimeFilmstrip(
+    options: BrowserFilmstripOptions = {},
+  ): Promise<BrowserFilmstripCapture> {
+    const normalized = normalizeFilmstripOptions(options);
+    return withRuntimeView(
+      this.options.page,
+      () => this.captureApplicationFilmstrip(normalized),
+      (error) => this.options.onRestoreError('browser_filmstrip', error),
+    );
+  }
+
   snapshotApplication(
     request: BrowserSnapshotRequest = {},
   ): Promise<BrowserSnapshotResult> {
@@ -632,6 +667,45 @@ export class ManagedInteractionSurface {
       () => this.runInteractionBatch(request),
       (error) => this.options.onRestoreError('browser_interact', error),
     );
+  }
+
+  private async captureApplicationFilmstrip(
+    options: NormalizedFilmstripOptions,
+  ): Promise<BrowserFilmstripCapture> {
+    const { getRemainingOperationTimeMs, page, screenshotSize } = this.options;
+    const frame = await resolveApplicationFrame(page);
+    // Panels are captured losslessly; only the sheet uses the requested format.
+    // Every step and capture re-reads the active budget, so a sequence that
+    // cannot fit fails with the budget error instead of overrunning the command.
+    const budget = () => getRemainingOperationTimeMs('browser_filmstrip');
+    const frames = await runFilmstrip(
+      pageFilmstripEcsControl(frame),
+      options,
+      async () =>
+        (await this.captureApplicationImage({ format: 'png' }, budget())).bytes,
+      budget,
+    );
+    const { bytes, layout } = await composeContactSheet(
+      frames.map(({ offset, capture }) => ({ offset, bytes: capture })),
+      { width: screenshotSize.width * 2, height: screenshotSize.height * 2 },
+      options.format,
+    );
+    return {
+      bytes,
+      metadata: {
+        ...(await getApplicationMetadata(page)),
+        columns: layout.columns,
+        count: options.count,
+        every: options.every,
+        frameOffsets: frames.map(({ offset }) => offset),
+        height: layout.height,
+        mimeType: options.format === 'jpeg' ? 'image/jpeg' : 'image/png',
+        panelHeight: layout.panelHeight,
+        panelWidth: layout.panelWidth,
+        rows: layout.rows,
+        width: layout.width,
+      },
+    };
   }
 
   private async captureApplicationImage(

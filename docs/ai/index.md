@@ -37,8 +37,8 @@ When you enable AI in your Vite config and start the app through the `iwsdk` CLI
 
 The AI agent communicates with `iwsdk mcp stdio` over stdio. `iwsdk dev up` records the active workspace runtime, and `iwsdk mcp stdio` resolves that runtime before relaying commands to the Playwright browser via WebSocket, where the IWER runtime processes them (move controllers, trigger inputs, query state). The dev server accepts a command only with the session's command credential, which it writes to `.iwsdk/runtime/command-credential.json` for local tools to read; pages and processes that cannot read that file (on macOS and Linux, other local users among them) cannot send commands. Browser commands automatically resolve the current application, including the runtime frame inside the managed workspace, rather than asking the agent to select a target.
 
-The common browser surface is deliberately small: exactly seven MCP tools provide
-screenshots, semantic snapshots, bounded Playwright interaction, uncalibrated
+The common browser surface is deliberately small: exactly eight MCP tools provide
+screenshots, frame-accurate filmstrips, semantic snapshots, bounded Playwright interaction, uncalibrated
 host-browser profiling, structured browser diagnostics, current-app reload, and tab
 audio muting. These tools do not provide arbitrary URL navigation. For advanced
 development tasks, an operator can explicitly enable

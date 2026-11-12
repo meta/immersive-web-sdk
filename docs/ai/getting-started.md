@@ -205,8 +205,8 @@ npx @iwsdk/cli dev up --ai-mode agent \
 
 ## Opt In to Advanced Browser Automation
 
-The seven browser MCP tools cover routine current-app inspection, interaction,
-screenshots, profiling, diagnostics, reloads, and tab muting. If a development task
+The eight browser MCP tools cover routine current-app inspection, interaction,
+screenshots, filmstrips, profiling, diagnostics, reloads, and tab muting. If a development task
 requires a Playwright API or direct CDP operation that those tools do not expose,
 explicitly enable the local runner when starting a new session, or restart an existing
 session:

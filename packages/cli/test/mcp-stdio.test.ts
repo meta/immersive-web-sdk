@@ -411,6 +411,59 @@ describe('mcp stdio interface shaping', () => {
     }
   });
 
+  test('persists browser filmstrips and returns a compact path', async () => {
+    let observed: { method?: string; params?: unknown; target?: unknown } = {};
+    const runtime = await startRuntimeFixture(
+      appRoot,
+      ({ method, params, target }) => {
+        if (method === 'browser_filmstrip') {
+          observed = { method, params, target };
+          return {
+            result: {
+              imageData: ONE_BY_ONE_PNG_BASE64,
+              mimeType: 'image/png',
+              frameOffsets: [0, 5],
+            },
+            _tabId: 'tab-1',
+            _tabGeneration: 1,
+          };
+        }
+        return { result: { ok: true }, _tabId: 'tab-1', _tabGeneration: 1 };
+      },
+    );
+    const mcp = await connectMcpClient(appRoot);
+
+    try {
+      const result = await mcp.client.callTool({
+        name: 'browser_filmstrip',
+        arguments: { count: 2, every: 5 },
+      });
+
+      expect(result.isError).not.toBe(true);
+      const payload = JSON.parse(
+        (result.content as Array<{ text?: string }>)[0]?.text ?? '',
+      );
+      expect(payload).toMatchObject({
+        frameOffsets: [0, 5],
+        mimeType: 'image/png',
+      });
+      expect(payload.imageData).toBeUndefined();
+      expect(path.isAbsolute(payload.screenshotPath)).toBe(true);
+      expect(await readFile(payload.screenshotPath, 'base64')).toBe(
+        ONE_BY_ONE_PNG_BASE64,
+      );
+      await rm(payload.screenshotPath, { force: true });
+      expect(observed).toMatchObject({
+        method: 'browser_filmstrip',
+        params: { count: 2, every: 5 },
+        target: { role: 'app' },
+      });
+    } finally {
+      await mcp.close();
+      await runtime.close();
+    }
+  });
+
   test('returns browser interaction failures with structured recovery evidence', async () => {
     let observedTarget: unknown;
     const runtime = await startRuntimeFixture(appRoot, ({ method, target }) => {

@@ -9,6 +9,7 @@ import type { RenderMode, World } from '../ecs/world.js';
 import {
   DEBUG_SYNC_TIMEOUT_MS,
   installDebugHook,
+  isEcsPaused,
   ecsPause,
   ecsResume,
   ecsStep,
@@ -77,6 +78,14 @@ export class MCPRuntime {
    */
   requestRender(frames = 1): Promise<void> {
     return this.world.requestRender(frames);
+  }
+
+  /**
+   * Whether `ecs_pause` is in effect. Lets the development bridge restore the
+   * caller's pause state after a sequence that pauses for its own steps.
+   */
+  get ecsPaused(): boolean {
+    return isEcsPaused();
   }
 
   /**

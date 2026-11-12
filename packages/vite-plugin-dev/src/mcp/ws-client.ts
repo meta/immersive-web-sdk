@@ -55,7 +55,10 @@ interface FrameworkMCPRuntime {
   releaseRenderHold?(id: string): boolean;
 
   /** `'continuous'` or `'on-demand'`. */
-  readonly renderMode?: string;
+  readonly renderMode?: 'continuous' | 'on-demand';
+
+  /** Whether the ECS debug hook has paused system updates. */
+  readonly ecsPaused?: boolean;
 }
 
 declare global {

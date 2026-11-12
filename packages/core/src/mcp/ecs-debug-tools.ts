@@ -145,6 +145,11 @@ export function installDebugHook(world: World): void {
   };
 }
 
+/** Whether `ecs_pause` is in effect (systems skipped until resumed). */
+export function isEcsPaused(): boolean {
+  return debugState.paused;
+}
+
 // ---------------------------------------------------------------------------
 // ecs_pause
 // ---------------------------------------------------------------------------

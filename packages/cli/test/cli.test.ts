@@ -359,19 +359,28 @@ async function startRuntimeFixture(
                     },
                     success: false,
                   }
-                : request.method === 'screenshot' ||
-                    request.method === 'scene_screenshot' ||
-                    request.method === 'asset_render_preview' ||
-                    request.method === 'ui_render_preview'
+                : request.method === 'browser_filmstrip'
                   ? {
+                      // Echo the params next to the image so alias tests can
+                      // check them after the image is written to disk.
                       imageData: ONE_BY_ONE_PNG_BASE64,
                       mimeType: 'image/png',
-                    }
-                  : {
-                      ok: true,
                       method: request.method,
                       params: request.params ?? {},
-                    },
+                    }
+                  : request.method === 'screenshot' ||
+                      request.method === 'scene_screenshot' ||
+                      request.method === 'asset_render_preview' ||
+                      request.method === 'ui_render_preview'
+                    ? {
+                        imageData: ONE_BY_ONE_PNG_BASE64,
+                        mimeType: 'image/png',
+                      }
+                    : {
+                        ok: true,
+                        method: request.method,
+                        params: request.params ?? {},
+                      },
         _tabId: 'tab-1',
         _tabGeneration: 1,
       };
@@ -967,6 +976,20 @@ describe('runtime introspection and raw output', () => {
     expect(sceneScreenshotHelp.stdout).toContain('--output-file <path>');
     expect(sceneScreenshotHelp.stdout).toContain('takes precedence over --raw');
 
+    const filmstripHelp = await runCli(
+      ['browser', 'filmstrip', '--help'],
+      appA,
+    );
+    expect(filmstripHelp.exitCode).toBe(0);
+    for (const line of [
+      '--count <frames>',
+      '--every <frames>',
+      '--format <png|jpeg>',
+      '--output-file <path>',
+    ]) {
+      expect(filmstripHelp.stdout).toContain(line);
+    }
+
     const uiPreviewHelp = await runCli(
       ['ui', 'render-preview', '--help'],
       appA,
@@ -1022,6 +1045,52 @@ describe('runtime introspection and raw output', () => {
           params: { muted },
         });
       }
+      const filmstrip = await runCli(
+        [
+          'browser',
+          'filmstrip',
+          '--count',
+          '4',
+          '--every',
+          '10',
+          '--format',
+          'jpeg',
+        ],
+        appA,
+      );
+      expect(filmstrip.exitCode).toBe(0);
+      const filmstripData = JSON.parse(filmstrip.stdout).data;
+      expect(filmstripData.result).toMatchObject({
+        method: 'browser_filmstrip',
+        params: { count: 4, every: 10, format: 'jpeg' },
+      });
+      // The contact sheet is written to disk, never printed as base64.
+      expect(filmstripData.result.imageData).toBeUndefined();
+      expect(path.isAbsolute(filmstripData.screenshotPath)).toBe(true);
+      expect(await readFile(filmstripData.screenshotPath, 'base64')).toBe(
+        ONE_BY_ONE_PNG_BASE64,
+      );
+      const requestedFilmstrip = path.join(appA, 'captures', 'strip.png');
+      const filmstripToFile = await runCli(
+        ['browser', 'filmstrip', '--output-file', requestedFilmstrip],
+        appA,
+      );
+      expect(filmstripToFile.exitCode).toBe(0);
+      expect(JSON.parse(filmstripToFile.stdout).data.screenshotPath).toBe(
+        requestedFilmstrip,
+      );
+      expect(await readFile(requestedFilmstrip, 'base64')).toBe(
+        ONE_BY_ONE_PNG_BASE64,
+      );
+      const invalidFilmstrip = await runCli(
+        ['browser', 'filmstrip', '--count', '1'],
+        appA,
+      );
+      expect(invalidFilmstrip.exitCode).toBe(1);
+      expect(JSON.parse(invalidFilmstrip.stderr).error.message).toContain(
+        'browser_filmstrip.count must be at least 2',
+      );
+
       const invalidMute = await runCli(
         ['browser', 'set-muted', '--muted', 'off'],
         appA,

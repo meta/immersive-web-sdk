@@ -542,6 +542,93 @@ describe('launchManagedBrowser', () => {
     });
   });
 
+  test('captures a filmstrip in runtime view: pause, lossless panels, step, resume', async () => {
+    vi.resetModules();
+    process.env.IWSDK_GPU = 'swiftshader';
+    const page = createMockPage();
+    const sharp = (await import('sharp')).default;
+    // A decodable panel: the shared mock PNG only passes header reads.
+    page.screenshot.mockResolvedValue(
+      await sharp({
+        create: {
+          background: { alpha: 1, b: 40, g: 80, r: 120 },
+          channels: 4,
+          height: 80,
+          width: 80,
+        },
+      })
+        .png()
+        .toBuffer(),
+    );
+    const frame = page.mainFrame();
+    const dispatch = vi.fn(async () => ({}));
+    const pageWindow = {
+      __IWSDK_KEEPS_DRAWN_FRAMES: true,
+      FRAMEWORK_MCP_RUNTIME: {
+        dispatch,
+        ecsPaused: false,
+        requestRender: vi.fn(async () => {}),
+      },
+    };
+    const previousWindow = (globalThis as any).window;
+    // Run the filmstrip's page functions against a fake app window; other
+    // frame probes keep the generic tab identity answer.
+    frame.evaluate.mockImplementation(async (fn: unknown, arg?: unknown) => {
+      if (typeof fn !== 'function') {
+        return { generation: 1, id: 'tab-1' };
+      }
+      (globalThis as any).window = pageWindow;
+      try {
+        const value = await (fn as (arg?: unknown) => unknown)(arg);
+        return value === undefined ? { generation: 1, id: 'tab-1' } : value;
+      } catch {
+        return { generation: 1, id: 'tab-1' };
+      } finally {
+        (globalThis as any).window = previousWindow;
+      }
+    });
+    const { browser } = createMockBrowser(page);
+    mocks.launch.mockResolvedValueOnce(browser);
+
+    const { launchManagedBrowser } = await import('../src/headless-browser.js');
+    const managedBrowser = await launchManagedBrowser(
+      'http://127.0.0.1:5173/__iwsdk/workspace',
+      true,
+      false,
+      { height: 800, width: 800 },
+    );
+    const { bytes, metadata } = await managedBrowser.captureRuntimeFilmstrip({
+      count: 3,
+      every: 2,
+      format: 'jpeg',
+    });
+
+    expect(dispatch.mock.calls).toEqual([
+      ['ecs_pause', {}],
+      ['ecs_step', { count: 2 }],
+      ['ecs_step', { count: 2 }],
+      ['ecs_resume', {}],
+    ]);
+    // One fresh frame per panel, each captured losslessly.
+    expect(
+      pageWindow.FRAMEWORK_MCP_RUNTIME.requestRender,
+    ).toHaveBeenCalledTimes(3);
+    expect(page.screenshot).toHaveBeenCalledTimes(3);
+    for (const [options] of page.screenshot.mock.calls) {
+      expect(options).toMatchObject({ type: 'png' });
+      expect(options.timeout).toBeGreaterThanOrEqual(100);
+    }
+    expect(metadata).toMatchObject({
+      count: 3,
+      every: 2,
+      frameOffsets: [0, 2, 4],
+      mimeType: 'image/jpeg',
+      columns: 3,
+      rows: 1,
+    });
+    expect((await sharp(bytes).metadata()).format).toBe('jpeg');
+  });
+
   test('bounds slow screenshots and snapshots without aborting the browser', async () => {
     vi.resetModules();
     process.env.IWSDK_GPU = 'swiftshader';

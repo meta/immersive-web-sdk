@@ -60,6 +60,11 @@ const DIRECT_OPTION_ALIASES: Record<
   browser_set_muted: {
     muted: { parameter: 'muted', type: 'boolean' },
   },
+  browser_filmstrip: {
+    count: { parameter: 'count', type: 'number' },
+    every: { parameter: 'every', type: 'number' },
+    format: { parameter: 'format', type: 'string' },
+  },
   ecs_step: {
     count: { parameter: 'count', type: 'number' },
     frames: { parameter: 'count', type: 'number' },
@@ -106,6 +111,7 @@ function resolveRuntimeParams(
   const allowed = new Set([...COMMON_RUNTIME_OPTIONS, ...Object.keys(aliases)]);
   if (
     operationName === 'browser_screenshot' ||
+    operationName === 'browser_filmstrip' ||
     operationName === 'scene_screenshot' ||
     operationName === 'scene_render_file' ||
     operationName === 'asset_render_preview' ||
@@ -291,6 +297,7 @@ async function runRuntimeOperation(
 
   const isScreenshotOperation =
     operation.mcpName === 'browser_screenshot' ||
+    operation.mcpName === 'browser_filmstrip' ||
     operation.mcpName === 'scene_screenshot' ||
     operation.mcpName === 'scene_render_file' ||
     operation.mcpName === 'asset_render_preview' ||

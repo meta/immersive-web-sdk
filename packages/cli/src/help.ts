@@ -83,6 +83,7 @@ const RUNTIME_HELP_EXAMPLES: Record<string, unknown> = {
     steps: [{ label: 'press', target: 'counter-button', press: {} }],
   },
   xr_set_hand_pose: { device: 'hand-right', poseId: 'point' },
+  browser_filmstrip: { count: 6, every: 5 },
 };
 
 function schemaExample(schema: JsonSchema): unknown {
@@ -126,6 +127,7 @@ export function buildRuntimeCommandHelp(
 
   const writesScreenshot =
     operation.mcpName === 'browser_screenshot' ||
+    operation.mcpName === 'browser_filmstrip' ||
     operation.mcpName === 'scene_screenshot' ||
     operation.mcpName === 'scene_render_file' ||
     operation.mcpName === 'asset_render_preview' ||
@@ -179,6 +181,13 @@ export function buildRuntimeCommandHelp(
       '  --frames <count>      Alias for input count',
       '  --count <count>       Alias for input count',
       '  --delta <seconds>     Alias for input delta',
+    );
+  }
+  if (operation.mcpName === 'browser_filmstrip') {
+    lines.push(
+      '  --count <frames>      Alias for input count',
+      '  --every <frames>      Alias for input every',
+      '  --format <png|jpeg>   Alias for input format',
     );
   }
   if (operation.mcpName === 'browser_set_muted') {

@@ -58,3 +58,13 @@ test('reports the world render mode and drawn frames, and forwards render reques
   await runtime.requestRender(2);
   expect(world.requestRender).toHaveBeenCalledWith(2);
 });
+
+test('reports whether ecs_pause is in effect', async () => {
+  const world = { ...fakeWorld(), getSystems: () => [] };
+  const runtime = new MCPRuntime(world as any);
+  expect(runtime.ecsPaused).toBe(false);
+  await runtime.dispatch('ecs_pause', {});
+  expect(runtime.ecsPaused).toBe(true);
+  await runtime.dispatch('ecs_resume', {});
+  expect(runtime.ecsPaused).toBe(false);
+});

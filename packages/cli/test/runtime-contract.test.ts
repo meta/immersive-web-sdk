@@ -75,6 +75,7 @@ test('allows isolated UI rendering extra time for editor resource settling', () 
 
 test('allows managed browser host operations time to queue and execute', () => {
   for (const method of [
+    'browser_filmstrip',
     'browser_interact',
     'browser_profile',
     'browser_set_muted',
@@ -84,6 +85,36 @@ test('allows managed browser host operations time to queue and execute', () => {
     'screenshot',
   ]) {
     expect(getDefaultRuntimeCommandTimeoutMs(method)).toBe(60_000);
+  }
+});
+
+test('browser_filmstrip is a host browser operation with bounded parameters', () => {
+  const filmstrip = getRuntimeOperationByToolName('browser_filmstrip')!;
+  expect(filmstrip).toMatchObject({
+    cliPath: ['browser', 'filmstrip'],
+    execution: 'host',
+    wsMethod: 'browser_filmstrip',
+  });
+  expect(
+    resolveRuntimeOperationRequest(filmstrip, {
+      count: 6,
+      every: 5,
+      format: 'png',
+    }).params,
+  ).toEqual({ count: 6, every: 5, format: 'png' });
+  expect(resolveRuntimeOperationRequest(filmstrip, {}).params).toEqual({});
+  for (const [params, message] of [
+    [{ count: 1 }, 'browser_filmstrip.count must be at least 2'],
+    [{ count: 13 }, 'browser_filmstrip.count must be at most 12'],
+    [{ count: 2.5 }, 'browser_filmstrip.count must be integer'],
+    [{ every: 0 }, 'browser_filmstrip.every must be at least 1'],
+    [{ every: 121 }, 'browser_filmstrip.every must be at most 120'],
+    [{ format: 'gif' }, 'browser_filmstrip.format must be one of'],
+    [{ frames: 3 }, 'browser_filmstrip has unknown parameter "frames"'],
+  ] as const) {
+    expect(() => resolveRuntimeOperationRequest(filmstrip, params)).toThrow(
+      message,
+    );
   }
 });
 
@@ -234,6 +265,7 @@ describe('runtime contract scene tools', () => {
     );
     expect(browserTools).toEqual([
       'browser_screenshot',
+      'browser_filmstrip',
       'browser_snapshot',
       'browser_interact',
       'browser_profile',
