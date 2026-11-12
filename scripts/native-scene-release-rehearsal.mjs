@@ -39,7 +39,7 @@ const STEPS = [
   },
   {
     name: 'Build local package tarballs',
-    args: ['build:tgz:skip-reference-assets'],
+    args: ['build:tgz'],
   },
   {
     name: 'Build create CLI',

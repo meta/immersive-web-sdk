@@ -96,10 +96,9 @@ corepack pnpm@10.18.3 --filter @iwsdk/core build
 `bootstrap` is also the repair command for a partial or stale source build. It
 uses the lockfile, builds runtime and tooling packages in dependency order, and
 generates WebXR input profiles from the pinned npm asset package instead of
-making a separate CDN request. It deliberately leaves out the producer-only
-`@iwsdk/reference-assets` package. `build:all` includes that package by running
-its full ingest pipeline, which downloads the pinned embedding model on a fresh
-machine. Run `corepack pnpm@10.18.3 run doctor` for environment, proxy, and
+making a separate CDN request. It deliberately leaves out the private
+`@iwsdk/reference-assets` producer, so `@iwsdk/reference` has no corpus until
+you run `build:all`, which first runs that offline ingest (about a minute). Run `corepack pnpm@10.18.3 run doctor` for environment, proxy, and
 generated-output checks.
 
 For a network-restricted checkout whose pnpm store is already warm, use

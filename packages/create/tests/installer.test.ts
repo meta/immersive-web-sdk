@@ -15,7 +15,6 @@ import {
   configureDependenciesFromBundle,
   installDependenciesFromBundle,
   printNextSteps,
-  warmupReference,
 } from '../src/installer.js';
 import type { ResolvedSource } from '../src/source.js';
 
@@ -187,13 +186,12 @@ describe('installDependenciesFromBundle', () => {
         ...bundlePackageSpecs,
       },
       onlyBuiltDependencies: ['esbuild', 'protobufjs', 'sharp'],
-      ignoredBuiltDependencies: ['@meta-quest/metavr', 'onnxruntime-node'],
+      ignoredBuiltDependencies: ['@meta-quest/metavr'],
       allowBuilds: {
         esbuild: true,
         protobufjs: true,
         sharp: true,
         '@meta-quest/metavr': false,
-        'onnxruntime-node': false,
       },
       supportedArchitectures: { os: ['current'] },
     });
@@ -309,54 +307,11 @@ describe('installDependenciesFromBundle', () => {
   });
 });
 
-describe('warmupReference', () => {
-  it('runs the installed IWSDK reference warmup as part of creation', async () => {
-    await expect(warmupReference('/tmp/generated-iwsdk-app')).resolves.toBe(
-      true,
-    );
-    expect(mockedSpawn).toHaveBeenCalledWith(
-      process.execPath,
-      [
-        '/tmp/generated-iwsdk-app/node_modules/@iwsdk/cli/dist/cli.js',
-        'reference',
-        'warmup',
-      ],
-      {
-        cwd: '/tmp/generated-iwsdk-app',
-        stdio: 'inherit',
-      },
-    );
-  });
-
-  it('does not fail project creation when reference warmup fails', async () => {
-    const mock = await import('cross-spawn');
-    (mock as any).__setExitCode(1);
-
-    await expect(warmupReference('/tmp/generated-iwsdk-app')).resolves.toBe(
-      false,
-    );
-  });
-
-  it('terminates a reference warmup that exceeds its time limit', async () => {
-    const { EventEmitter } = await import('events');
-    const child = new EventEmitter() as EventEmitter & {
-      kill: ReturnType<typeof vi.fn>;
-    };
-    child.kill = vi.fn();
-    vi.mocked(mockedSpawn).mockReturnValueOnce(child as any);
-
-    await expect(warmupReference('/tmp/generated-iwsdk-app', 1)).resolves.toBe(
-      false,
-    );
-    expect(child.kill).toHaveBeenCalledOnce();
-  });
-});
-
 describe('printNextSteps', () => {
   it('links generated projects to the IWER controls', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-    printNextSteps('example-app', true, [], false, true, true);
+    printNextSteps('example-app', true, [], false, true);
 
     expect(log).toHaveBeenCalledWith(
       expect.stringContaining(
@@ -369,7 +324,7 @@ describe('printNextSteps', () => {
   it('prints the metavr notice before the next steps', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-    printNextSteps('example-app', true, [], false, true, true);
+    printNextSteps('example-app', true, [], false, true);
 
     const lines = log.mock.calls.map(([line]) => String(line));
     const noticeIndex = lines.indexOf('\nAbout metavr CLI:');
@@ -385,7 +340,7 @@ describe('printNextSteps', () => {
   it('does not show IWER controls for browser-first projects', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-    printNextSteps('example-app', true, [], false, true, false);
+    printNextSteps('example-app', true, [], false, false);
 
     expect(log).not.toHaveBeenCalledWith(
       expect.stringContaining('IWER controls:'),

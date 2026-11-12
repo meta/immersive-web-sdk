@@ -162,105 +162,10 @@ export async function installDependenciesFromBundle(
   }
 }
 
-const DEFAULT_REFERENCE_WARMUP_TIMEOUT_MS = 120_000;
 const IWER_CONTROLS_URL =
   'https://iwsdk.dev/guides/02-testing-experience.html#iwer-controls';
 const MPT_SDK_LICENSE_URL =
   'https://developers.meta.com/horizon/licenses/oculussdk/';
-
-/**
- * Initialize the optional reference cache without making project creation
- * depend on network/model availability.
- */
-export async function warmupReference(
-  outDir: string,
-  timeoutMs = DEFAULT_REFERENCE_WARMUP_TIMEOUT_MS,
-): Promise<boolean> {
-  const spinner: Ora = ora({
-    text: 'Initializing IWSDK reference tools (one-time shared download) ...',
-    stream: process.stderr,
-    discardStdin: false,
-    hideCursor: false,
-    isEnabled: process.stderr.isTTY,
-  }).start();
-  const cliEntrypoint = path.join(
-    outDir,
-    'node_modules',
-    '@iwsdk',
-    'cli',
-    'dist',
-    'cli.js',
-  );
-  try {
-    const child = spawn(
-      process.execPath,
-      [cliEntrypoint, 'reference', 'warmup'],
-      {
-        cwd: outDir,
-        stdio: 'inherit',
-      },
-    );
-    await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        child.kill();
-        reject(
-          new Error(
-            `Reference initialization timed out after ${Math.ceil(timeoutMs / 1000)} seconds`,
-          ),
-        );
-      }, timeoutMs);
-      const finish = (callback: () => void) => {
-        clearTimeout(timeout);
-        callback();
-      };
-      child.on('error', (error) => finish(() => reject(error)));
-      child.on('exit', (code) =>
-        code === 0
-          ? finish(resolve)
-          : finish(() =>
-              reject(new Error(`Reference initialization failed (${code})`)),
-            ),
-      );
-    });
-    spinner.stopAndPersist({
-      symbol: stderrColor.green('✔'),
-      text: 'IWSDK reference tools ready',
-    });
-    return true;
-  } catch (error) {
-    spinner.stopAndPersist({
-      symbol: stderrColor.red('✖'),
-      text: 'IWSDK reference initialization failed',
-    });
-    console.warn(
-      stderrColor.yellow(
-        `Project creation will continue without the optional reference cache: ${error instanceof Error ? error.message : String(error)}. Run "npx @iwsdk/cli reference warmup" from the project directory to retry.`,
-      ),
-    );
-    return false;
-  }
-}
-
-function printReferenceWarmupGuidance() {
-  console.log(
-    stdoutColor.gray(
-      '  # @iwsdk/reference downloads its pinned model automatically during warmup',
-    ),
-  );
-  console.log(
-    stdoutColor.gray(
-      '  # optional for bundle/internal or unpublished corpus payloads: set IWSDK_REFERENCE_ASSETS_BASE_URL to the hosted reference-assets dist URL',
-    ),
-  );
-  console.log(
-    stdoutColor.gray(
-      '  # warmup still needs access to the baked public model file URLs unless the shared cache is already pre-warmed',
-    ),
-  );
-  console.log(
-    stdoutColor.gray('  # then run: npx @iwsdk/cli reference warmup'),
-  );
-}
 
 function printMetavrNotice() {
   console.log('\nAbout metavr CLI:');
@@ -278,7 +183,6 @@ export function printNextSteps(
   installed: boolean,
   actionItems: ActionItem[] = [],
   inPlace = false,
-  referenceReady = false,
   xrEnabled = true,
 ) {
   const startCmd = 'npm run dev';
@@ -305,9 +209,6 @@ export function printNextSteps(
   }
   if (!installed) {
     console.log(stdoutColor.gray('  npm install'));
-  }
-  if (!referenceReady) {
-    printReferenceWarmupGuidance();
   }
   console.log(stdoutColor.gray(`  ${startCmd}`));
   if (xrEnabled) {

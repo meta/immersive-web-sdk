@@ -260,7 +260,7 @@ export function buildReferenceCommandHelp(action?: string): string[] {
     return [
       'Usage: iwsdk reference status',
       '',
-      'Show reference project state plus shared corpus and model cache status.',
+      'Show whether @iwsdk/reference is installed and its bundled corpus loads.',
     ];
   }
 
@@ -268,9 +268,8 @@ export function buildReferenceCommandHelp(action?: string): string[] {
     return [
       'Usage: iwsdk reference warmup',
       '',
-      'Download and initialize the external reference corpus and model caches.',
-      'The pinned model file URLs are baked into the SDK and must remain reachable unless the shared cache is already pre-warmed.',
-      'Set IWSDK_REFERENCE_ASSETS_BASE_URL when you are hosting the corpus payload yourself, including local/internal SDK bundle deployments that do not ship @iwsdk/reference-assets.',
+      'Check that the corpus bundled with @iwsdk/reference loads.',
+      'Kept for compatibility; nothing is downloaded and queries work right after install.',
     ];
   }
 

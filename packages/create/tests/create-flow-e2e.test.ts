@@ -729,14 +729,12 @@ describe('create-iwsdk scene flow E2E', () => {
           ]);
           expect(pnpmWorkspace.ignoredBuiltDependencies).toEqual([
             '@meta-quest/metavr',
-            'onnxruntime-node',
           ]);
           expect(pnpmWorkspace.allowBuilds).toEqual({
             esbuild: true,
             protobufjs: true,
             sharp: true,
             '@meta-quest/metavr': false,
-            'onnxruntime-node': false,
           });
 
           const install = await runCommand(
@@ -873,7 +871,6 @@ describe('create-iwsdk scene flow E2E', () => {
             ]);
             expect(pnpmWorkspace.ignoredBuiltDependencies).toEqual([
               '@meta-quest/metavr',
-              'onnxruntime-node',
             ]);
             await stat(path.join(appRoot, 'node_modules'));
 

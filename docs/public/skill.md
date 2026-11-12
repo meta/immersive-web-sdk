@@ -426,20 +426,18 @@ Supported adapters: Claude Code, Cursor, OpenAI Codex, GitHub Copilot.
 
 ## 7. Reference System
 
-`@iwsdk/reference` is a workspace-local reference CLI/MCP server for semantic
-IWSDK search, backed by warmed corpus/model assets.
-
-### Setup
+`@iwsdk/reference` is a workspace-local reference CLI/MCP server that searches
+IWSDK source, examples, guides and dependency type definitions. Its corpus ships
+inside the package, so queries work offline right after install.
 
 ```bash
-npx @iwsdk/cli reference warmup   # Download corpus archive + pinned model files into cache
-npx @iwsdk/cli reference status    # Check readiness
+npx @iwsdk/cli reference status    # Confirm the package is installed and its corpus loads
 ```
 
 ### Query Tools
 
 ```bash
-# Semantic search
+# Search (identifiers and plain-language questions)
 npx @iwsdk/cli reference search --input-json '{"query":"how to create a grabbable object","limit":5}'
 
 # API reference
@@ -468,9 +466,8 @@ npx @iwsdk/cli reference inspect --tool search
 
 Do not use `npm install --ignore-scripts` as the default workaround for
 `@iwsdk/reference`; the package bin expects built `dist` files. If installation
-fails, inspect the package-manager error and fix the underlying dependency,
-engine, or network/cache issue. In the current repo, the reference package
-declares its MCP and embedding dependencies and type-checks successfully.
+fails, inspect the package-manager error and fix the underlying dependency or
+engine issue. The package has no native or model dependencies.
 
 ---
 

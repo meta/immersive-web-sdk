@@ -7,8 +7,7 @@ It owns:
 
 - dev server lifecycle commands
 - adapter sync and status
-- reference status and recovery warmup commands (fresh installed scaffolds warm
-  the shared cache automatically)
+- reference status and queries against the installed `@iwsdk/reference`
 - runtime-resolved MCP stdio access
 - direct runtime control commands
 

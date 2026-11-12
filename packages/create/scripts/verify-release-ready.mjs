@@ -63,8 +63,7 @@ try {
     pnpmWorkspace.overrides?.sharp !== '0.35.4' ||
     pnpmWorkspace.overrides?.three !== 'npm:super-three@0.185.0' ||
     pnpmWorkspace.allowBuilds?.sharp !== true ||
-    pnpmWorkspace.allowBuilds?.['@meta-quest/metavr'] !== false ||
-    pnpmWorkspace.allowBuilds?.['onnxruntime-node'] !== false
+    pnpmWorkspace.allowBuilds?.['@meta-quest/metavr'] !== false
   ) {
     blockers.push(
       'generated pnpm-workspace.yaml is missing the pnpm 10/11 override and build policy',

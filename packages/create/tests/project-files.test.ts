@@ -216,13 +216,12 @@ describe('common starter project files', () => {
         three: 'npm:super-three@0.185.0',
       },
       onlyBuiltDependencies: ['esbuild', 'protobufjs', 'sharp'],
-      ignoredBuiltDependencies: ['@meta-quest/metavr', 'onnxruntime-node'],
+      ignoredBuiltDependencies: ['@meta-quest/metavr'],
       allowBuilds: {
         esbuild: true,
         protobufjs: true,
         sharp: true,
         '@meta-quest/metavr': false,
-        'onnxruntime-node': false,
       },
     });
     expect(packageJson.scripts.typecheck).toBe('tsc --noEmit');

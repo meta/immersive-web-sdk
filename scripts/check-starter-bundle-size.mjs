@@ -85,9 +85,6 @@ async function startBundleServer() {
   );
   const packages = {};
   for (const directory of await readdir(path.join(ROOT, 'packages'))) {
-    if (directory === 'reference-assets') {
-      continue;
-    }
     const tarball = `iwsdk-${directory}.tgz`;
     const packageRoot = path.join(ROOT, 'packages', directory);
     try {

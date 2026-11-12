@@ -55,8 +55,8 @@ When the server starts, several things happen automatically:
 
 If you need the resolved runtime URL, want to inspect adapter state explicitly, or need to confirm that the managed browser bridge is actually ready to accept commands, run `npx @iwsdk/cli dev status`. The `dev up` result also reports `browserCommandReady` and may return while a lifecycle-managed browser is still launching. The `state.browserCommandReady` field and `state.session.browser.commandReady` value are the source of truth for browser readiness.
 
-::: tip Optional reference warmup
-If your project installs `@iwsdk/reference`, run `npx @iwsdk/cli reference warmup` once after install. That step prepares the pinned reference corpus under your project's `.iwsdk/reference` state, populates the shared corpus store, and eagerly downloads the pinned model into the shared model cache. Set `IWSDK_REFERENCE_ASSETS_BASE_URL` too when you are hosting the corpus payload yourself instead of relying on the published `@iwsdk/reference-assets` package. SDK bundles intentionally exclude the corpus payload, so bundle/internal deployments must host it separately before warmup. The pinned model file URLs themselves are baked into the SDK, so warmup still requires access to those public URLs unless the shared cache has already been pre-warmed.
+::: tip Reference search
+If your project installs `@iwsdk/reference` (generated apps do), its search corpus ships inside the package, so reference queries work offline right after install. There is nothing to warm up or download.
 :::
 
 ## Connect Your AI Tool

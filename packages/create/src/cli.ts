@@ -35,7 +35,6 @@ import {
   installDependenciesFromBundle,
   printNextSteps,
   printPrerequisites,
-  warmupReference,
 } from './installer.js';
 import {
   buildStarterProjectFiles,
@@ -270,7 +269,7 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
     .option('--no-environment-raycast', 'Disable environment raycast')
     .option(
       '--skip-reference-warmup',
-      'Skip the optional one-time reference model download',
+      'No effect; kept for older scripts (@iwsdk/reference bundles its corpus)',
     )
     .action((n: string | undefined, opts: CliOptions) => {
       nameArg = n;
@@ -503,7 +502,6 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
       if (adopting) {
         await adoptProject(outDir, projectFiles, res.language, {
           install: res.installNow,
-          warmup: !cliOpts.skipReferenceWarmup,
         });
         return;
       }
@@ -555,15 +553,11 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
       }
 
       // Install dependencies
-      let referenceReady = false;
       if (res.installNow) {
         if (source.isBundleMode) {
           await installDependenciesFromBundle(outDir, source);
         } else {
           await installDependencies(outDir);
-        }
-        if (!cliOpts.skipReferenceWarmup) {
-          referenceReady = await warmupReference(outDir);
         }
       }
 
@@ -580,7 +574,6 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
         res.installNow,
         res.actionItems || [],
         projectTarget.inPlace,
-        referenceReady,
         res.xrEnabled,
       );
     } finally {
@@ -620,7 +613,7 @@ async function adoptProject(
   outDir: string,
   files: Awaited<ReturnType<typeof buildStarterProjectFiles>>,
   language: Language,
-  options: { install: boolean; warmup: boolean },
+  options: { install: boolean },
 ): Promise<void> {
   const report = await adoptExistingProject({
     outDir,
@@ -639,9 +632,6 @@ async function adoptProject(
     }
   }
   if (outcome.installed) {
-    if (options.warmup) {
-      await warmupReference(outDir);
-    }
     outcome.adaptersSynced = syncAdapters(outDir, true);
   }
   printAdoptReport(report, outcome);

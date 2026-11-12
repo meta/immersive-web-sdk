@@ -52,7 +52,7 @@ Your normal browser runs independently with its own XR session, so you can devel
 
 The runtime-first adapter sync can also register optional MCP servers alongside `iwsdk-runtime`:
 
-- **`iwsdk-reference`** — If `@iwsdk/reference` is installed, a local reference server is registered that provides semantic code search and IWSDK API knowledge. Run `npx @iwsdk/cli reference warmup` once to download the pinned model plus the reference corpus into your project-local `.iwsdk/reference` state and shared cache. Set `IWSDK_REFERENCE_ASSETS_BASE_URL` too when you are hosting the corpus payload yourself instead of using the published `@iwsdk/reference-assets` package. SDK bundles intentionally exclude the corpus payload, so bundle/internal deployments must host that artifact separately before warmup will succeed. The pinned model file URLs themselves are baked into the SDK, so warmup still requires access to those public URLs unless the shared cache has already been pre-warmed.
+- **`iwsdk-reference`** — If `@iwsdk/reference` is installed, a local reference server is registered that searches IWSDK source, examples, guides and dependency type definitions. The corpus ships inside the package, so it works offline with no warmup.
 - **`metavr`** — If `@meta-quest/metavr` is installed, the MetaVR MCP server is registered. This provides Meta Quest device management, 3D asset search from Meta's asset library, and IWSDK documentation lookup.
 
 These appear automatically in the generated MCP config files when the corresponding packages are present in `node_modules`.

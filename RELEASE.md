@@ -57,9 +57,8 @@ From the `main` branch after PRs are merged:
 
 2. Build all packages:
    - `pnpm build:all`
-   - This includes the producer-only `@iwsdk/reference-assets` package and runs
-     its ingest pipeline. A fresh machine needs access to the pinned embedding
-     model URLs.
+   - This first runs the private `@iwsdk/reference-assets` ingest, which builds
+     the corpus that `@iwsdk/reference` bundles. It needs only local files.
 
 3. Type-check every example against fresh local package tarballs:
    - `pnpm typecheck:examples`

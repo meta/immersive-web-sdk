@@ -13,10 +13,7 @@ const BASE_OVERRIDES = {
 } as const;
 
 const ONLY_BUILT_DEPENDENCIES = ['esbuild', 'protobufjs', 'sharp'] as const;
-const IGNORED_BUILT_DEPENDENCIES = [
-  '@meta-quest/metavr',
-  'onnxruntime-node',
-] as const;
+const IGNORED_BUILT_DEPENDENCIES = ['@meta-quest/metavr'] as const;
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -96,7 +93,6 @@ export function mergePnpmWorkspaceYaml(
         protobufjs: true,
         sharp: true,
         '@meta-quest/metavr': false,
-        'onnxruntime-node': false,
       },
       ...sortedRecord(otherConfiguration),
     },

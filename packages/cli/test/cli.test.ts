@@ -49,16 +49,6 @@ const CLI_RUNTIME_OWNER_URL = new URL(
 
 const ONE_BY_ONE_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlH0ZQAAAAASUVORK5CYII=';
-const REFERENCE_TEST_MODEL = {
-  source: 'archive',
-  format: 'transformers-js',
-  archiveSha256: 'model-hash',
-  archiveSize: 123,
-  dtype: 'q8',
-  pooling: 'mean',
-  normalize: true,
-};
-
 let tempDir: string;
 let appA: string;
 let appB: string;
@@ -100,7 +90,6 @@ async function installReferenceFixture(
     warmupData?: Record<string, unknown>;
   } = {},
 ) {
-  const normalizedRoot = await realpath(root);
   const entrypoint = path.join(
     root,
     'node_modules',
@@ -111,41 +100,16 @@ async function installReferenceFixture(
   );
   await mkdir(path.dirname(entrypoint), { recursive: true });
   const statusData = options.statusData ?? {
-    packageVersion: '0.3.1',
-    assetsPackage: {
-      name: '@iwsdk/reference-assets',
-      version: '0.3.1',
-    },
-    workspaceRoot: normalizedRoot,
-    stateRoot: path.join(normalizedRoot, '.iwsdk', 'reference'),
-    sharedDataRoot: '/tmp/reference-cache/corpora',
-    sharedModelRoot: '/tmp/reference-cache/models',
-    initState: 'not_started',
-    manifestUrl: null,
-    dataDir: null,
-    dataSha256: null,
-    modelDir: null,
-    modelSha256: null,
-    modelUrl: null,
-    model: null,
-    startedAt: null,
-    completedAt: null,
-    updatedAt: null,
-    error: null,
-    warmupRequired: true,
-  };
-  const warmupData = options.warmupData ?? {
-    ...statusData,
+    packageVersion: '1.1.0',
+    corpusPath: path.join(path.dirname(entrypoint), 'corpus.json.gz'),
+    corpusBytes: 2_000_000,
+    corpusVersion: '1.1.0',
+    generatedAt: '2026-11-03T00:00:00.000Z',
     initState: 'ready',
+    error: null,
     warmupRequired: false,
-    dataDir: '/tmp/reference-cache/data',
-    dataSha256: 'data-hash',
-    modelDir: '/tmp/reference-cache/models/model-hash/model',
-    modelSha256: REFERENCE_TEST_MODEL.archiveSha256,
-    modelUrl: 'https://cdn.example.test/model.tgz',
-    model: REFERENCE_TEST_MODEL,
-    updatedAt: new Date().toISOString(),
   };
+  const warmupData = options.warmupData ?? statusData;
   await writeFile(
     entrypoint,
     `function readOption(name) {
@@ -163,7 +127,7 @@ if (args.has('--status-json')) {
   process.exit(0);
 }
 if (args.has('--warmup')) {
-  process.stderr.write('warming reference assets\\n');
+  process.stderr.write('checking reference corpus\\n');
   process.stdout.write(${JSON.stringify(
     `${JSON.stringify({ ok: true, data: warmupData })}\n`,
   )});
@@ -1158,7 +1122,7 @@ describe('runtime introspection and raw output', () => {
 });
 
 describe('reference commands', () => {
-  test('reports install and cache state from a nested cwd', async () => {
+  test('reports install and corpus state from a nested cwd', async () => {
     await installReferenceFixture(appA);
 
     const result = await runCli(
@@ -1170,8 +1134,8 @@ describe('reference commands', () => {
     const parsed = JSON.parse(result.stdout);
     expect(parsed.data.installed).toBe(true);
     expect(parsed.data.workspaceRoot).toBe(await realpath(appA));
-    expect(parsed.data.initState).toBe('not_started');
-    expect(parsed.data.warmupRequired).toBe(true);
+    expect(parsed.data.initState).toBe('ready');
+    expect(parsed.data.warmupRequired).toBe(false);
   });
 
   test('supports --workspace for reference warmup', async () => {
@@ -1187,7 +1151,7 @@ describe('reference commands', () => {
     expect(parsed.data.workspaceRoot).toBe(await realpath(appA));
     expect(parsed.data.initState).toBe('ready');
     expect(parsed.data.warmupRequired).toBe(false);
-    expect(result.stderr).toContain('warming reference assets');
+    expect(result.stderr).toContain('checking reference corpus');
   });
 
   test('reports when reference is not installed', async () => {

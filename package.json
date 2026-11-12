@@ -166,9 +166,6 @@
       "esbuild",
       "protobufjs",
       "sharp"
-    ],
-    "ignoredBuiltDependencies": [
-      "onnxruntime-node"
     ]
   },
   "engines": {

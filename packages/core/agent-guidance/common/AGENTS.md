@@ -84,18 +84,17 @@ and subtle breakage. Exception: `import type { GLTF } from 'three/addons/...'`.
 
 ## Traps that produce silent failures
 
-| Trap                                                           | Symptom                                                                  | Fix                                                                                      |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| `locomotion: true` with no `LocomotionEnvironment` on a floor  | player falls through the world                                           | add the component to a walkable surface                                                  |
-| Scene origin left occupied                                     | player spawns inside your geometry                                       | the player origin is `0,0,0` unless the scene authors `player.transform`                 |
-| Scene JSON with `imports`                                      | authoring preview works, but editable open and runtime load are rejected | run `npx @iwsdk/cli scene flatten` once, then edit the flat output                       |
-| `entity.destroy()`                                             | GPU memory leaked                                                        | use `entity.dispose()`                                                                   |
-| `setValue` on a Vec2/Vec3/Vec4/Color field                     | throws in elics 3.4.x                                                    | use `entity.getVectorView(...)`                                                          |
-| Environment component on a non-root entity                     | silently ignored                                                         | `DomeGradient`/`IBLGradient` go on the level root only                                   |
-| `DomeFade` with no `DomeGradient` on the level root            | no fade; the floor keeps its hard edge                                   | add a `DomeGradient` (render stats report the DomeFade `inactiveReason`)                 |
-| `DomeTexture`/`IBLTexture` prop changed without `_needsUpdate` | change ignored                                                           | set `_needsUpdate` after writing; `DomeGradient`/`IBLGradient` apply edits without it    |
-| `ScreenSpace` given numbers                                    | clamped with a console warning                                           | it takes CSS strings: `'400px'`, `'25vw'`                                                |
-| `@iwsdk/reference` MCP tools in an old or `--no-install` app   | queries report warmup required                                           | run `npx @iwsdk/cli reference warmup`; fresh installed scaffolds do this during creation |
+| Trap                                                           | Symptom                                                                  | Fix                                                                                   |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| `locomotion: true` with no `LocomotionEnvironment` on a floor  | player falls through the world                                           | add the component to a walkable surface                                               |
+| Scene origin left occupied                                     | player spawns inside your geometry                                       | the player origin is `0,0,0` unless the scene authors `player.transform`              |
+| Scene JSON with `imports`                                      | authoring preview works, but editable open and runtime load are rejected | run `npx @iwsdk/cli scene flatten` once, then edit the flat output                    |
+| `entity.destroy()`                                             | GPU memory leaked                                                        | use `entity.dispose()`                                                                |
+| `setValue` on a Vec2/Vec3/Vec4/Color field                     | throws in elics 3.4.x                                                    | use `entity.getVectorView(...)`                                                       |
+| Environment component on a non-root entity                     | silently ignored                                                         | `DomeGradient`/`IBLGradient` go on the level root only                                |
+| `DomeFade` with no `DomeGradient` on the level root            | no fade; the floor keeps its hard edge                                   | add a `DomeGradient` (render stats report the DomeFade `inactiveReason`)              |
+| `DomeTexture`/`IBLTexture` prop changed without `_needsUpdate` | change ignored                                                           | set `_needsUpdate` after writing; `DomeGradient`/`IBLGradient` apply edits without it |
+| `ScreenSpace` given numbers                                    | clamped with a console warning                                           | it takes CSS strings: `'400px'`, `'25vw'`                                             |
 
 ## Verify before you claim it works
 

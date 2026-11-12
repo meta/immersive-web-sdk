@@ -102,7 +102,6 @@ function createProjectPackageJson(
       'dev:down': 'iwsdk dev down',
       'dev:status': 'iwsdk dev status',
       'reference:status': 'iwsdk reference status',
-      'reference:warmup': 'iwsdk reference warmup',
       ...(language === 'ts' ? { typecheck: 'tsc --noEmit' } : {}),
       build: 'vite build',
       preview: 'vite preview',
