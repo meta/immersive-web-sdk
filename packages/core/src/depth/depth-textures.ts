@@ -14,6 +14,33 @@ import {
   UnsignedByteType,
   WebGLRenderer,
 } from '../runtime/three.js';
+
+/**
+ * The GPU depth texture is opaque and swapchain-backed: Quest Browser hands
+ * out the same WebGLTexture every frame but points it at a different image,
+ * and a texture unit only follows when bindTexture() is called again.
+ * three.js caches unit bindings by object identity and skips that call, so a
+ * unit can keep an earlier frame's image, which the browser may already have
+ * dropped ("RENDER WARNING: there is no texture bound to the unit N"; the
+ * shader then samples zeros). Re-issue the bind on every unit that holds the
+ * texture. The bound objects and the active unit stay as they were, so
+ * three.js's state cache remains correct.
+ */
+function rebindOpaqueTexture(
+  renderer: WebGLRenderer,
+  texture: WebGLTexture,
+): void {
+  const gl = renderer.getContext() as WebGL2RenderingContext;
+  const active = gl.getParameter(gl.ACTIVE_TEXTURE) as number;
+  for (let unit = 0; unit < renderer.capabilities.maxTextures; unit++) {
+    gl.activeTexture(gl.TEXTURE0 + unit);
+    if (gl.getParameter(gl.TEXTURE_BINDING_2D_ARRAY) === texture) {
+      gl.bindTexture(gl.TEXTURE_2D_ARRAY, texture);
+    }
+  }
+  gl.activeTexture(active);
+}
+
 /**
  * Manages depth textures from WebXR depth sensing.
  * Supports both CPU-optimized (DataArrayTexture) and GPU-optimized (ExternalTexture) depth data.
@@ -112,6 +139,7 @@ export class DepthTextures {
     };
     textureProperties.__webglTexture = depthData.texture;
     textureProperties.__version = 1;
+    rebindOpaqueTexture(renderer, depthData.texture);
   }
 
   /**
