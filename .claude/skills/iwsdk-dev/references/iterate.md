@@ -87,8 +87,9 @@ the output bounded. The existing scaffold rules are already in context:
 3. Implement the smallest complete vertical delta, including state/UI feedback
    and recovery when the request needs them.
 4. Run one batched typecheck and fix errors together.
-5. Start the managed runtime directly with
-   `npx @iwsdk/cli dev up --headless --timeout 45000`. Headless sessions draw
+5. Start the managed runtime directly in the mode AGENTS.md's session rule
+   picks: `npx @iwsdk/cli dev up --ai-mode agent --timeout 45000`, or
+   `--ai-mode collaborate` when the user is watching. Headless sessions draw
    only when a tool needs pixels; read references/headless-rendering.md before
    relying on frame rate, frame timing, or which frame a screenshot shows.
 6. Exercise the changed path with real user input and query only the named state
@@ -158,7 +159,7 @@ stretch a press that far, so run that press once more before changing code.
 If a scene/source/UI edit happens after the managed runtime started and live
 state becomes stale, do not call `scene open`, repeatedly poll `dev status`, or
 loop on browser reload. Run one
-`npx @iwsdk/cli dev restart --headless --timeout 60000`, then resume the named-state
+`npx @iwsdk/cli dev restart --ai-mode <the session's current mode> --timeout 60000`, then resume the named-state
 check. One failed restart may be diagnosed once; do not enter a recovery loop.
 
 Do not perform a full product replay when the edit affects one bounded path.

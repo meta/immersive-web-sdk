@@ -186,8 +186,8 @@ views independently when both modes matter.
 ## Verify with a bounded loop
 
 Typecheck after the complete first slice, then start or reuse one managed
-session. If no command-ready session exists, run `npx @iwsdk/cli dev up --open`
-once. Do not call `dev --help`, separately call `dev open`, restart a healthy
+session. If no command-ready session exists, run `npx @iwsdk/cli dev up` once,
+with the `--ai-mode` that AGENTS.md's session rule picks. Do not call `dev --help`, separately call `dev open`, restart a healthy
 session, start a second browser, or build a custom UIKit renderer.
 
 1. Run `npx @iwsdk/cli ui assets --raw` once to confirm registration.

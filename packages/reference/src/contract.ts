@@ -69,7 +69,7 @@ export const REFERENCE_OPERATIONS: ReferenceOperationDefinition[] = [
         query: {
           type: 'string',
           description:
-            'Natural language search query (e.g., "how to create a VR session", "XR controller input handling")',
+            'Keywords, best led by identifiers (e.g., "XRInputManager select", "PokeInteractable hand", "createSystem queries")',
         },
         limit: {
           type: 'number',

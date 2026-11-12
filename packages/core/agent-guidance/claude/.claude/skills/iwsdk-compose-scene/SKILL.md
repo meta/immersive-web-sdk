@@ -122,8 +122,8 @@ npx @iwsdk/cli scene state --raw
 `iwsdk dev up` starts the server in the background and launches the configured
 managed editor browser. It can return while that browser is still starting; use
 `iwsdk runtime wait` or inspect `iwsdk runtime status` before browser-backed
-commands. Do not edit `vite.config.ts` to change browser mode as an ad hoc
-startup workaround.
+commands. Pass the `--ai-mode` that AGENTS.md's session rule picks; do not edit
+`vite.config.ts` to change browser mode as an ad hoc startup workaround.
 
 `scene_render_file` renders a file without replacing the editor's active document,
 but it still uses the managed editor browser for manifest evaluation and WebGL.

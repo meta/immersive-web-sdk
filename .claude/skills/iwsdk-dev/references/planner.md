@@ -205,9 +205,9 @@ physics, deployment, and interactions with meaningful failure modes need
 broader scenarios and stronger evidence.
 
 After the coherent vertical slice typechecks, start one managed dev session
-and keep it alive while iterating. The developer owns headed versus headless
-mode: announce a proposed mode change before restarting rather than silently
-replacing their visible collaboration window. Do not start an untouched or
+and keep it alive while iterating. Pick headed or headless with the session
+rule in AGENTS.md (headless unless the user wants to watch) and announce a later
+mode change before restarting rather than silently replacing a visible window. Do not start an untouched or
 knowingly non-typechecking app. Exercise the real paths rather than inferring
 behavior from code. Confirm `npx @iwsdk/cli xr status` is active before making pose,
 controller/hand alignment, or immersive-interaction claims; a flat screenshot

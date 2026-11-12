@@ -380,9 +380,11 @@ npx @iwsdk/cli dev open           # Open in browser
 Generated apps use bare `iwsdkDev()` and the CLI launches the managed Playwright
 runtime/editor workspace, registers the MCP WebSocket endpoint, and records
 runtime state. AI, headed/headless, open, and screenshot behavior are
-launch-time `iwsdk dev up` flags. The developer owns the headed/headless choice;
-announce any change before restarting rather than silently changing their
-workspace. Use `npx @iwsdk/cli dev status` for the resolved `runtimeUrls.local` and
+launch-time `iwsdk dev up` flags. Pass the mode explicitly (the default is
+headed): `--ai-mode collaborate` when the user wants to watch or steer the work,
+`--ai-mode agent` (headless, renders on demand) otherwise; ask once if the
+request does not say, and use agent when nobody can answer. Announce any later
+change before restarting rather than silently changing their workspace. Use `npx @iwsdk/cli dev status` for the resolved `runtimeUrls.local` and
 `runtimeUrls.network` fields in the JSON result; the generated starter template
 defaults to `https://localhost:8081/`, but examples or existing apps may use
 another Vite port.

@@ -669,7 +669,7 @@ describe('common starter project files', () => {
     expect(configuredSkills).toEqual(emittedSkills);
     for (const sharedGuidance of [
       'Explain immersive terms in plain language',
-      'The developer owns whether that managed window is headed or headless',
+      'Choose the session mode before the first `dev up`',
       'immersive interaction claims require an',
       'data.runtimeUrls.network',
     ]) {

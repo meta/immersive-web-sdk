@@ -58,12 +58,29 @@ tabGeneration on every physical command. Reload is supported through the page
 bridge; screenshot, snapshot, interaction, profiling, console capture, and the
 managed editor are host-only. Rediscover after reload to get the new generation.
 
-The developer owns whether that managed window is headed or headless. Do not
-change modes silently: announce the change before restarting. In a visible
-collaboration session, use the Runtime/Editor toggle in the single managed
-Chromium window. Its expected unsupported-flag banner comes from
-`--ignore-certificate-errors` for the local development certificate. Playwright
-may add separate sandbox-related flags in constrained environments.
+**Choose the session mode before the first `dev up`, and pass it explicitly**
+(the CLI default is headed):
+
+- `--ai-mode collaborate` (headed, draws every frame, Runtime/Editor toggle)
+  when the user wants to watch or steer the work as it happens: they ask to see
+  it, are pairing live, or will judge visuals or motion by eye.
+- `--ai-mode agent` (headless, draws only when a tool needs pixels, fast without
+  a GPU) for everything else: autonomous or background work, CI, a remote host
+  or no display.
+
+If the request does not say and the user is there, ask once whether they want to
+watch in a browser window or let you work headless; if nobody can answer, use
+agent. That one question is allowed even where a playbook avoids pausing; put it
+in your first reply, and start agent mode if no answer has come by the time you
+need the session. Reuse a healthy session in whatever mode it runs, and announce
+any mode change before restarting. Headless screenshots always show a fresh
+frame, but frame rate there means nothing; the iwsdk-dev skill's
+`references/headless-rendering.md` covers exact frames, filmstrips and
+`RuntimeSettings`. In a visible collaboration session, use the Runtime/Editor
+toggle in the single managed Chromium window. Its expected unsupported-flag
+banner comes from `--ignore-certificate-errors` for the local development
+certificate. Playwright may add separate sandbox-related flags in constrained
+environments.
 
 **`src/assets.ts`/`src/assets.js` is evaluated twice, in two different JS
 realms** — once by the app runtime, once by the editor. It must be deterministic
@@ -188,9 +205,10 @@ The selected playbook routes work to the narrowest owning specialist:
 - a model-local defect found during composition routes back to `iwsdk-build-model`;
   a placement or lighting defect stays in `iwsdk-compose-scene`.
 
-UI authoring, physics, depth occlusion, grab and ray interaction testing, ECS
-frame-stepping, and debugging have their own project skills. Use them only when
-the selected `iwsdk-dev` playbook calls for the matching specialty.
+UI authoring, physics, depth occlusion, grab and ray interaction testing, and
+debugging (including ECS frame-stepping, in `iwsdk-debug`) have their own
+project skills. Use them only when the selected `iwsdk-dev` playbook calls for
+the matching specialty.
 Invoke `iwsdk-upgrade` whenever the user asks to upgrade or bump IWSDK.
 Two device-testing skills are invoked directly: `iwsdk-native-xr-test` whenever
 the user wants to run, automate, or debug the app on a connected Quest, and
@@ -233,6 +251,15 @@ renderer imports; systems import the declarations, never the reverse.
 - VR targets 72–90 fps: 11–14 ms per frame. Treat per-frame allocation as a bug.
 
 ## Deep reference
+
+Look up IWSDK APIs with `npx @iwsdk/cli reference <op> --input-json '{...}'`
+(the same tools are on MCP) instead of reading `node_modules`: `api`
+`{"name":"World"}` for a known name, `search` `{"query":"PokeInteractable hand"}`,
+`components` and `systems` to list every ECS type, `examples`
+`{"api_name":"createSystem"}` for usage. `search` is a keyword search: give
+identifiers plus a few words, not questions. The corpus ships inside
+`@iwsdk/reference`, matches the installed version and needs no network or
+warmup.
 
 Harness-native scoped rules cover `public/scenes/**`, `public/ui/**`,
 `src/assets.ts`, `src/scene-assets/**`, and `src/**/*.ts`. `AGENTS.md`-based

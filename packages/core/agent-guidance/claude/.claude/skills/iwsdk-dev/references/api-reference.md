@@ -1387,6 +1387,12 @@ const texture = AssetManager.getTexture('myTexture');
 const audio = AssetManager.getAudio('mySound');
 ```
 
+**Render loop (headless automation):** `world.renderMode` is `'continuous'`
+(default) or `'on-demand'`. On demand, systems still run every frame but only
+frames asked for are drawn: `await world.requestRender(frames)` or
+`const release = world.holdRender()` (draw every frame until `release()`).
+Headless dev sessions switch it on for you; shipped apps keep `'continuous'`.
+
 **Runtime loading (on-demand):**
 
 ```typescript

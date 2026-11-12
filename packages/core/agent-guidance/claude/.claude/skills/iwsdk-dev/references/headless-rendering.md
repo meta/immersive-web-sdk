@@ -57,12 +57,16 @@ npx @iwsdk/cli ecs find --input-json '{"withComponents":["RuntimeSettings"]}'
 npx @iwsdk/cli ecs set-component --input-json '{"entityIndex":<index>,"componentId":"RuntimeSettings","field":"renderMode","value":"continuous"}'
 ```
 
-Set it back to `"on-demand"` when done.
+Without a GPU, continuous drawing drops the app to a few frames per second, so
+set it back to `"on-demand"` when done.
 
 ## Do not
 
-- Judge performance from headless frame rates. Use `browser profile`, which
-  draws every frame, or measure on a device.
+- Judge performance from headless frame rates. Profile instead, which draws
+  every frame while it runs, or measure on a device:
+  `npx @iwsdk/cli browser profile --input-json '{"action":"start","mode":"rendering"}'`,
+  exercise the scene, then
+  `npx @iwsdk/cli browser profile --input-json '{"action":"stop"}'`.
 - Expect a frame to change between screenshots if the scene did not change.
 - Restart into headed mode to "fix" a stale view; screenshots already draw a
   fresh frame.

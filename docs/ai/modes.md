@@ -8,9 +8,13 @@ IWSDK's AI integration supports two modes. Both use the same managed Playwright
 workspace, runtime preview, native scene editor, and MCP connection. The mode
 only changes whether that workspace is visible and how screenshots are sized.
 
-The developer owns this choice. An agent must announce any proposed change to
-headed/headless mode before restarting the workspace; it must not silently
-replace a visible collaboration window with a headless session, or vice versa.
+Coding agents pick the mode from what you want. If you want to watch or steer
+the work as it happens, they start collaborate mode; otherwise they start agent
+mode, which is headless and fast without a GPU. When your request does not say,
+they ask once, and they fall back to agent mode when nobody can answer. Say
+which mode you want to override that. An agent announces any later change
+before restarting the workspace; it never silently replaces a visible
+collaboration window with a headless session, or the reverse.
 
 ## Collaborate Mode
 
