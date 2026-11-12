@@ -77,6 +77,12 @@ export type OnXRFrameCallback = (
 ) => void;
 
 /**
+ * Render loop drawing policy. See {@link World.renderMode}.
+ * @category Runtime
+ */
+export type RenderMode = 'continuous' | 'on-demand';
+
+/**
  * World is the root ECS container, Three.js scene/renderer owner, and XR session gateway.
  *
  * @remarks
@@ -139,6 +145,30 @@ export class World extends ElicsWorld {
   >();
   /** Per-frame XR callbacks registered via {@link World.onXRFrame}. */
   private xrFrameCallbacks = new Set<OnXRFrameCallback>();
+
+  /**
+   * How the render loop draws.
+   *
+   * - `'continuous'` (default): draw every frame.
+   * - `'on-demand'`: run systems every frame but only draw frames requested
+   *   through {@link World.requestRender} or {@link World.holdRender}. Scene
+   *   matrices, skinned-mesh bones and the XR camera still update every frame,
+   *   so raycasts, grabbing, physics, UI and MCP tooling behave as in
+   *   continuous mode. Intended for headless automation on machines without a
+   *   GPU, where every draw is software-rasterized.
+   *
+   * @category Runtime
+   */
+  public renderMode: RenderMode = 'continuous';
+  /** Frames still to draw for pending {@link World.requestRender} calls. */
+  private requestedRenderFrames = 0;
+  /** Open {@link World.holdRender} holds; any open hold draws every frame. */
+  private renderHolds = 0;
+  /** Resolvers waiting for the requested frames to be drawn and presented. */
+  private renderWaiters: Array<() => void> = [];
+  /** Resolvers to release on the tick after the last requested draw. */
+  private presentedRenderWaiters: Array<() => void> = [];
+  private drawnFrameCount = 0;
 
   /** Entity wrapping the XROrigin Group (persistent, survives level changes). */
   public playerEntity!: Entity;
@@ -547,6 +577,90 @@ export class World extends ElicsWorld {
       return [];
     }
     return frame.getHitTestResults(source);
+  }
+
+  /**
+   * Draw the next `frames` frames even in `'on-demand'` render mode.
+   *
+   * Resolves once the last requested frame has been drawn and the browser has
+   * started the following frame, so the drawn image has been handed to the
+   * compositor. A page screenshot taken then shows it, unless something
+   * clears the canvas every frame: IWER's immersive sessions do by default
+   * (see its `XRDevice.frameClearEnabled`), so under that emulator hold
+   * rendering with {@link World.holdRender} for the length of the capture.
+   * In `'continuous'` mode this simply waits for the next `frames` frames.
+   *
+   * @param frames Number of frames to draw. Defaults to 1; values that are
+   * not finite or are below 1 draw one frame.
+   * @category Runtime
+   */
+  requestRender(frames = 1): Promise<void> {
+    const count = Number.isFinite(frames) ? Math.max(1, Math.floor(frames)) : 1;
+    this.requestedRenderFrames = Math.max(this.requestedRenderFrames, count);
+    return new Promise((resolve) => {
+      this.renderWaiters.push(resolve);
+    });
+  }
+
+  /**
+   * Draw every frame until the returned function is called, whatever
+   * {@link World.renderMode} says. Holds are counted, so overlapping holds
+   * (two captures, a capture during a profile) cannot end each other early.
+   * The returned function is idempotent.
+   *
+   * @category Runtime
+   */
+  holdRender(): () => void {
+    this.renderHolds++;
+    let released = false;
+    return () => {
+      if (!released) {
+        released = true;
+        this.renderHolds--;
+      }
+    };
+  }
+
+  /**
+   * Called by the render loop at the start of each tick. Returns whether this
+   * tick should draw, and releases {@link World.requestRender} callers whose
+   * frames were drawn on the previous tick.
+   * @internal
+   */
+  beginRenderTick(): boolean {
+    if (this.presentedRenderWaiters.length > 0) {
+      const waiters = this.presentedRenderWaiters.splice(0);
+      for (const resolve of waiters) {
+        resolve();
+      }
+    }
+    let draw: boolean;
+    if (this.requestedRenderFrames > 0) {
+      this.requestedRenderFrames--;
+      if (this.requestedRenderFrames === 0) {
+        this.presentedRenderWaiters.push(...this.renderWaiters.splice(0));
+      }
+      draw = true;
+    } else {
+      // Only an explicit on-demand mode skips drawing; anything else draws.
+      draw = this.renderHolds > 0 || this.renderMode !== 'on-demand';
+    }
+    if (draw) {
+      this.drawnFrameCount++;
+    }
+    return draw;
+  }
+
+  /**
+   * How many frames the render loop has drawn, counting the current tick
+   * once it has decided to draw. Development tooling compares it across a
+   * frame to tell whether the app drew that frame, for example to draw the
+   * emulator's synthetic AR environment only when the app draws.
+   *
+   * @category Runtime
+   */
+  get drawnFrames(): number {
+    return this.drawnFrameCount;
   }
 
   /**

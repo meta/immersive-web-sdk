@@ -85,6 +85,8 @@ import {
   Scene,
   Timer,
   WebGLRenderer,
+  type Skeleton,
+  type SkinnedMesh,
 } from '../runtime/index.js';
 import {
   SceneUnderstandingSystem,
@@ -912,13 +914,28 @@ async function registerFeatureSystems(
 
 /**
  * Setup the main render loop
+ * @internal Exported for tests.
  */
-function setupRenderLoop(world: World, renderer: WebGLRenderer) {
+export function setupRenderLoop(world: World, renderer: WebGLRenderer) {
   // Timer replaces Clock (deprecated in three r183). Without a timestamp,
   // update() uses performance.now(), as Clock did.
   const timer = new Timer();
 
+  // Development harnesses (the headless managed browser) ask for on-demand
+  // rendering before the app boots so no frame is software-rasterized until a
+  // tool needs pixels.
+  const requestedMode =
+    typeof window !== 'undefined'
+      ? (window as { __IWSDK_RENDER_MODE?: unknown }).__IWSDK_RENDER_MODE
+      : undefined;
+  if (requestedMode === 'on-demand' || requestedMode === 'continuous') {
+    world.renderMode = requestedMode;
+  }
+
+  const skeletons = new Set<Skeleton>();
+
   const render = () => {
+    const draw = world.beginRenderTick();
     timer.update();
     const delta = timer.getDelta();
     const elapsedTime = timer.getElapsed();
@@ -933,7 +950,11 @@ function setupRenderLoop(world: World, renderer: WebGLRenderer) {
     if (xrFrame) {
       world.runXRFrameCallbacks(xrFrame, delta, elapsedTime);
     }
-    renderer.render(world.scene, world.camera);
+    if (draw) {
+      renderer.render(world.scene, world.camera);
+    } else {
+      updateWithoutDrawing(renderer, world.scene, world.camera, skeletons);
+    }
   };
 
   renderer.setAnimationLoop(render);
@@ -943,6 +964,42 @@ function setupRenderLoop(world: World, renderer: WebGLRenderer) {
 
   // No explicit sessionend handling required on r177; WebXRManager handles
   // render target and canvas sizing restoration internally.
+}
+
+/**
+ * Apply the CPU-side state updates `WebGLRenderer.render()` performs before
+ * drawing, without issuing any GL work: world matrices (read by raycasts,
+ * grabbing and physics), skinned-mesh bone matrices (read by
+ * `SkinnedMesh.raycast`) and, while presenting, the XR camera pose.
+ */
+function updateWithoutDrawing(
+  renderer: WebGLRenderer,
+  scene: Scene,
+  camera: PerspectiveCamera,
+  skeletons: Set<Skeleton>,
+) {
+  if (scene.matrixWorldAutoUpdate === true) {
+    scene.updateMatrixWorld();
+  }
+  if (camera.parent === null && camera.matrixWorldAutoUpdate === true) {
+    camera.updateMatrixWorld();
+  }
+  // render() updates each visible skeleton once per frame; do the same so
+  // raycasts against animated characters see the current pose. Skeletons can
+  // be shared between meshes, hence the set.
+  scene.traverseVisible((object) => {
+    if ((object as SkinnedMesh).isSkinnedMesh) {
+      skeletons.add((object as SkinnedMesh).skeleton);
+    }
+  });
+  for (const skeleton of skeletons) {
+    skeleton.update();
+  }
+  skeletons.clear();
+  const xr = renderer.xr;
+  if (xr.enabled === true && xr.isPresenting === true && xr.cameraAutoUpdate) {
+    xr.updateCamera(camera);
+  }
 }
 
 /**

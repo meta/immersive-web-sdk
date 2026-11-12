@@ -28,7 +28,8 @@ interface DebugFrameSynchronizer {
   flushDebugFrame(): Promise<void>;
 }
 
-const DEBUG_SYNC_TIMEOUT_MS = 5000;
+/** How long debug tools wait on the render loop before giving up. @internal */
+export const DEBUG_SYNC_TIMEOUT_MS = 5000;
 
 function isDebugFrameSynchronizer(
   system: unknown,

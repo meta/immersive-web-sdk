@@ -5,8 +5,9 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import type { World } from '../ecs/world.js';
+import type { RenderMode, World } from '../ecs/world.js';
 import {
+  DEBUG_SYNC_TIMEOUT_MS,
   installDebugHook,
   ecsPause,
   ecsResume,
@@ -61,9 +62,78 @@ export class MCPRuntime {
    */
   readonly targetResolver: SceneTargetResolver;
 
+  private renderHolds = new Map<string, () => void>();
+  private nextRenderHoldId = 0;
+
   constructor(private world: World) {
     installDebugHook(world);
     this.targetResolver = new SceneTargetResolver(world);
+  }
+
+  /**
+   * Draw fresh frames before the development bridge captures pixels. Needed
+   * in `'on-demand'` render mode, where the canvas otherwise holds whatever
+   * was last drawn; harmless in continuous mode.
+   */
+  requestRender(frames = 1): Promise<void> {
+    return this.world.requestRender(frames);
+  }
+
+  /**
+   * Frames the render loop has drawn so far. The development bridge reads it
+   * after each emulated XR frame to draw the emulator's synthetic environment
+   * only on frames the app drew.
+   */
+  get drawnFrames(): number {
+    return this.world.drawnFrames;
+  }
+
+  /** The world's current render mode, for development status reports. */
+  get renderMode(): RenderMode {
+    return this.world.renderMode;
+  }
+
+  /**
+   * Draw every frame until {@link MCPRuntime.releaseRenderHold} is called with
+   * the returned id. The development bridge holds rendering across several
+   * page evaluations (a profile, publish evidence), so holds are addressed by
+   * id rather than by closure.
+   */
+  acquireRenderHold(): string {
+    const id = `render-hold-${++this.nextRenderHoldId}`;
+    this.renderHolds.set(id, this.world.holdRender());
+    return id;
+  }
+
+  /** Release a hold from {@link MCPRuntime.acquireRenderHold}. */
+  releaseRenderHold(id: string): boolean {
+    const release = this.renderHolds.get(id);
+    if (!release) {
+      return false;
+    }
+    this.renderHolds.delete(id);
+    release();
+    return true;
+  }
+
+  /** Draw one frame for fresh render stats, bounded like ecs_step. */
+  private drawFrameForStats(): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    return Promise.race([
+      this.world.requestRender(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new Error(
+                `Render stats timed out after ${DEBUG_SYNC_TIMEOUT_MS}ms waiting for a frame to be drawn — the render loop may not be running. ` +
+                  `Ensure the browser tab is visible.`,
+              ),
+            ),
+          DEBUG_SYNC_TIMEOUT_MS,
+        );
+      }),
+    ]).finally(() => clearTimeout(timer));
   }
 
   /** Release native XR before the development bridge navigates this page. */
@@ -130,6 +200,10 @@ export class MCPRuntime {
       case 'get_object_transform':
         return getObjectTransform(this.world, params);
       case 'get_render_stats':
+        // renderer.info describes the last drawn frame.
+        if (this.world.renderMode === 'on-demand') {
+          await this.drawFrameForStats();
+        }
         return getRenderStats(this.world);
       case 'ecs_pause':
         return ecsPause(this.world);
