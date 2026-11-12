@@ -20,6 +20,7 @@ import {
 } from '../tools/ingest.js';
 import { chunkMarkdown } from '../tools/ingestion/markdown.js';
 import { TypeScriptParser } from '../tools/ingestion/parser.js';
+import { TypeScriptParser } from '../tools/ingestion/parser.js';
 import type { TypeScriptChunk } from '../tools/ingestion/types.js';
 
 let tempDir: string;
@@ -217,6 +218,36 @@ describe('oversized declarations', () => {
       end_line: 600,
     });
     expect(filterLargeChunks([big])).toMatchObject({ skipped: 1, outlined: 0 });
+  });
+});
+
+describe('ECS factory declarations', () => {
+  it('indexes components and systems, also when a helper wraps the factory', async () => {
+    const file = path.join(tempDir, 'components.ts');
+    await writeFile(
+      file,
+      [
+        "export const Plain = createComponent('Plain', {});",
+        'export const Wrapped = setComponentEditorMetadata(',
+        "  createComponent('Wrapped', { mode: { type: Types.Enum, enum: {}, default: 'a' } }),",
+        '  { hidden: true },',
+        ');',
+        'export const Spinner = createSystem({});',
+        "export const NotEcs = makeThing(other('x'));",
+      ].join('\n'),
+    );
+    const chunks = new TypeScriptParser().parseFile(file);
+    const ecs = chunks
+      .filter(
+        (chunk) =>
+          chunk.chunk_type === 'component' || chunk.chunk_type === 'system',
+      )
+      .map((chunk) => [chunk.name, chunk.chunk_type, chunk.calls[0]]);
+    expect(ecs).toEqual([
+      ['Plain', 'component', 'createComponent'],
+      ['Wrapped', 'component', 'createComponent'],
+      ['Spinner', 'system', 'createSystem'],
+    ]);
   });
 });
 

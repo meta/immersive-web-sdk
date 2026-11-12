@@ -61,7 +61,7 @@ export const REFERENCE_OPERATIONS: ReferenceOperationDefinition[] = [
     handlerId: 'searchCode',
     mcpName: 'search_code',
     description:
-      'Semantic search across IWSDK and dependency code. Best for finding relevant code by description, use case, or functionality. Returns code chunks ranked by relevance.',
+      'Keyword search across IWSDK source, dependency code and guides. Best with identifiers (class, function, component or system names) plus a few words; identifiers match whole and by their camelCase words. Returns code chunks ranked by relevance.',
     requiresSearchService: true,
     inputSchema: {
       type: 'object',

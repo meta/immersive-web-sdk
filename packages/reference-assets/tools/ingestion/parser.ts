@@ -30,6 +30,32 @@ import { TypeScriptChunk } from './types.js';
 
 type SourceLanguage = 'typescript' | 'javascript';
 
+/**
+ * The ECS factory a declaration's initializer calls (`createComponent` or
+ * `createSystem`), also when a helper wraps it, e.g.
+ * `setComponentEditorMetadata(createComponent(...), ...)`. Returns undefined
+ * for other calls.
+ */
+function findECSFactoryName(call: Node, depth = 0): string | undefined {
+  if (!Node.isCallExpression(call)) {
+    return undefined;
+  }
+  const name = call.getExpression().getText();
+  if (name.includes('createComponent') || name.includes('createSystem')) {
+    return name;
+  }
+  if (depth >= 3) {
+    return undefined;
+  }
+  for (const argument of call.getArguments()) {
+    const found = findECSFactoryName(argument, depth + 1);
+    if (found) {
+      return found;
+    }
+  }
+  return undefined;
+}
+
 export class TypeScriptParser {
   private project: Project;
 
@@ -457,12 +483,12 @@ export class TypeScriptParser {
           continue;
         }
 
-        const functionName = initializer.getExpression().getText();
-        const isComponent = functionName.includes('createComponent');
-        const isSystem = functionName.includes('createSystem');
-        if (!isComponent && !isSystem) {
+        const functionName = findECSFactoryName(initializer);
+        if (!functionName) {
           continue;
         }
+        const isComponent = functionName.includes('createComponent');
+        const isSystem = !isComponent;
 
         const name = declaration.getName();
         chunks.push({
