@@ -7,7 +7,7 @@
 
 import type { PointerEventsMap } from '@pmndrs/pointer-events';
 import { Entity as ElicsEntity, Types } from 'elics';
-import type { AnyComponent } from 'elics';
+import type { AnyComponent, TypeValueToType } from 'elics';
 import type { Color, Object3D, Object3DEventMap } from '../runtime/index.js';
 
 export type ColorValueInput =
@@ -17,9 +17,16 @@ export type ColorValueInput =
   | readonly [number, number, number]
   | readonly [number, number, number, number];
 
-type ColorKeys<C extends AnyComponent> = {
-  [K in keyof C['schema']]: C['schema'][K]['type'] extends 'Color' ? K : never;
-}[keyof C['schema']];
+/**
+ * The value `setValue` accepts for a field: Color fields also take hex
+ * numbers, `#RRGGBB`/`#RRGGBBAA` strings, `Color` objects and RGB tuples.
+ */
+type SetValueInput<
+  C extends AnyComponent,
+  K extends keyof C['schema'],
+> = C['schema'][K]['type'] extends 'Color'
+  ? ColorValueInput
+  : TypeValueToType<C['schema'][K]['type']>;
 
 /** Options for {@link Entity.dispose}. @category ECS */
 export interface EntityDisposeOptions {
@@ -53,10 +60,13 @@ declare module 'elics' {
      * ```
      */
     dispose(options?: EntityDisposeOptions): void;
-    setValue<C extends AnyComponent, K extends ColorKeys<C>>(
+    // Keyed on every schema field, like elics' own signature, so editors
+    // keep completing all keys (an overload limited to Color keys hid the
+    // others).
+    setValue<C extends AnyComponent, K extends keyof C['schema']>(
       component: C,
       key: K,
-      value: ColorValueInput,
+      value: SetValueInput<C, K>,
     ): void;
   }
 }
