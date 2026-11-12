@@ -13,19 +13,17 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import {
-  getReferenceCacheStatus,
-  getReferencePackageVersion,
-  type ReferenceCacheStatus,
-  type ReferenceWarmupEvent,
-  warmupReferenceAssets,
-} from './assets.js';
-import {
   REFERENCE_MCP_TOOLS,
   REFERENCE_OPERATIONS,
   getReferenceOperationByCliName,
   getReferenceOperationByMcpName,
   type ReferenceOperationDefinition,
 } from './contract.js';
+import {
+  getReferencePackageVersion,
+  getReferenceStatus,
+  type ReferenceStatus,
+} from './corpus.js';
 import { FileService } from './files.js';
 import { executeReferenceOperation } from './query-handlers.js';
 import { SearchService } from './search.js';
@@ -95,64 +93,6 @@ function safeJsonParse<T = unknown>(raw: string, label: string): T {
 
 function writeEnvelope<T>(payload: CommandEnvelope<T>) {
   process.stdout.write(`${JSON.stringify(payload)}\n`);
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
-  if (bytes < 1024 * 1024 * 1024) {
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  }
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-}
-
-let progressLineActive = false;
-
-function clearProgressLine() {
-  if (!progressLineActive || !process.stderr.isTTY) {
-    return;
-  }
-  process.stderr.write('\n');
-  progressLineActive = false;
-}
-
-function renderWarmupEvent(event: ReferenceWarmupEvent) {
-  if (
-    event.phase === 'downloading' &&
-    event.completedBytes !== undefined &&
-    !process.stderr.isTTY
-  ) {
-    return;
-  }
-
-  if (
-    event.phase === 'downloading' &&
-    event.completedBytes !== undefined &&
-    process.stderr.isTTY
-  ) {
-    const totalBytes = event.totalBytes ?? event.completedBytes;
-    const ratio =
-      totalBytes > 0 ? Math.min(event.completedBytes / totalBytes, 1) : 0;
-    const width = 24;
-    const filled = Math.round(ratio * width);
-    const bar = `${'#'.repeat(filled)}${'-'.repeat(width - filled)}`;
-    const percent = Math.round(ratio * 100);
-    const label = event.asset ?? 'asset';
-    process.stderr.write(
-      `\r[${bar}] ${String(percent).padStart(3, ' ')}% ${label} ${formatBytes(
-        event.completedBytes,
-      )}/${formatBytes(totalBytes)}`,
-    );
-    progressLineActive = true;
-    return;
-  }
-
-  clearProgressLine();
-  process.stderr.write(`${event.message}\n`);
 }
 
 async function ensureSearchService() {
@@ -275,36 +215,27 @@ function createServer() {
 }
 
 async function runStatusCommand() {
-  writeEnvelope<ReferenceCacheStatus>({
-    ok: true,
-    data: await getReferenceCacheStatus(),
-  });
+  writeEnvelope<ReferenceStatus>({ ok: true, data: getReferenceStatus() });
 }
 
+/**
+ * The corpus ships with the package, so warmup only confirms it loads. The
+ * command stays for scaffolds and scripts that still call it.
+ */
 async function runWarmupCommand() {
-  try {
-    const status = await warmupReferenceAssets({
-      onEvent: renderWarmupEvent,
-    });
-    clearProgressLine();
-    writeEnvelope<ReferenceCacheStatus>({
-      ok: true,
-      data: status,
-    });
-  } catch (error) {
-    clearProgressLine();
-    writeEnvelope<never>({
-      ok: false,
-      error: {
-        code:
-          error instanceof Error && 'code' in error
-            ? String(error.code)
-            : 'warmup_failed',
-        message: error instanceof Error ? error.message : String(error),
-      },
-    });
-    process.exitCode = 1;
+  const status = getReferenceStatus();
+  if (status.initState === 'ready') {
+    writeEnvelope<ReferenceStatus>({ ok: true, data: status });
+    return;
   }
+  writeEnvelope<never>({
+    ok: false,
+    error: {
+      code: 'corpus_unavailable',
+      message: status.error?.message ?? 'The reference corpus did not load.',
+    },
+  });
+  process.exitCode = 1;
 }
 
 async function runInspectCommand(options: CliOptions) {
@@ -442,7 +373,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  clearProgressLine();
   console.error('Fatal error:', error);
   process.exit(1);
 });

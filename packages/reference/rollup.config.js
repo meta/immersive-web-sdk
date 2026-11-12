@@ -25,14 +25,10 @@ const external = [
   'path',
   'process',
   'stream',
-  'tar',
   'tls',
   'url',
   'util',
   'zlib',
-  // Keep @huggingface/transformers external — it has Node.js-specific file
-  // loading code paths that break when bundled by Rollup.
-  '@huggingface/transformers',
 ];
 
 const plugins = [

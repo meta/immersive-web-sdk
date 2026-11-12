@@ -1,7 +1,7 @@
 {
   "name": "@iwsdk/reference",
   "version": "1.1.0-rc.1",
-  "description": "Workspace-local reference CLI/MCP server for semantic IWSDK search using externally hosted corpus/model warmup artifacts",
+  "description": "Reference CLI/MCP server for searching IWSDK source, examples, guides and dependency types, with the corpus bundled in the package",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -26,11 +26,12 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json --emitDeclarationOnly && rollup -c",
+    "build": "tsc -p tsconfig.json --emitDeclarationOnly && rollup -c && node scripts/copy-corpus.mjs",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
     "test": "vitest run",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "prepack": "node scripts/copy-corpus.mjs --require"
   },
   "files": [
     "dist"
@@ -41,8 +42,6 @@
     "iwsdk",
     "immersive-web-sdk",
     "webxr",
-    "rag",
-    "semantic-search",
     "code-search"
   ],
   "author": "Felix Zhang <fe1ix@meta.com>",
@@ -57,9 +56,7 @@
   },
   "homepage": "https://github.com/facebook/immersive-web-sdk/tree/main/packages/reference#readme",
   "dependencies": {
-    "@huggingface/transformers": "^3.1.2",
-    "@modelcontextprotocol/sdk": "^1.30.0",
-    "tar": "^7.5.22"
+    "@modelcontextprotocol/sdk": "^1.30.0"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.6",

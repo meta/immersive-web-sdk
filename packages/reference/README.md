@@ -1,24 +1,23 @@
 # `@iwsdk/reference`
 
-Local semantic search and API reference tooling for Immersive Web SDK projects.
+Local code search and API reference tooling for Immersive Web SDK projects.
 The package supplies the `iwsdk-reference` MCP server and is normally invoked
 through `@iwsdk/cli` rather than called directly.
 
 ## Setup
 
 Create-generated projects install this package as a development dependency.
-Warm the pinned corpus and embedding model once before using reference queries:
+The search corpus (SDK source, examples, guides and dependency types) ships
+inside the package as `dist/corpus.json.gz`, so queries work offline right after
+install. There is no model, download or cache to warm up:
 
 ```bash
-npx @iwsdk/cli reference warmup
 npx @iwsdk/cli reference status
 ```
 
-The package intentionally does not embed the large reference corpus or model.
-Warmup stores project state under `.iwsdk/reference` and reuses the shared model
-and corpus caches. Internal or offline deployments can host the corpus payload
-themselves and set `IWSDK_REFERENCE_ASSETS_BASE_URL`; the pinned model URLs must
-also be reachable or already present in the shared cache.
+`npx @iwsdk/cli reference warmup` remains for compatibility; it only checks that
+the bundled corpus loads. Set `IWSDK_REFERENCE_CORPUS` to use another corpus
+file.
 
 ## Queries
 
@@ -33,55 +32,15 @@ npx @iwsdk/cli reference systems
 Run `npx @iwsdk/cli reference --help` for the complete command surface. When this
 package is installed, `@iwsdk/cli` also registers its MCP adapter automatically.
 
-## Sharp security override
+## Building from the monorepo
 
-The currently supported `@huggingface/transformers` release still declares
-Sharp `^0.34.x`, while the patched Sharp line begins at 0.35. Create-generated
-projects pin the compatible patched release for both npm and pnpm. For npm, use
-the root package manifest:
+The private `@iwsdk/reference-assets` package produces the corpus. Build it
+before building or packing this package; `prepack` fails without it:
 
-```json
-{
-  "overrides": {
-    "sharp": "0.35.4",
-    "three": "npm:super-three@0.185.0"
-  }
-}
+```bash
+pnpm --filter @iwsdk/reference-assets run build
+pnpm --filter @iwsdk/reference run build
 ```
-
-Create-generated pnpm projects keep resolution and lifecycle policy in
-`pnpm-workspace.yaml` instead of a `pnpm` field in `package.json`:
-
-```yaml
-packages:
-  - '.'
-overrides:
-  sharp: 0.35.4
-  three: npm:super-three@0.185.0
-onlyBuiltDependencies:
-  - esbuild
-  - protobufjs
-  - sharp
-ignoredBuiltDependencies:
-  - '@meta-quest/metavr'
-  - onnxruntime-node
-allowBuilds:
-  esbuild: true
-  protobufjs: true
-  sharp: true
-  '@meta-quest/metavr': false
-  onnxruntime-node: false
-```
-
-Add the matching root override for your package manager when installing
-`@iwsdk/reference` manually. Generated pnpm projects include both lifecycle-policy
-forms: the explicit allow and ignore lists support pnpm 10.18, while the unified
-`allowBuilds` map supports package managers that prefer the newer form. This lets
-both versions allow the required native helpers while intentionally
-disabling the optional MetaVR and onnxruntime-node install scripts. Bundle-based
-projects also receive local tarball entries in `overrides`. IWSDK uses Transformers
-for text feature extraction; its test and release matrices exercise that path with
-Sharp 0.35.4.
 
 ## License
 

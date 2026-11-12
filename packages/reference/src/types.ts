@@ -31,7 +31,6 @@ export interface Chunk {
   id: string;
   content: string;
   metadata: ChunkMetadata;
-  embedding: number[];
 }
 
 // Raw chunk format from embeddings.json (flattened structure)
@@ -59,38 +58,16 @@ export interface RawChunk {
   three_js_usage?: string[];
   semantic_labels?: string[];
   source: string;
-  embedding: number[];
 }
 
-export type ReferenceEmbeddingModelDType =
-  | 'auto'
-  | 'fp32'
-  | 'fp16'
-  | 'q8'
-  | 'int8'
-  | 'uint8'
-  | 'q4'
-  | 'bnb4'
-  | 'q4f16';
-
-export interface ReferenceEmbeddingModelMetadata {
-  source: 'archive';
-  format: 'transformers-js';
-  archiveSha256: string;
-  archiveSize: number;
-  fileHashes?: Record<string, string>;
-  dtype: ReferenceEmbeddingModelDType;
-  pooling: string;
-  normalize: boolean;
-}
-
-// Embeddings.json format
-export interface EmbeddingsData {
-  version: string;
-  model: ReferenceEmbeddingModelMetadata;
-  dimensions: number;
-  iwsdk: RawChunk[];
-  deps: RawChunk[];
+/** `dist/corpus.json.gz`: every chunk plus the source files they come from. */
+export interface ReferenceCorpus {
+  schemaVersion: number;
+  referenceVersion: string;
+  generatedAt: string;
+  chunks: RawChunk[];
+  /** File text keyed by `iwsdk/<repo path>` or `deps/<package path>`. */
+  files: Record<string, string>;
 }
 
 export interface SearchResult {
@@ -102,45 +79,4 @@ export interface RelationshipQuery {
   type: 'extends' | 'implements' | 'imports' | 'calls' | 'uses_webxr_api';
   target: string;
   limit?: number;
-}
-
-export function isReferenceEmbeddingModelMetadata(
-  value: unknown,
-): value is ReferenceEmbeddingModelMetadata {
-  if (
-    typeof value !== 'object' ||
-    value === null ||
-    !('source' in value) ||
-    value.source !== 'archive' ||
-    !('format' in value) ||
-    value.format !== 'transformers-js' ||
-    !('archiveSha256' in value) ||
-    typeof value.archiveSha256 !== 'string' ||
-    value.archiveSha256.length === 0 ||
-    !('archiveSize' in value) ||
-    typeof value.archiveSize !== 'number' ||
-    !Number.isFinite(value.archiveSize) ||
-    value.archiveSize <= 0 ||
-    !('dtype' in value) ||
-    typeof value.dtype !== 'string' ||
-    value.dtype.length === 0 ||
-    !('pooling' in value) ||
-    typeof value.pooling !== 'string' ||
-    value.pooling.length === 0 ||
-    !('normalize' in value) ||
-    typeof value.normalize !== 'boolean'
-  ) {
-    return false;
-  }
-
-  if ('fileHashes' in value && value.fileHashes != null) {
-    if (
-      typeof value.fileHashes !== 'object' ||
-      Array.isArray(value.fileHashes)
-    ) {
-      return false;
-    }
-  }
-
-  return true;
 }

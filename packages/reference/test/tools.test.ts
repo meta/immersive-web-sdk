@@ -17,7 +17,6 @@ function makeChunk(
   return {
     id: name,
     content,
-    embedding: [],
     metadata: {
       source: 'iwsdk',
       file_path: `examples/${name}.ts`,

@@ -9,27 +9,10 @@
  * File service for reading source files
  */
 
-import { existsSync, readFileSync } from 'fs';
 import path from 'path';
-import { resolveReferenceAssets } from './assets.js';
+import { loadReferenceCorpus } from './corpus.js';
 
 export class FileService {
-  private sourcesDirPromise: Promise<string> | null = null;
-
-  private async getSourcesDir(): Promise<string> {
-    if (!this.sourcesDirPromise) {
-      this.sourcesDirPromise = resolveReferenceAssets().then(({ dataDir }) =>
-        path.join(dataDir, 'sources'),
-      );
-    }
-    try {
-      return await this.sourcesDirPromise;
-    } catch (error) {
-      this.sourcesDirPromise = null;
-      throw error;
-    }
-  }
-
   /**
    * Find a file by searching across all source directories
    */
@@ -74,25 +57,21 @@ export class FileService {
     relativePath: string,
     source: string,
   ): Promise<string | null> {
-    const sourcesDir = await this.getSourcesDir();
-    const searchPaths: string[] = [];
+    const { files } = loadReferenceCorpus();
+    const keys: string[] = [];
 
     if (source === 'iwsdk') {
-      searchPaths.push(path.join(sourcesDir, 'iwsdk', relativePath));
+      keys.push(path.posix.join('iwsdk', relativePath.replace(/\\/g, '/')));
     } else if (source === 'deps') {
-      const depsDir = path.join(sourcesDir, 'deps');
       for (const candidate of this.normalizeDependencyPath(relativePath)) {
-        searchPaths.push(path.join(depsDir, candidate));
+        keys.push(path.posix.join('deps', candidate));
       }
     }
 
-    for (const candidatePath of searchPaths) {
-      if (existsSync(candidatePath)) {
-        return candidatePath;
-      }
-    }
-
-    return null;
+    return (
+      keys.find((key) => Object.prototype.hasOwnProperty.call(files, key)) ??
+      null
+    );
   }
 
   /**
@@ -106,26 +85,20 @@ export class FileService {
       endLine?: number;
     },
   ): Promise<string | null> {
-    const filePath = await this.findFile(relativePath, source);
-    if (!filePath) {
+    const key = await this.findFile(relativePath, source);
+    if (!key) {
       return null;
     }
 
-    try {
-      const content = readFileSync(filePath, 'utf-8');
-
-      if (options?.startLine !== undefined || options?.endLine !== undefined) {
-        const lines = content.split('\n');
-        const start = (options.startLine ?? 1) - 1; // Convert to 0-indexed
-        const end = options.endLine ?? lines.length;
-        return lines.slice(start, end).join('\n');
-      }
-
-      return content;
-    } catch (error) {
-      console.error(`Error reading file ${filePath}:`, error);
-      return null;
+    const content = loadReferenceCorpus().files[key];
+    if (options?.startLine !== undefined || options?.endLine !== undefined) {
+      const lines = content.split('\n');
+      const start = (options.startLine ?? 1) - 1; // Convert to 0-indexed
+      const end = options.endLine ?? lines.length;
+      return lines.slice(start, end).join('\n');
     }
+
+    return content;
   }
 
   /**

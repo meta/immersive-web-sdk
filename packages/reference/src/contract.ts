@@ -133,7 +133,7 @@ export const REFERENCE_OPERATIONS: ReferenceOperationDefinition[] = [
     handlerId: 'getApiReference',
     mcpName: 'get_api_reference',
     description:
-      'Quick lookup of API by name. Use this when you know the class/function/interface name and want to see its implementation and documentation.',
+      'Quick lookup of API by name. Use this when you know the class/function/interface name and want to see its implementation and documentation. Exact matches come first, then members (Class.member), then prefix and substring matches.',
     requiresSearchService: true,
     inputSchema: {
       type: 'object',
@@ -153,6 +153,11 @@ export const REFERENCE_OPERATIONS: ReferenceOperationDefinition[] = [
           items: { type: 'string' },
           description:
             'Filter by source: ["iwsdk", "deps"]. Omit to search all sources.',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of matches to return (default: 8)',
+          default: 8,
         },
       },
       required: ['name'],

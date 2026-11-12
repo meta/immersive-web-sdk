@@ -6,22 +6,17 @@
  */
 
 /**
- * Vector search service for IWSDK code chunks
+ * Search service for IWSDK code chunks
  */
 
-import { readFileSync } from 'fs';
-import path from 'path';
-import { resolveReferenceAssets } from './assets.js';
-import { EmbeddingService, cosineSimilarity } from './embeddings.js';
+import { loadReferenceCorpus } from './corpus.js';
+import { LexicalIndex, rankByName } from './lexical.js';
 import type {
   Chunk,
-  EmbeddingsData,
   RawChunk,
-  ReferenceEmbeddingModelMetadata,
   SearchResult,
   RelationshipQuery,
 } from './types.js';
-import { isReferenceEmbeddingModelMetadata } from './types.js';
 
 /**
  * Helper to safely convert a field to an array
@@ -41,74 +36,32 @@ function toArray(value: any): string[] {
 
 export class SearchService {
   private chunks: Chunk[] = [];
-  private embeddingService: EmbeddingService;
+  private index: LexicalIndex | null = null;
   private initialized = false;
-
-  constructor() {
-    this.embeddingService = new EmbeddingService();
-  }
 
   async initialize(): Promise<void> {
     if (this.initialized) {
       return;
     }
 
-    console.error('Initializing search service...');
-
-    const { dataDir, modelDir } = await resolveReferenceAssets();
-    const embeddingsPath = path.join(dataDir, 'embeddings.json');
-    let model: ReferenceEmbeddingModelMetadata | null = null;
-
-    try {
-      console.error(`Loading embeddings from ${embeddingsPath}...`);
-      const data = JSON.parse(
-        readFileSync(embeddingsPath, 'utf-8'),
-      ) as EmbeddingsData;
-      if (!isReferenceEmbeddingModelMetadata(data.model)) {
-        throw new Error('Embeddings file is missing pinned model metadata.');
-      }
-      model = data.model;
-
-      // Transform raw chunks into Chunk objects
-      this.chunks = [
-        ...data.iwsdk.map((raw, idx) =>
-          this.rawChunkToChunk(raw, `iwsdk_${idx}`),
-        ),
-        ...data.deps.map((raw, idx) =>
-          this.rawChunkToChunk(raw, `deps_${idx}`),
-        ),
-      ];
-
-      console.error(
-        `Loaded ${this.chunks.length} chunks using pinned model sha256 ${data.model.archiveSha256}`,
-      );
-      console.error(`  - iwsdk: ${data.iwsdk.length} chunks`);
-      console.error(`  - deps: ${data.deps.length} chunks`);
-      console.error(`  - embedding dimensions: ${data.dimensions}`);
-    } catch (error) {
-      throw new Error(
-        `Failed to load embeddings from ${embeddingsPath}: ${error instanceof Error ? error.message : String(error)}. Rebuild @iwsdk/reference-assets if needed and rerun "iwsdk reference warmup".`,
-      );
-    }
-
-    // Initialize embedding service
-    await this.embeddingService.initialize({
-      model: model ?? undefined,
-      modelDir,
+    const corpus = loadReferenceCorpus();
+    const counters = new Map<string, number>();
+    this.chunks = corpus.chunks.map((raw) => {
+      const next = counters.get(raw.source) ?? 0;
+      counters.set(raw.source, next + 1);
+      return this.rawChunkToChunk(raw, `${raw.source}_${next}`);
     });
-
+    this.index = new LexicalIndex(this.chunks);
     this.initialized = true;
-    console.error('Search service initialized successfully');
   }
 
   /**
-   * Transform a RawChunk from embeddings.json into a Chunk object
+   * Transform a RawChunk from the corpus into a Chunk object
    */
   private rawChunkToChunk(raw: RawChunk, id: string): Chunk {
     return {
       id,
       content: raw.content,
-      embedding: raw.embedding,
       metadata: {
         source: raw.source,
         file_path: raw.file_path,
@@ -130,7 +83,8 @@ export class SearchService {
   }
 
   /**
-   * Semantic search across all code chunks
+   * Ranked lexical search across all code chunks. Scores are relative to the
+   * best hit (1.0).
    */
   async search(
     query: string,
@@ -140,37 +94,19 @@ export class SearchService {
       min_score?: number;
     } = {},
   ): Promise<SearchResult[]> {
-    if (!this.initialized) {
+    if (!this.initialized || !this.index) {
       throw new Error(
         'Search service not initialized. Call initialize() first.',
       );
     }
 
-    const limit = options.limit ?? 10;
     const minScore = options.min_score ?? 0.0;
-
-    // Generate query embedding
-    const queryEmbedding = await this.embeddingService.embed(query);
-
-    // Filter chunks by source if specified
-    let searchableChunks = this.chunks;
-    if (options.source_filter && options.source_filter.length > 0) {
-      searchableChunks = this.chunks.filter((chunk) =>
-        options.source_filter!.includes(chunk.metadata.source),
-      );
-    }
-
-    // Calculate similarity scores
-    const results: SearchResult[] = searchableChunks.map((chunk) => ({
-      chunk,
-      score: cosineSimilarity(queryEmbedding, chunk.embedding),
-    }));
-
-    // Filter by minimum score and sort by score descending
-    return results
-      .filter((result) => result.score >= minScore)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit);
+    return this.index
+      .search(query, {
+        limit: options.limit ?? 10,
+        sourceFilter: options.source_filter,
+      })
+      .filter((result) => result.score >= minScore);
   }
 
   /**
@@ -233,7 +169,8 @@ export class SearchService {
   }
 
   /**
-   * Get a specific chunk by name (for API reference lookups)
+   * Get chunks by name for API reference lookups, best match first: exact
+   * name, then members, then prefix, then substring matches.
    */
   getByName(
     name: string,
@@ -248,9 +185,13 @@ export class SearchService {
       );
     }
 
-    let results = this.chunks.filter((chunk) =>
-      chunk.metadata.name.toLowerCase().includes(name.toLowerCase()),
+    // Guide sections are found by search; API lookups return declarations.
+    let results = this.chunks.filter(
+      (chunk) =>
+        chunk.metadata.chunk_type !== 'doc' &&
+        chunk.metadata.name.toLowerCase().includes(name.toLowerCase()),
     );
+    results = rankByName(results, name);
 
     if (options.chunk_type) {
       results = results.filter(

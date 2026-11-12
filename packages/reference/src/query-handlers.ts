@@ -28,6 +28,7 @@ export interface ApiReferenceQueryArgs {
   name: string;
   type?: 'class' | 'function' | 'interface' | 'type';
   source?: string[];
+  limit?: number;
 }
 
 export interface FileContentQueryArgs {
@@ -99,6 +100,7 @@ export interface ApiReferenceQueryResult {
   operation: 'api';
   name: string;
   type?: 'class' | 'function' | 'interface' | 'type';
+  totalMatches: number;
   totalResults: number;
   results: ReferenceChunkResult[];
 }
@@ -223,6 +225,58 @@ function deduplicateByLineRange<T>(
   return deduplicated;
 }
 
+// Guide sections help with "how do I" questions, but they are long; a few
+// per search keep room for the declarations agents usually want.
+const MAX_DOC_RESULTS = 1;
+const MAX_DOC_LINES = 30;
+// Search results show the head of long declarations; get_api_reference and a
+// ranged get_file_content return more.
+const MAX_CODE_LINES = 40;
+// The top search results are shown longer so they rarely need a follow-up read.
+const MAX_TOP_LINES = 60;
+// A whole-file read is capped; explicit line ranges return in full.
+const MAX_FILE_LINES = 200;
+// API lookups return declarations in full up to this size; larger classes
+// point at member lookups (`Class.member`) and get_file_content instead.
+const MAX_API_LINES = 120;
+// Search shows the best few results at MAX_TOP_LINES and the rest as short
+// cards.
+const FULL_RESULTS = 3;
+const CARD_LINES = 12;
+
+/**
+ * Drop repeats of the same declaration (examples copy helpers such as
+ * configureWelcomePanel) and keep at most MAX_DOC_RESULTS guide sections.
+ */
+function diversifyResults<T>(items: T[], getChunk: (item: T) => Chunk): T[] {
+  const seen = new Set<string>();
+  const kept: T[] = [];
+  let docs = 0;
+  for (const item of items) {
+    const chunk = getChunk(item);
+    const isDoc = chunk.metadata.chunk_type === 'doc';
+    if (isDoc && docs >= MAX_DOC_RESULTS) {
+      continue;
+    }
+    const body = chunk.content.replace(/\s+/g, ' ').trim();
+    // Examples copy helpers with small edits, so match those by name alone.
+    const key = isDoc
+      ? body
+      : chunk.metadata.file_path.startsWith('examples/')
+        ? `example:${chunk.metadata.chunk_type}:${chunk.metadata.name}`
+        : `${chunk.metadata.chunk_type}:${chunk.metadata.name}:${body}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    if (isDoc) {
+      docs++;
+    }
+    kept.push(item);
+  }
+  return kept;
+}
+
 function getIwsdkPathPriority(filePath: string): number {
   const normalized = filePath.replace(/\\/g, '/');
   if (normalized.startsWith('packages/core/')) {
@@ -337,9 +391,62 @@ function getSourceHints(results: Chunk[], query: string): string[] {
   return hints;
 }
 
-function summarizeContent(content: string, verbosity = 3): string {
+const API_HEAD_LINES = 30;
+
+/**
+ * A large class or interface as its doc comment and declaration head plus one
+ * signature line per member (members are indexed as `Class.member`).
+ */
+function summarizeApiContent(chunk: Chunk, allChunks: Chunk[]): string {
+  const lines = chunk.content.split('\n');
+  if (lines.length <= MAX_API_LINES) {
+    return chunk.content;
+  }
+  const end = chunk.metadata.start_line + lines.length - 1;
+  const members = allChunks
+    .filter(
+      (candidate) =>
+        candidate.metadata.class_context === chunk.metadata.name &&
+        candidate.metadata.file_path === chunk.metadata.file_path &&
+        candidate !== chunk,
+    )
+    .map((member) => {
+      const signature = member.content
+        .split('\n')
+        .map((line) => line.trim())
+        .find((line) => line.length > 0 && !/^(\/\*\*?|\*|\/\/|@)/.test(line));
+      return `  ${signature ?? member.metadata.name}`;
+    });
+  const head = lines.slice(0, API_HEAD_LINES).join('\n');
+  const memberBlock = members.length
+    ? `\n\n// Members (${members.length}):\n${[...new Set(members)].join('\n')}`
+    : '';
+  return `${head}\n  // ...${memberBlock}\n\n// [${lines.length} lines in total: get_api_reference "${chunk.metadata.name}.<member>" for one member, or get_file_content ${chunk.metadata.file_path} lines ${chunk.metadata.start_line}-${end}]`;
+}
+
+function summarizeContent(
+  content: string,
+  verbosity = 3,
+  chunk?: Chunk,
+  maxLinesOverride?: number,
+): string {
   if (verbosity >= 3) {
-    return content;
+    if (!chunk) {
+      return content;
+    }
+    const isDoc = chunk.metadata.chunk_type === 'doc';
+    const maxLines =
+      maxLinesOverride ?? (isDoc ? MAX_DOC_LINES : MAX_CODE_LINES);
+    const lines = content.split('\n');
+    if (lines.length <= maxLines) {
+      return content;
+    }
+    const end = chunk.metadata.start_line + lines.length - 1;
+    const more = isDoc
+      ? `get_file_content ${chunk.metadata.file_path} lines ${chunk.metadata.start_line + maxLines}-${end}`
+      : `get_api_reference "${chunk.metadata.name}" or get_file_content ${chunk.metadata.file_path} lines ${chunk.metadata.start_line}-${end}`;
+    const comment = isDoc ? '' : '// ';
+    return `${lines.slice(0, maxLines).join('\n')}\n\n${comment}[... ${lines.length - maxLines} more lines: ${more}]`;
   }
 
   const lines = content.split('\n');
@@ -364,6 +471,12 @@ function toChunkResult(
   options: {
     score?: number;
     verbosity?: number;
+    /** Cap long content (search and example results). */
+    truncate?: boolean;
+    /** Line cap override for lower-ranked search results. */
+    maxLines?: number;
+    /** Summarize very large declarations against these chunks (API lookups). */
+    apiChunks?: Chunk[];
   } = {},
 ): ReferenceChunkResult {
   return {
@@ -379,7 +492,14 @@ function toChunkResult(
     webxrApis: toArray(chunk.metadata.webxr_api_usage),
     ecsComponent: chunk.metadata.ecs_component === true,
     ecsSystem: chunk.metadata.ecs_system === true,
-    content: summarizeContent(chunk.content, options.verbosity),
+    content: options.apiChunks
+      ? summarizeApiContent(chunk, options.apiChunks)
+      : summarizeContent(
+          chunk.content,
+          options.verbosity,
+          options.truncate ? chunk : undefined,
+          options.maxLines,
+        ),
     ...(options.score !== undefined ? { score: options.score } : {}),
   };
 }
@@ -410,15 +530,15 @@ export async function searchCodeQuery(
     throw new Error('verbosity must be between 0 and 3');
   }
 
-  const requestLimit = Math.min(limit * 2, 100);
+  const requestLimit = Math.min(limit * 4, 200);
   const results = await searchService.search(query, {
     limit: requestLimit,
     source_filter: args.source,
     min_score: minScore,
   });
 
-  const deduplicated = deduplicateByLineRange(
-    results,
+  const deduplicated = diversifyResults(
+    deduplicateByLineRange(results, (result) => result.chunk),
     (result) => result.chunk,
   );
   const finalResults = deduplicated.slice(0, limit);
@@ -427,10 +547,12 @@ export async function searchCodeQuery(
     operation: 'search',
     query,
     totalResults: finalResults.length,
-    results: finalResults.map((result) =>
+    results: finalResults.map((result, rank) =>
       toChunkResult(result.chunk, {
         score: result.score,
         verbosity,
+        truncate: true,
+        maxLines: rank < FULL_RESULTS ? MAX_TOP_LINES : CARD_LINES,
       }),
     ),
     hints: getSourceHints(
@@ -470,20 +592,25 @@ export async function getApiReferenceQuery(
   args: ApiReferenceQueryArgs,
 ): Promise<ApiReferenceQueryResult> {
   const name = assertNonEmptyString(args.name, 'Name');
-  const results = deduplicateByLineRange(
+  const limit = assertPositiveLimit(args.limit, 'Limit', 1, 50) ?? 8;
+  const matches = deduplicateByLineRange(
     searchService.getByName(name, {
       chunk_type: args.type,
       source_filter: args.source,
     }),
     (chunk) => chunk,
   );
+  const results = matches.slice(0, limit);
 
   return {
     operation: 'api',
     name,
     type: args.type,
+    totalMatches: matches.length,
     totalResults: results.length,
-    results: results.map((chunk) => toChunkResult(chunk)),
+    results: results.map((chunk) =>
+      toChunkResult(chunk, { apiChunks: searchService.getAllChunks() }),
+    ),
   };
 }
 
@@ -504,13 +631,21 @@ export async function getFileContentQuery(
     throw new Error(`File not found: ${filePath} (source: ${args.source})`);
   }
 
+  const lines = content.split('\n');
+  const wholeFile =
+    args.start_line === undefined && args.end_line === undefined;
+  const capped =
+    wholeFile && lines.length > MAX_FILE_LINES
+      ? `${lines.slice(0, MAX_FILE_LINES).join('\n')}\n\n[... ${lines.length - MAX_FILE_LINES} more lines (${lines.length} in total): pass start_line/end_line, or get_api_reference for one declaration]`
+      : content;
+
   return {
     operation: 'file',
     filePath,
     source: args.source,
     startLine: args.start_line,
     endLine: args.end_line,
-    content,
+    content: capped,
   };
 }
 
@@ -676,7 +811,9 @@ export async function findDependentsQuery(
     (entry) => entry.chunk,
   )
     .slice(0, limit)
-    .map((entry) => toChunkResult(entry.chunk, { score: entry.score }));
+    .map((entry) =>
+      toChunkResult(entry.chunk, { score: entry.score, truncate: true }),
+    );
 
   return {
     operation: 'dependents',
@@ -754,7 +891,9 @@ export async function findUsageExamplesQuery(
 
   const finalResults = deduplicateByLineRange(examples, (entry) => entry.chunk)
     .slice(0, limit)
-    .map((entry) => toChunkResult(entry.chunk, { score: entry.score / 10 }));
+    .map((entry) =>
+      toChunkResult(entry.chunk, { score: entry.score / 10, truncate: true }),
+    );
 
   return {
     operation: 'examples',

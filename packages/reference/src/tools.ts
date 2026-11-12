@@ -78,10 +78,23 @@ function formatChunk(result: ReferenceChunkResult): string {
   }
 
   lines.push('');
-  lines.push('```typescript');
-  lines.push(result.content);
-  lines.push('```');
+  lines.push(
+    ...fenced(
+      result.content,
+      result.chunkType === 'doc' ? 'markdown' : 'typescript',
+    ),
+  );
   return lines.join('\n');
+}
+
+/** Fence text with more backticks than any run inside it, so nested fences in guide sections cannot close the block early. */
+function fenced(content: string, language: string): string[] {
+  const longest = Math.max(
+    0,
+    ...(content.match(/`+/g) ?? []).map((run) => run.length),
+  );
+  const fence = '`'.repeat(Math.max(3, longest + 1));
+  return [`${fence}${language}`, content, fence];
 }
 
 function formatSymbol(result: ReferenceSymbolResult): string {
@@ -165,7 +178,9 @@ function renderApiReferenceResult(result: ApiReferenceQueryResult): ToolResult {
   const output: string[] = [
     `# API Reference: "${result.name}"`,
     '',
-    `Found ${result.totalResults} matching definitions:`,
+    result.totalMatches > result.totalResults
+      ? `Showing the best ${result.totalResults} of ${result.totalMatches} matching definitions (raise \`limit\` for more):`
+      : `Found ${result.totalResults} matching definitions:`,
     '',
   ];
 
@@ -188,7 +203,13 @@ function renderFileContentResult(result: FileContentQueryResult): ToolResult {
     );
   }
 
-  output.push('', '```typescript', result.content, '```');
+  output.push(
+    '',
+    ...fenced(
+      result.content,
+      result.filePath.endsWith('.md') ? 'markdown' : 'typescript',
+    ),
+  );
   return wrapText(output.join('\n'));
 }
 
@@ -324,6 +345,7 @@ export async function getApiReference(
     name: string;
     type?: 'class' | 'function' | 'interface' | 'type';
     source?: string[];
+    limit?: number;
   },
 ): Promise<ToolResult> {
   try {
