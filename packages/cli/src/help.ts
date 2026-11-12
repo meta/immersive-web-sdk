@@ -364,6 +364,27 @@ export function buildAgentsCommandHelp(): string[] {
   ];
 }
 
+export function buildUpgradeCommandHelp(): string[] {
+  return [
+    'Usage: npx @iwsdk/cli@latest upgrade [--to <version>] [--dry-run] [--no-install] [--workspace <path>]',
+    '',
+    'Upgrades every @iwsdk/* dependency in the release group to this CLI release',
+    "(or --to), keeping ^ and ~ ranges, and installs with the project's package",
+    'manager (found from the nearest lockfile). Then it aligns the Three.js alias',
+    'with @iwsdk/core, refreshes the coding-agent guidance the project already has,',
+    'and checks iwsdk.config.json against the new release. It writes to',
+    '.iwsdk/migrations/ (gitignored) a migration guide for each release boundary',
+    'crossed and release-notes.md with every change in between. Run it with',
+    '@latest so the newest migration guides and release notes are available.',
+    '',
+    'Options:',
+    '  --to <version>      target IWSDK version (default: this CLI version)',
+    '  --dry-run           report the version change, migration guides and release-note count only',
+    '  --no-install        update package.json without installing',
+    '  --workspace <path>  project directory',
+  ];
+}
+
 export function usageLines(): string[] {
   return [
     'Usage: iwsdk <command> [subcommand] [--help]',
@@ -375,6 +396,7 @@ export function usageLines(): string[] {
     '  dev down|logs|open|status',
     '  adapter sync|status|prune|prompt',
     '  agents sync|check [--tools <list>] [--force]',
+    '  upgrade [--to <version>] [--dry-run] [--no-install]',
     '  reference status|warmup|inspect|search|relationship|api|file|components|systems|dependents|examples',
     '  mcp stdio|inspect [--tool <mcpName>]',
     '  xr <action>',

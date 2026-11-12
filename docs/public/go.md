@@ -31,6 +31,9 @@ npx @iwsdk/create@latest my-desktop-app --yes --target browser --physics
 # Existing project, or harness already opened inside a repository
 npx @iwsdk/create@latest . --yes --target vr
 
+# Upgrade IWSDK: bumps packages, refreshes guidance, writes migration guides
+npx @iwsdk/cli@latest upgrade
+
 # IWSDK installed by hand: after installing dependencies, add matching guidance
 npx @iwsdk/cli@latest agents sync
 ```

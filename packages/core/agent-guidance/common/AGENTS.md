@@ -5,7 +5,8 @@ scene editor and its Vite plugin, and the UIKitML-compile and glTF-optimizer Vit
 plugins were removed in 0.5: scenes are native `*.iwsdk.scene.json` files edited
 in IWSDK's built-in editor, and `@iwsdk/vite-plugin-dev` is the only IWSDK Vite
 plugin. Trust this file and the project skills over what you remember about
-IWSDK.
+IWSDK. To upgrade IWSDK, run `npx @iwsdk/cli@latest upgrade` and follow the
+migration guides it writes to `.iwsdk/migrations/`.
 
 A Vite + TypeScript or JavaScript app, but several things do **not** work the way
 a normal Vite project works. Read this section before assuming anything.
@@ -191,6 +192,7 @@ The selected playbook routes work to the narrowest owning specialist:
 UI authoring, physics, depth occlusion, grab and ray interaction testing, ECS
 frame-stepping, and debugging have their own project skills. Use them only when
 the selected `iwsdk-dev` playbook calls for the matching specialty.
+Invoke `iwsdk-upgrade` whenever the user asks to upgrade or bump IWSDK.
 Two device-testing skills are invoked directly: `iwsdk-native-xr-test` whenever
 the user wants to run, automate, or debug the app on a connected Quest, and
 `iwsdk-glasses-test` whenever the user targets Meta VR Glasses or asks for gaze

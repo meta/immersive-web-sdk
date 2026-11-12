@@ -6,7 +6,7 @@
  */
 
 import { createHash } from 'crypto';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, realpathSync } from 'fs';
 import {
   lstat,
   mkdir,
@@ -321,7 +321,33 @@ export function readInstalledCoreVersion(projectRoot: string): string | null {
   }
 }
 
-function resolveInstalledCorePackageJson(projectRoot: string): string | null {
+/**
+ * The installed `@iwsdk/core/package.json`, looked up fresh each time. Node's
+ * resolver caches paths per process, so after `pnpm install` re-points
+ * node_modules/@iwsdk/core it would still return the old release.
+ */
+export function resolveInstalledCorePackageJson(
+  projectRoot: string,
+): string | null {
+  let current = path.resolve(projectRoot);
+  while (true) {
+    const candidate = path.join(
+      current,
+      'node_modules',
+      '@iwsdk',
+      'core',
+      'package.json',
+    );
+    if (existsSync(candidate)) {
+      return realpathSync(candidate);
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      break;
+    }
+    current = parent;
+  }
+  // Layouts without node_modules folders (Yarn Plug'n'Play).
   try {
     return createRequire(path.join(projectRoot, 'package.json')).resolve(
       '@iwsdk/core/package.json',
@@ -349,7 +375,7 @@ export async function resolveProjectGuidance(
     if (!existsSync(path.join(root, 'manifest.json'))) {
       const version = readInstalledCoreVersion(projectRoot) ?? 'unknown';
       throw new GuidanceSourceError(
-        `The installed @iwsdk/core ${version} predates bundled agent guidance. Upgrade IWSDK (install the latest @iwsdk/core, @iwsdk/cli and @iwsdk/vite-plugin-dev) and run this command again.`,
+        `The installed @iwsdk/core ${version} predates bundled agent guidance. Upgrade IWSDK with \`npx @iwsdk/cli@latest upgrade\`.`,
         'core_without_guidance',
       );
     }

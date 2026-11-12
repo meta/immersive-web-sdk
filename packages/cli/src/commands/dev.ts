@@ -22,6 +22,8 @@ import type {
   CliSuccess,
   ResolvedCliIo,
 } from '../cli-types.js';
+import { refreshAgentGuidanceForDev } from '../guidance-refresh.js';
+import { findPackageManager } from '../package-manager.js';
 import {
   hasRuntimeBrowserCommandReadyContract,
   INTERNAL_BROWSER_PROBE_METHOD,
@@ -250,27 +252,16 @@ async function readPackageManifest(
   );
 }
 
-async function detectPackageManager(workspaceRoot: string): Promise<string> {
+export async function detectPackageManager(
+  workspaceRoot: string,
+): Promise<string> {
   const packageJson = await readPackageManifest(workspaceRoot);
 
   if (typeof packageJson.packageManager === 'string') {
     return packageJson.packageManager.split('@')[0];
   }
-
-  if (existsSync(path.join(workspaceRoot, 'pnpm-lock.yaml'))) {
-    return 'pnpm';
-  }
-  if (existsSync(path.join(workspaceRoot, 'yarn.lock'))) {
-    return 'yarn';
-  }
-  if (
-    existsSync(path.join(workspaceRoot, 'bun.lockb')) ||
-    existsSync(path.join(workspaceRoot, 'bun.lock'))
-  ) {
-    return 'bun';
-  }
-
-  return 'npm';
+  // The nearest lockfile, so an app inside a monorepo uses its tool.
+  return findPackageManager(workspaceRoot).name;
 }
 
 async function resolveDevRuntimeScript(workspaceRoot: string): Promise<string> {
@@ -872,17 +863,62 @@ export async function handleDevUp(
   options: CliOptions,
   io: ResolvedCliIo,
 ): Promise<CliSuccess<unknown> | CliFailure | number | null> {
-  const devSessionOptions = resolveDevSessionOptions(options);
   const workspaceRoot = await resolveWorkspaceRoot({
     cwd: io.cwd,
     workspace:
       typeof options.workspace === 'string' ? options.workspace : undefined,
     requireRunning: false,
   });
+  // Coding agents start the dev server right after upgrading IWSDK; this is
+  // where guidance from the previous release gets noticed and refreshed.
+  // Foreground output is plain text; otherwise the report joins the JSON.
+  const agentGuidance = await refreshAgentGuidanceForDev(workspaceRoot);
+  if (agentGuidance && isForegroundLaunch(options)) {
+    io.stdout.write(`${agentGuidance.notice}\n`);
+  }
+  let result: Awaited<ReturnType<typeof startOrAttachDevRuntime>>;
+  try {
+    result = await startOrAttachDevRuntime(options, io, workspaceRoot);
+  } catch (error) {
+    // The CLI turns this into the failure JSON; carry the report along.
+    if (agentGuidance && error instanceof Error) {
+      Object.assign(error, { agentGuidance });
+    }
+    throw error;
+  }
+  if (agentGuidance && result && typeof result === 'object') {
+    if (result.ok) {
+      return createSuccess({
+        ...(result.data as Record<string, unknown>),
+        agentGuidance,
+      });
+    }
+    // The refresh already ran; say so even though the server did not start.
+    return {
+      ...result,
+      error: {
+        ...result.error,
+        details: {
+          ...((result.error.details as Record<string, unknown>) ?? {}),
+          agentGuidance,
+        },
+      },
+    };
+  }
+  return result;
+}
+
+async function startOrAttachDevRuntime(
+  options: CliOptions,
+  io: ResolvedCliIo,
+  workspaceRoot: string,
+): Promise<CliSuccess<unknown> | CliFailure | number | null> {
+  const devSessionOptions = resolveDevSessionOptions(options);
 
   const timeoutMs = parseIntegerOption(options.timeout, '--timeout', 60000);
   const foreground = isForegroundLaunch(options);
   const openBrowser = devSessionOptions.open;
+
   const [existingSession, existingLaunch] = await Promise.all([
     getRuntimeSession(workspaceRoot),
     getLaunchMetadata(workspaceRoot),

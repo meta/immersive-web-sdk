@@ -64,6 +64,30 @@ test('allows retired-surface names only in exact packaged migration resources', 
   assert.equal(
     isIntentionalMigrationReference(
       'tarball',
+      'package/dist/migrations/iwsdk-migrate-0-5/SKILL.md',
+      'Meta Spatial Editor',
+    ),
+    true,
+  );
+  assert.equal(
+    isIntentionalMigrationReference(
+      'tarball',
+      'package/dist/release-notes.json',
+      'Replace the Meta Spatial Editor integration path',
+    ),
+    true,
+  );
+  assert.equal(
+    isIntentionalMigrationReference(
+      'docs',
+      'package/dist/release-notes.json',
+      'Meta Spatial Editor',
+    ),
+    false,
+  );
+  assert.equal(
+    isIntentionalMigrationReference(
+      'tarball',
       'package/dist/guidance/files/CLAUDE.md',
       '- Replacing GLXF or Meta Spatial Editor with native IWSDK scenes',
     ),

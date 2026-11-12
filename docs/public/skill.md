@@ -92,6 +92,13 @@ If IWSDK was installed by hand (for example `npm install @iwsdk/core`), install
 dependencies, then the coding-agent guidance with
 `npx @iwsdk/cli@latest agents sync`.
 
+To upgrade an existing IWSDK app, run `npx @iwsdk/cli@latest upgrade`. It sets
+every `@iwsdk/*` dependency to the new release, installs with the project's
+package manager, refreshes the coding-agent guidance, and writes the migration
+guide for each release boundary crossed to `.iwsdk/migrations/`. Follow those
+guides before other work. After a manual upgrade, `npx @iwsdk/cli dev up`
+refreshes guidance files nobody edited.
+
 ### Step 1: Starting Point
 
 | Target | Flag | When to use |

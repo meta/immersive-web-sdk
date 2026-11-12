@@ -28,6 +28,7 @@ const REFERENCE_SPACE_TYPES = [
   'viewer',
 ] as const;
 const OFFER_VALUES = ['none', 'once', 'always'] as const;
+const AGENT_GUIDANCE_MODES = ['auto', 'warn', 'off'] as const;
 const DEVICES = [
   'metaQuest2',
   'metaQuest3',
@@ -741,12 +742,20 @@ function validateDev(
   const dev = objectValue(
     value,
     path,
-    ['emulator', 'targetDevicePreview'],
+    ['emulator', 'targetDevicePreview', 'agentGuidance'],
     [],
     issues,
   );
   if (dev == null) {
     return;
+  }
+  if ('agentGuidance' in dev) {
+    enumValue(
+      dev.agentGuidance,
+      `${path}.agentGuidance`,
+      AGENT_GUIDANCE_MODES,
+      issues,
+    );
   }
   if ('emulator' in dev) {
     const emulator = objectValue(

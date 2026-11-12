@@ -224,6 +224,12 @@ export interface ProjectDevOptions {
   emulator?: ProjectEmulatorOptions;
   /** Development-only preview layered on the browser's native XR session. */
   targetDevicePreview?: ProjectTargetDevicePreviewOptions;
+  /**
+   * What `iwsdk dev up` does when the project's coding-agent guidance is older
+   * than the installed `@iwsdk/core`: `auto` (default) refreshes files nobody
+   * edited, `warn` only reports it, `off` skips the check.
+   */
+  agentGuidance?: 'auto' | 'warn' | 'off';
 }
 
 export interface ProjectModuleDeclaration {

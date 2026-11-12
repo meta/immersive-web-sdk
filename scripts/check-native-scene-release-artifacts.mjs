@@ -158,8 +158,14 @@ function isIntentionalMigrationReference(container, filePath, line) {
     return false;
   }
 
+  // The CLI ships the release group's changelogs, which keep the history of
+  // the 0.5 removal, as release notes for `iwsdk upgrade`.
+  if (filePath === 'package/dist/release-notes.json') {
+    return true;
+  }
+
   if (
-    /^package\/dist\/(?:guidance|agent-guidance)\/files\/\.(?:claude|agents)\/skills\/iwsdk-migrate-0-5\/SKILL\.md$/.test(
+    /^package\/dist\/(?:(?:guidance|agent-guidance)\/files\/\.(?:claude|agents)\/skills|migrations)\/iwsdk-migrate-0-5\/SKILL\.md$/.test(
       filePath,
     )
   ) {

@@ -72,6 +72,48 @@ The command prints a short notice on stderr naming the entry skill and every
 skill path, so a coding agent can read the guidance in the same session that
 installed it.
 
+`iwsdk dev up` and `dev restart` keep the guidance current after an upgrade:
+when the installed `@iwsdk/core` ships different guidance than the project has,
+they refresh the files nobody edited and print what changed. They only report,
+without writing, when `CI` is set, when `node_modules` holds a different
+`@iwsdk/core` than the lockfile resolves (for example after switching branches
+without installing), or when `iwsdk.config.json` sets
+`"dev": { "agentGuidance": "warn" }`. `"off"` (or `IWSDK_AGENT_GUIDANCE=off`)
+disables the check. They never install guidance into a project that has none.
+
+For dependency bots, run the sync after the bump with dependencies installed,
+for example with Renovate (self-hosted Renovate must also allow the commands):
+
+```json
+{
+  "postUpgradeTasks": {
+    "commands": ["npm ci", "npx @iwsdk/cli@latest agents sync"],
+    "fileFilters": ["**/*"]
+  }
+}
+```
+
+Use your package manager's install in place of `npm ci`
+(`pnpm install --frozen-lockfile`, `yarn install --immutable`).
+
+## Upgrading IWSDK
+
+```bash
+npx @iwsdk/cli@latest upgrade [--to <version>] [--dry-run] [--no-install]
+```
+
+`upgrade` sets every `@iwsdk/*` dependency in the release group to the CLI's
+release (or `--to`), keeping `^` and `~` ranges and leaving `workspace:`,
+`file:` and `catalog:` specs alone. It installs with the package manager found
+from the nearest lockfile, aligns the `three` alias (in `package.json` or
+`pnpm-workspace.yaml`) with the one `@iwsdk/core` uses, refreshes the agent
+guidance the project already has, and checks `iwsdk.config.json` against the
+new release. It writes to `.iwsdk/migrations/` (gitignored) the migration guide
+for each release boundary crossed and `release-notes.md` with every change in
+between, and names them in its output. Use `@latest`: migration guides and
+release notes ship with the CLI, so the newest CLI covers every release,
+whatever version the project starts from.
+
 - `iwsdk adapter status` reports MCP, instruction, and permission state.
 - `iwsdk adapter prune` removes managed MCP/permission entries and preserves
   editable instruction files.

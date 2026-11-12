@@ -38,8 +38,8 @@ left to finish.
 > the external 0.4 scene editor and its Vite plugin, and the UIKitML-compile and
 > glTF-optimizer Vite plugins were removed in 0.5. After installing IWSDK by any
 > route, install dependencies, run `npx @iwsdk/cli@latest agents sync`, and read the `iwsdk-agent-guidance`
-> block it adds to `AGENTS.md` and the skills it lists. Run it again after
-> upgrading IWSDK.
+> block it adds to `AGENTS.md` and the skills it lists. Upgrade with
+> `npx @iwsdk/cli@latest upgrade`, which also writes migration guides.
 
 ## Manual Installation
 

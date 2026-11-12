@@ -1,0 +1,6 @@
+---
+'@iwsdk/cli': minor
+'@iwsdk/core': minor
+---
+
+Keep coding-agent guidance current across IWSDK upgrades. `iwsdk dev up` and `dev restart` notice when the installed `@iwsdk/core` ships different guidance than the project has. They refresh the files nobody edited for the coding tools the project already uses, and print what changed, including the migration guide and release notes when the upgrade crosses releases. They only report when `CI` is set, when `node_modules` disagrees with the lockfile (a monorepo's included), or when `iwsdk.config.json` sets `dev.agentGuidance` to `"warn"`; `"off"` disables the check. New `npx @iwsdk/cli@latest upgrade` sets every `@iwsdk/*` dependency in the release group to the new release, keeping ranges and leaving `workspace:`, `file:` and `catalog:` specs alone. It installs with the package manager found from the nearest lockfile, aligns the `three` alias and `@types/three` with core's, refreshes existing guidance, and checks `iwsdk.config.json` against the new release. It writes migration guides and the release notes between the two versions to `.iwsdk/migrations/`; both now ship with the CLI. New project skill `iwsdk-upgrade` walks coding agents through an upgrade, and a new guide, Upgrading IWSDK, covers it for people.

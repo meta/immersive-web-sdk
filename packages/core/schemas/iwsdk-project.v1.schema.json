@@ -368,7 +368,11 @@
       "additionalProperties": false,
       "properties": {
         "emulator": { "$ref": "#/$defs/emulator" },
-        "targetDevicePreview": { "$ref": "#/$defs/targetDevicePreview" }
+        "targetDevicePreview": { "$ref": "#/$defs/targetDevicePreview" },
+        "agentGuidance": {
+          "description": "What iwsdk dev up does when coding-agent guidance is older than the installed @iwsdk/core: auto refreshes unedited files, warn only reports, off skips the check.",
+          "enum": ["auto", "warn", "off"]
+        }
       }
     }
   }

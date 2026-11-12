@@ -457,6 +457,25 @@ describe('iwsdk.project.v1 validation and normalization', () => {
     }
   });
 
+  it('accepts the dev agent-guidance modes and rejects others', () => {
+    for (const mode of ['auto', 'warn', 'off']) {
+      const manifest = structuredClone(vrManifest) as unknown as Record<
+        string,
+        any
+      >;
+      manifest.dev = { agentGuidance: mode };
+      expect(validateIwsdkProjectManifest(manifest).valid).toBe(true);
+    }
+    const invalid = structuredClone(vrManifest) as unknown as Record<
+      string,
+      any
+    >;
+    invalid.dev = { agentGuidance: 'always' };
+    expect(validateIwsdkProjectManifest(invalid).issues).toEqual([
+      expect.objectContaining({ path: '$.dev.agentGuidance', code: 'enum' }),
+    ]);
+  });
+
   it('rejects non-boolean, non-object physics configuration', () => {
     const invalid = structuredClone(vrManifest) as unknown as Record<
       string,

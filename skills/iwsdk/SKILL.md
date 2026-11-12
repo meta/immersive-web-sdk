@@ -28,6 +28,10 @@ Always use `@latest` and the scoped package names.
   files go in `src/iwsdk/`), merges `package.json`, and prints a "To finish"
   list. Do every step on that list. A project on Vite 8 is refused, with nothing
   changed.
+- **Upgrade IWSDK**: `npx @iwsdk/cli@latest upgrade`. It bumps every
+  `@iwsdk/*` package, installs, refreshes the guidance, and writes a migration
+  guide to `.iwsdk/migrations/` for each release that needs code changes.
+  Follow those guides first.
 - **IWSDK already in `package.json`** (installed by hand or cloned): install
   dependencies first, then run `npx @iwsdk/cli@latest agents sync`.
 

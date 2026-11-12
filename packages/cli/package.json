@@ -53,7 +53,7 @@
     "README.md"
   ],
   "scripts": {
-    "prebuild": "node scripts/gen-version.cjs && node ../core/scripts/build-agent-guidance.mjs dist/agent-guidance",
+    "prebuild": "node scripts/gen-version.cjs && node ../core/scripts/build-agent-guidance.mjs dist/agent-guidance && node scripts/copy-migrations.mjs && node scripts/build-release-notes.mjs",
     "build": "tsc -p tsconfig.json --emitDeclarationOnly && rollup -c",
     "clean": "rm -rf dist",
     "test": "npm run build && vitest run",

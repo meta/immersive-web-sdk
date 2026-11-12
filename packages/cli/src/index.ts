@@ -39,8 +39,10 @@ import {
 } from './commands/reference.js';
 import { handleRuntimeOperation } from './commands/runtime.js';
 import { handleStatus } from './commands/status.js';
+import { handleUpgrade } from './commands/upgrade.js';
 import {
   buildAgentsCommandHelp,
+  buildUpgradeCommandHelp,
   buildBrowserRunHelp,
   buildDevCommandHelp,
   buildMcpInspectHelp,
@@ -82,6 +84,11 @@ export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
 
       if (command === 'mcp' && subcommand === 'inspect') {
         stdout.write(`${buildMcpInspectHelp().join('\n')}\n`);
+        return 0;
+      }
+
+      if (command === 'upgrade') {
+        stdout.write(`${buildUpgradeCommandHelp().join('\n')}\n`);
         return 0;
       }
 
@@ -154,6 +161,9 @@ export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
         } else {
           throw new Error('Usage: iwsdk adapter sync|status|prune|prompt');
         }
+        break;
+      case 'upgrade':
+        result = await handleUpgrade(parsed.options, context);
         break;
       case 'agents':
         if (subcommand === 'sync') {
@@ -249,6 +259,15 @@ export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
             : createFailure(
                 error instanceof Error ? error.message : String(error),
               );
+    // Set by `dev up` when the guidance refresh ran before startup threw.
+    const agentGuidance = (error as { agentGuidance?: unknown } | null)
+      ?.agentGuidance;
+    if (agentGuidance) {
+      failure.error.details = {
+        ...((failure.error.details as Record<string, unknown>) ?? {}),
+        agentGuidance,
+      };
+    }
     writeJson(stderr, failure);
     return 1;
   }
