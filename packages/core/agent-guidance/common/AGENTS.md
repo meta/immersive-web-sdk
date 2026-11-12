@@ -23,6 +23,12 @@ applicable IWSDK guide or concept page.
 
 ## What is not standard Vite
 
+**No `iwsdk.config.json` in this project?** IWSDK was added by hand. Run
+`npx @iwsdk/create@latest . --yes --target vr` (`ar` for mixed reality,
+`browser` for desktop 3D) to add the project manifest, an empty scene, and a
+`virtual:iwsdk-project` entry in `src/iwsdk/` without overwriting any file; the
+rest of this file assumes them.
+
 **`iwsdk.config.json` is the project authority, not `vite.config.ts`.** It selects
 the active scene, the asset module, the component module, and all XR/world
 features. `vite.config.ts` only wires the plugin. Editing `iwsdk.config.json`
@@ -205,6 +211,10 @@ src/scene-assets/      *.scene-asset.ts|js — parentless Object3D prototypes
 public/scenes/         *.iwsdk.scene.json — composition only
 public/ui/             *.uikitml — runtime-loaded panels
 ```
+
+An app that added IWSDK to an existing project keeps these modules in
+`src/iwsdk/` instead. `iwsdk.config.json` names the modules either way; the
+`src/...` paths in this guidance mean the modules it names.
 
 No barrel `index.ts` files. Keep component declarations free of system, DOM and
 renderer imports; systems import the declarations, never the reverse.

@@ -22,7 +22,17 @@ import { createRequire } from 'module';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import semver from 'semver';
-import { SUPPORTED_AI_TOOLS, type AiTool } from './runtime-contract.js';
+// Type-only: @iwsdk/create bundles this module, and runtime-contract is large.
+import type { AiTool } from './runtime-contract.js';
+
+/** Same list as SUPPORTED_AI_TOOLS; test/agent-guidance.test.ts checks it. */
+export const GUIDANCE_TOOLS: AiTool[] = [
+  'claude',
+  'cursor',
+  'copilot',
+  'codex',
+  'opencode',
+];
 
 // Hash and stamp format. Keep in sync with
 // packages/core/scripts/agent-guidance-format.mjs, which renders the files;
@@ -1088,7 +1098,7 @@ function toolsForPath(unitPath: string): readonly AiTool[] {
   if (unitPath.startsWith('.github/')) {
     return ['copilot'];
   }
-  return SUPPORTED_AI_TOOLS;
+  return GUIDANCE_TOOLS;
 }
 
 async function pruneRetiredUnits(
@@ -1307,7 +1317,7 @@ function buildAgentNotice(
 export async function syncAgentGuidance({
   projectRoot,
   source,
-  tools = [...SUPPORTED_AI_TOOLS],
+  tools = [...GUIDANCE_TOOLS],
   force = false,
   dryRun = false,
 }: SyncAgentGuidanceOptions): Promise<SyncAgentGuidanceResult> {
@@ -1417,7 +1427,7 @@ export async function installedGuidanceTools(
   for (const unit of source.manifest.units) {
     // Settings and CLAUDE.md are written by MCP setup and by developers too.
     if (
-      unit.tools.length < SUPPORTED_AI_TOOLS.length &&
+      unit.tools.length < GUIDANCE_TOOLS.length &&
       (unit.kind === 'directory' ||
         unit.kind === 'file' ||
         (unit.kind === 'block' &&
@@ -1434,7 +1444,7 @@ export async function installedGuidanceTools(
   for (const [unitPath, hashes] of Object.entries(source.manifest.legacy)) {
     const tools = toolsForPath(unitPath);
     const filePath = path.join(projectRoot, unitPath);
-    if (tools.length === SUPPORTED_AI_TOOLS.length || !existsSync(filePath)) {
+    if (tools.length === GUIDANCE_TOOLS.length || !existsSync(filePath)) {
       continue;
     }
     const hash =
@@ -1456,5 +1466,5 @@ export async function installedGuidanceTools(
       present.add('opencode');
     }
   }
-  return SUPPORTED_AI_TOOLS.filter((tool) => present.has(tool));
+  return GUIDANCE_TOOLS.filter((tool) => present.has(tool));
 }

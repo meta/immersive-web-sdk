@@ -16,7 +16,10 @@ import type { ActionItem } from './types.js';
 const stdoutColor = new Chalk({ level: process.stdout.isTTY ? 3 : 0 });
 const stderrColor = new Chalk({ level: process.stderr.isTTY ? 3 : 0 });
 
-export async function installDependencies(outDir: string) {
+export async function installDependencies(
+  outDir: string,
+  packageManager: 'npm' | 'pnpm' | 'yarn' | 'bun' = 'npm',
+) {
   const installSpinner: Ora = ora({
     text: 'Installing dependencies ...',
     stream: process.stderr,
@@ -26,15 +29,25 @@ export async function installDependencies(outDir: string) {
   }).start();
 
   const args = ['install'];
-  const cmd = 'npm';
+  const cmd = packageManager;
   try {
     const child = spawn(cmd, args, {
       cwd: outDir,
       stdio: 'inherit',
     });
     await new Promise<void>((resolve, reject) => {
+      // A package manager that is not on PATH fails to spawn instead of exiting.
+      child.on('error', (error) =>
+        reject(
+          new Error(
+            `${cmd} could not start (${error.message}). Install ${cmd}${cmd === 'pnpm' || cmd === 'yarn' ? ' or enable it with Corepack' : ''}.`,
+          ),
+        ),
+      );
       child.on('exit', (code) =>
-        code === 0 ? resolve() : reject(new Error(`Install failed (${code})`)),
+        code === 0
+          ? resolve()
+          : reject(new Error(`${cmd} install failed (exit ${code})`)),
       );
     });
     installSpinner.stopAndPersist({

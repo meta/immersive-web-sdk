@@ -23,6 +23,24 @@ npm create @iwsdk@latest
 
 This will guide you through creating a new project with all the recommended tooling pre-configured.
 
+To add IWSDK to an existing project, run the same command in it with `.`:
+
+```bash
+npm create @iwsdk@latest . -- --yes --target vr
+```
+
+When the directory has a `package.json`, Create keeps every existing file, adds
+its skeleton in `src/iwsdk/`, merges `package.json`, adds the IWSDK Vite plugin
+when it can do so safely, installs coding-agent guidance, and lists the steps
+left to finish.
+
+> **Coding agents:** IWSDK changes faster than model training data. GLXF scenes,
+> the external 0.4 scene editor and its Vite plugin, and the UIKitML-compile and
+> glTF-optimizer Vite plugins were removed in 0.5. After installing IWSDK by any
+> route, install dependencies, run `npx @iwsdk/cli@latest agents sync`, and read the `iwsdk-agent-guidance`
+> block it adds to `AGENTS.md` and the skills it lists. Run it again after
+> upgrading IWSDK.
+
 ## Manual Installation
 
 ```bash

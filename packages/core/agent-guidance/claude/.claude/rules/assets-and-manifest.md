@@ -2,6 +2,8 @@
 paths:
   - "src/assets.ts"
   - "src/assets.js"
+  - "src/iwsdk/assets.ts"
+  - "src/iwsdk/assets.js"
   - "src/scene-assets/**"
 ---
 

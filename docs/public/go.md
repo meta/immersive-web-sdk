@@ -28,16 +28,23 @@ npx @iwsdk/create@latest my-mr-app --yes --target ar --physics --scene-understan
 # Desktop 3D app
 npx @iwsdk/create@latest my-desktop-app --yes --target browser --physics
 
-# Harness already opened inside a repository
-npx @iwsdk/create@latest . --yes --force --target vr
+# Existing project, or harness already opened inside a repository
+npx @iwsdk/create@latest . --yes --target vr
+
+# IWSDK installed by hand: after installing dependencies, add matching guidance
+npx @iwsdk/cli@latest agents sync
 ```
 
 Choose flags based on the requested experience. The Desktop 3D starter includes
 browser locomotion and canvas pointer input; camera look is app-owned so each app
-can choose first-person, orbit, editor, or follow behavior. `.` scaffolds in
-place; a non-empty target requires `--force`, which overwrites conflicting
-generated files while preserving unrelated files. `--yes` alone never permits
-overwrites.
+can choose first-person, orbit, editor, or follow behavior. `.` works in place.
+In a directory that already has a `package.json`, Create adds IWSDK to the
+existing project and never overwrites a file: it adds its skeleton in
+`src/iwsdk/`, merges `package.json`, adds `iwsdkDev()` to the Vite config when it
+can do so safely, installs with the project's package manager and adds the agent
+guidance, then prints the steps left to finish. Do every step. A non-empty directory without a `package.json` needs
+`--force`, which overwrites conflicting generated files. `--yes` alone never
+permits overwrites.
 
 ## Run
 

@@ -9,11 +9,11 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, expect, it } from 'vitest';
 import {
   loadGuidanceSource,
   syncAgentGuidance,
-} from '../../cli/src/agent-guidance.js';
+} from '@iwsdk/cli/agent-guidance';
+import { afterEach, expect, it } from 'vitest';
 import { getRecommendedConfiguration } from '../src/catalog.js';
 import { buildStarterProjectFiles } from '../src/project-files.js';
 

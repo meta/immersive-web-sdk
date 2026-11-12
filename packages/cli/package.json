@@ -14,6 +14,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./agent-guidance": {
+      "types": "./dist/agent-guidance.d.ts",
+      "import": "./dist/agent-guidance.js"
+    },
     "./contract": {
       "types": "./dist/runtime-contract.d.ts",
       "import": "./dist/contract.js"
@@ -29,6 +33,9 @@
   },
   "typesVersions": {
     "*": {
+      "agent-guidance": [
+        "dist/agent-guidance.d.ts"
+      ],
       "contract": [
         "dist/runtime-contract.d.ts"
       ],

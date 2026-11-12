@@ -15,7 +15,7 @@
     "README.md"
   ],
   "scripts": {
-    "prebuild": "node scripts/gen-version.cjs && node scripts/build-template.mjs",
+    "prebuild": "node scripts/gen-version.cjs && node scripts/ensure-cli-build.mjs && node scripts/build-template.mjs",
     "prepublishOnly": "npm run build && npm run verify:release-ready",
     "build": "rollup -c",
     "dev": "npm run --silent build && node dist/cli.js",

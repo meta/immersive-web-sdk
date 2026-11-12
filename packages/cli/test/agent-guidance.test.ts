@@ -30,12 +30,14 @@ import {
   findGuidanceProjectRoot,
   GuidanceSourceError,
   installedGuidanceTools,
+  GUIDANCE_TOOLS,
   loadGuidanceSource,
   resolveProjectGuidance,
   syncAgentGuidance,
   type GuidanceSource,
   type SyncAgentGuidanceResult,
 } from '../src/agent-guidance.js';
+import { SUPPORTED_AI_TOOLS } from '../src/runtime-contract.js';
 
 const CORE_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -180,6 +182,10 @@ describe('rendered guidance format', () => {
         expect(blockUnitHash(body), unit.path).toBe(unit.sha256);
       }
     }
+  });
+
+  test('covers every supported coding tool', () => {
+    expect([...GUIDANCE_TOOLS].sort()).toEqual([...SUPPORTED_AI_TOOLS].sort());
   });
 
   test('ships each skill to Claude Code and the portable tree with identical bytes', async () => {

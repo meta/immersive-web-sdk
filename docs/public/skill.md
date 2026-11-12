@@ -57,17 +57,40 @@ infer product intent for an agent. Do not replay or script the interactive
 questions. When the request is ambiguous in a way that changes the starter or a
 material feature, ask the user.
 
-Cloud coding harnesses often start inside an already-created repository. In
-that case, scaffold in place with `.` and pass `--force` explicitly:
+Cloud coding harnesses often start inside an already-created repository, and
+users often switch an existing project to IWSDK partway through. In both cases,
+run Create in place with `.`:
 
 ```bash
-npx @iwsdk/create@latest . --yes --force --target vr
+npx @iwsdk/create@latest . --yes --target vr
 ```
 
-Create refuses every non-empty target without `--force`. Forced scaffolding
-overwrites conflicting generated files, preserves unrelated files, and reuses
-the existing Git repository. `--yes` answers setup questions; it does not grant
-overwrite permission.
+If the directory already has a `package.json`, Create adds IWSDK to that
+project instead of scaffolding over it, and never overwrites an existing file:
+
+- It checks everything first. A project on a Vite major the IWSDK plugin does not
+  support yet (Vite 8) is refused with nothing changed.
+- It adds a minimal IWSDK skeleton in its own `src/iwsdk/` folder (world entry,
+  empty asset and component manifests), plus `iwsdk.config.json` and an empty
+  scene where none exist.
+- It merges `package.json` in its own formatting: IWSDK packages and the `three`
+  alias are set, versions are only raised, `workspace:`/`file:`/`catalog:` specs
+  are left alone, and your scripts are kept (`iwsdk:dev` is added when `dev` is
+  taken).
+- It adds `iwsdkDev()` to an existing Vite config when the config's shape is
+  recognizable, and otherwise lists it as a step.
+- It installs with the project's package manager, found from the nearest
+  lockfile (a monorepo's included), and installs the coding-agent guidance.
+
+It then prints what it kept and the steps left to finish, such as importing
+`./iwsdk` from the app's entry. Do every step. Without a `package.json`, a
+non-empty directory still needs `--force`, which overwrites conflicting
+generated files and preserves unrelated ones. `--yes` answers setup questions;
+it does not grant overwrite permission.
+
+If IWSDK was installed by hand (for example `npm install @iwsdk/core`), install
+dependencies, then the coding-agent guidance with
+`npx @iwsdk/cli@latest agents sync`.
 
 ### Step 1: Starting Point
 
@@ -99,10 +122,9 @@ agent-facing scaffolding flags.
 | Choice | Flag | Default with `--yes` |
 |--------|------|----------------------|
 | **Language** | `--language ts` / `--language js` | TypeScript |
-| **Coding-tool files** | `--ai-tools <tools>` (comma-separated) or `--ai-tools none` | None |
 | **Git** | `--git` / `--no-git` | Initialize a repository |
 | **Dependencies** | `--install` / `--no-install` | Install dependencies |
-| **Existing target** | `--force` | Required only when the target directory contains files |
+| **Existing target** | `--force` | Only for a non-empty directory without a `package.json`; an existing project is adopted without it and never overwritten |
 
 ### Step 4: Source (optional)
 
@@ -124,8 +146,8 @@ npx @iwsdk/create@latest mr-placer --yes --target ar --physics --scene-understan
 # Desktop 3D game (no headset; locomotion and pointer input are scaffolded)
 npx @iwsdk/create@latest desktop-game --yes --target browser --physics
 
-# Existing cloud-harness repository (explicitly confirm generated-file overwrite)
-npx @iwsdk/create@latest . --yes --force --target vr
+# Existing project or cloud-harness repository (adds IWSDK, overwrites nothing)
+npx @iwsdk/create@latest . --yes --target vr
 ```
 
 ---

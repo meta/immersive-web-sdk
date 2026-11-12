@@ -13,14 +13,47 @@
 ```bash
 npm create @iwsdk@latest
 
-# Cloud harness or repository that is already checked out
-npm create @iwsdk@latest . -- --yes --force --target vr
+# Add IWSDK to an existing project, or a repository that is already checked out
+npm create @iwsdk@latest . -- --yes --target vr
 ```
 
-`.` selects the current directory. If the target contains any files, Create
-requires the explicit `--force` confirmation. Forced scaffolding overwrites
-conflicting generated files but preserves unrelated files and an existing Git
-repository. `--yes` never implies overwrite permission.
+`.` selects the current directory.
+
+**Existing projects.** When the target already has a `package.json`, Create adds
+IWSDK to that project and never overwrites an existing file, even with
+`--force`:
+
+- everything is checked before the first write: an invalid `package.json`, or a
+  Vite major the IWSDK plugin does not support yet (Vite 8), stops Create with
+  nothing changed, and `--canary` is refused;
+- a minimal IWSDK skeleton goes into its own `src/iwsdk/` folder (a world entry,
+  empty asset and component manifests, and type references), so it never shadows
+  the project's modules. `iwsdk.config.json` and an empty scene are added where
+  missing, and `index.html`, a Vite config and `tsconfig.json` only when the
+  project has none. The starter demo is not added;
+- `package.json` is merged in its own indentation: IWSDK packages, the `three`
+  alias and `@types/three` are set, versions are only raised, and specs that are
+  not registry versions (`workspace:`, `file:`, `catalog:`) are left alone and
+  reported. Other dependencies and your scripts are kept; `iwsdk:dev` is added
+  when `dev` is taken;
+- overrides go where the package manager reads them: `overrides` (npm, bun),
+  `resolutions` (yarn), or `pnpm-workspace.yaml` (pnpm), merged without touching
+  its other settings;
+- `iwsdkDev()` is added to an existing Vite config when the config's own
+  top-level `plugins` array is unambiguous, and listed as a step otherwise;
+- `.gitignore` gains IWSDK's runtime and MCP entries, dependencies install with
+  the package manager found from the nearest lockfile (a monorepo's included),
+  and no Git repository is created;
+- coding-agent guidance is installed as by `npx @iwsdk/cli agents sync`, keeping
+  the text of an existing `AGENTS.md` or `CLAUDE.md`.
+
+Create then prints what it created and kept and the steps left to finish, such
+as importing `./iwsdk` from the app's entry module. The report is printed even
+when the install fails, with the command to retry.
+
+A non-empty target **without** a `package.json` requires `--force`, which
+overwrites conflicting generated files but preserves unrelated files and an
+existing Git repository. `--yes` never implies overwrite permission.
 
 Or with other package managers:
 
@@ -105,8 +138,8 @@ npm create @iwsdk@latest mr-app -- -y --target ar
 # Create a desktop browser 3D starter non-interactively
 npm create @iwsdk@latest desktop-app -- -y --target browser
 
-# Scaffold into the current, already-populated repository
-npm create @iwsdk@latest . -- -y --force --target vr
+# Add IWSDK to the project in the current directory (overwrites nothing)
+npm create @iwsdk@latest . -- -y --target vr
 
 # Use canary SDK bundle
 npm create @iwsdk@latest -- --canary
@@ -120,7 +153,7 @@ the interactive setup controls language, features, Git, and installation.
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `[name]`                                             | Project directory; use `.` to scaffold in the current directory                                  |
 | `-y, --yes`                                          | Skip prompts; defaults to VR, TypeScript, recommended features, Git, and dependency installation |
-| `--force`                                            | Confirm overwriting conflicting generated files when the target directory is non-empty           |
+| `--force`                                            | Overwrite conflicting generated files in a non-empty target without a `package.json`             |
 | `--target <target>`                                  | Starting point: `vr`, `ar`, or `browser`                                                         |
 | `--mode <mode>`                                      | Compatibility alias for XR targets: `vr` or `ar`                                                 |
 | `--xr` / `--no-xr`                                   | Compatibility selectors for VR (or `--mode ar`) and Desktop 3D                                   |
@@ -137,9 +170,10 @@ the interactive setup controls language, features, Git, and installation.
 
 Automation and coding agents should map the requested experience to a target
 and high-level feature flags before invoking Create, then pass those choices
-with `--yes`. When the harness starts inside an existing repository, pass `.`
-and `--force`; do not treat `--yes` as overwrite consent. The CLI does not infer
-application intent from an open-ended description.
+with `--yes`. When the harness starts inside an existing project, pass `.`;
+Create adopts it without overwriting files. Do not treat `--yes` as overwrite
+consent. The CLI does not infer application intent from an open-ended
+description.
 
 ## Generated Templates
 

@@ -90,6 +90,17 @@ export default [
     },
   },
   {
+    input: 'src/agent-guidance.ts',
+    external,
+    plugins,
+    output: {
+      file: 'dist/agent-guidance.js',
+      format: 'es',
+      sourcemap: true,
+      inlineDynamicImports: true,
+    },
+  },
+  {
     input: 'src/runtime-owner.ts',
     external,
     plugins,

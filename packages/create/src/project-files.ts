@@ -180,6 +180,11 @@ function isTextTemplate(filePath: string): boolean {
   return !filePath.endsWith('.mp3') && !filePath.endsWith('.png');
 }
 
+/** Rendered agent guidance next to the packaged templates. */
+export function resolvePackagedGuidanceRoot(): string {
+  return path.join(resolvePackagedTemplateRoot(), '..', 'guidance');
+}
+
 function resolvePackagedTemplateRoot(): string {
   const adjacent = fileURLToPath(new URL('./template/', import.meta.url));
   if (existsSync(adjacent)) {

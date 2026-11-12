@@ -1,0 +1,7 @@
+---
+'@iwsdk/create': minor
+'@iwsdk/cli': minor
+'@iwsdk/core': minor
+---
+
+`@iwsdk/create` now adds IWSDK to an existing project instead of scaffolding over it. When the target already has a `package.json`, Create checks everything before writing and never overwrites a file, even with `--force`. A project on a Vite major the plugin does not support yet, or with an invalid `package.json`, is refused with nothing changed, and `--canary` is refused. Otherwise Create adds a minimal skeleton in its own `src/iwsdk/` folder (world entry, empty asset and component manifests) plus `iwsdk.config.json` and an empty scene. It merges `package.json` in its own formatting: versions are only raised, `workspace:`/`file:`/`catalog:` specs are kept, and scripts are kept, with `iwsdk:dev` added when `dev` is taken. Overrides go where the package manager reads them (npm and bun `overrides`, yarn `resolutions`, `pnpm-workspace.yaml`). `iwsdkDev()` is added to the Vite config when its top-level `plugins` array is unambiguous. Dependencies install with the package manager found from the nearest lockfile, and coding-agent guidance is installed while an existing `AGENTS.md` keeps its text. Create prints what it kept and the steps left to finish, even when the install fails. Previously `create . --force` replaced the project's `package.json`, `index.html`, Vite config, and entry file. `@iwsdk/cli` exports the guidance sync as `@iwsdk/cli/agent-guidance`.

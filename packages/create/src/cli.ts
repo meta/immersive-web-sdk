@@ -15,6 +15,11 @@ import { Command } from 'commander';
 import ora from 'ora';
 import semver from 'semver';
 import {
+  adoptExistingProject,
+  printAdoptReport,
+  type AdoptOutcome,
+} from './adopt.js';
+import {
   EXPERIENCE_TARGETS,
   FEATURE_CATALOG,
   ScaffoldConfiguration,
@@ -32,7 +37,10 @@ import {
   printPrerequisites,
   warmupReference,
 } from './installer.js';
-import { buildStarterProjectFiles } from './project-files.js';
+import {
+  buildStarterProjectFiles,
+  resolvePackagedGuidanceRoot,
+} from './project-files.js';
 import { createProjectManifest } from './project-manifest.js';
 import {
   isValidProjectTarget,
@@ -154,7 +162,10 @@ function isInsideGitWorkTree(directory: string): boolean {
   }
 }
 
-function printConfigurationSummary(result: PromptResult): void {
+function printConfigurationSummary(
+  result: PromptResult,
+  adopting: boolean,
+): void {
   const config: ScaffoldConfiguration = {
     target: result.target,
     xrEnabled: result.xrEnabled,
@@ -180,7 +191,7 @@ function printConfigurationSummary(result: PromptResult): void {
   );
   console.log(
     chalk.dim(
-      '  Change declarative settings later in iwsdk.config.json; keep systems in src/index.ts.\n',
+      `  Change declarative settings later in iwsdk.config.json; keep systems in ${adopting ? 'src/iwsdk/index' : 'src/index'}.${result.language}.\n`,
     ),
   );
 }
@@ -236,7 +247,7 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
     .option('-y, --yes', 'Use defaults and skip prompts')
     .option(
       '--force',
-      'Overwrite conflicting generated files in a non-empty target directory',
+      'Overwrite conflicting generated files in a non-empty target without a package.json (an existing project is adopted and never overwritten)',
     )
     .option('--target <target>', 'Starting point: vr, ar, or browser')
     .option('--mode <mode>', 'XR mode alias: vr or ar')
@@ -404,13 +415,29 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
 
     const projectTarget = resolveProjectTarget(res.name, process.cwd());
     const hasTargetContent = targetHasContent(projectTarget);
-    if (hasTargetContent && !cliOpts.force) {
+    // An existing package.json means an existing project: adopt IWSDK into it
+    // without overwriting anything, even when --force is passed.
+    const adopting =
+      hasTargetContent &&
+      fs.existsSync(join(projectTarget.outDir, 'package.json'));
+    if (adopting && cliOpts.canary) {
+      throw new Error(
+        '--canary installs an SDK bundle into new projects only. Drop --canary to add IWSDK to this existing project.',
+      );
+    }
+    if (adopting) {
+      console.warn(
+        chalk.yellow(
+          `${projectTarget.displayPath === '.' ? 'The current directory' : `"${projectTarget.displayPath}"`} already has a package.json: adding IWSDK to this project without overwriting your files${cliOpts.force ? ' (--force is ignored for existing projects)' : ''}.`,
+        ),
+      );
+    } else if (hasTargetContent && !cliOpts.force) {
       throw new Error(
         `${projectTarget.inPlace ? 'Current directory' : `Directory "${projectTarget.displayPath}"`} is not empty. ` +
           'Re-run with --force to overwrite conflicting generated files; unrelated files will be preserved.',
       );
     }
-    if (hasTargetContent) {
+    if (hasTargetContent && !adopting) {
       console.warn(
         chalk.yellow(
           `Warning: --force will overwrite conflicting generated files in ${projectTarget.displayPath}; unrelated files will be preserved.`,
@@ -418,8 +445,19 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
       );
     }
     res.name = projectTarget.appName;
+    if (adopting && cliOpts.yes && cliOpts.language == null) {
+      // Match the project: no tsconfig and no TypeScript dependency means a
+      // JavaScript project.
+      res.language =
+        fs.existsSync(join(projectTarget.outDir, 'tsconfig.json')) ||
+        /"typescript"\s*:/u.test(
+          fs.readFileSync(join(projectTarget.outDir, 'package.json'), 'utf8'),
+        )
+          ? 'ts'
+          : 'js';
+    }
 
-    printConfigurationSummary(res);
+    printConfigurationSummary(res, adopting);
 
     const source = resolveSource(cliOpts.canary);
 
@@ -462,6 +500,13 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
         language: res.language,
         packageSource: source,
       });
+      if (adopting) {
+        await adoptProject(outDir, projectFiles, res.language, {
+          install: res.installNow,
+          warmup: !cliOpts.skipReferenceWarmup,
+        });
+        return;
+      }
       await scaffoldProject(projectFiles, outDir, { force: cliOpts.force });
 
       // Git init
@@ -524,24 +569,7 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
 
       // Write MCP adapter configs for every supported coding harness.
       if (res.installNow) {
-        try {
-          execFileSync(
-            process.execPath,
-            [
-              join(outDir, 'node_modules/@iwsdk/cli/dist/cli.js'),
-              'adapter',
-              'sync',
-            ],
-            { cwd: outDir, stdio: 'ignore', timeout: 15000 },
-          );
-        } catch (error) {
-          console.warn(
-            chalk.yellow(
-              `Project created, but coding-tool adapter sync failed: ${error instanceof Error ? error.message : String(error)}. ` +
-                'Run "npx @iwsdk/cli adapter sync" from the project directory.',
-            ),
-          );
-        }
+        syncAdapters(outDir);
       }
 
       const prereqs = [...(res.prerequisites || [])];
@@ -561,6 +589,64 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
   } catch (err: any) {
     console.error(chalk.red(err?.message || String(err)));
     process.exit(1);
+  }
+}
+
+/** Write MCP adapter configs for every supported coding harness. */
+function syncAdapters(outDir: string, adopting = false): boolean {
+  try {
+    execFileSync(
+      process.execPath,
+      [join(outDir, 'node_modules/@iwsdk/cli/dist/cli.js'), 'adapter', 'sync'],
+      { cwd: outDir, stdio: 'ignore', timeout: 15000 },
+    );
+    return true;
+  } catch (error) {
+    console.warn(
+      chalk.yellow(
+        `${adopting ? 'IWSDK was added' : 'Project created'}, but coding-tool adapter sync failed: ${error instanceof Error ? error.message : String(error)}. ` +
+          'Run "npx @iwsdk/cli adapter sync" from the project directory.',
+      ),
+    );
+    return false;
+  }
+}
+
+/**
+ * Add IWSDK to an existing project. The report is printed whatever the
+ * install does, so the developer always sees what changed and what is left.
+ */
+async function adoptProject(
+  outDir: string,
+  files: Awaited<ReturnType<typeof buildStarterProjectFiles>>,
+  language: Language,
+  options: { install: boolean; warmup: boolean },
+): Promise<void> {
+  const report = await adoptExistingProject({
+    outDir,
+    files,
+    guidanceRoot: resolvePackagedGuidanceRoot(),
+    language,
+  });
+  const outcome: AdoptOutcome = { installed: false, adaptersSynced: false };
+  if (options.install) {
+    try {
+      await installDependencies(outDir, report.packageManager);
+      outcome.installed = true;
+    } catch (error) {
+      outcome.installError =
+        error instanceof Error ? error.message : String(error);
+    }
+  }
+  if (outcome.installed) {
+    if (options.warmup) {
+      await warmupReference(outDir);
+    }
+    outcome.adaptersSynced = syncAdapters(outDir, true);
+  }
+  printAdoptReport(report, outcome);
+  if (outcome.installError) {
+    process.exitCode = 1;
   }
 }
 
