@@ -448,3 +448,71 @@ describe('ecsSnapshot retention', () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Frame counting
+// ---------------------------------------------------------------------------
+
+describe('ECS debug frame counter', () => {
+  it('counts simulated ECS frames, not render-loop ticks while paused', async () => {
+    vi.resetModules();
+    const {
+      installDebugHook,
+      ecsPause,
+      ecsStep,
+      ecsResume,
+      ecsSnapshot,
+      ecsDiff,
+    } = await import('../../src/mcp/ecs-debug-tools.js');
+    // A system whose step flush stays pending until released, so the render
+    // loop keeps ticking while a step is in flight.
+    let releaseFlush: (() => void) | null = null;
+    const flushDebugFrame = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseFlush = resolve;
+        }),
+    );
+    const system = {
+      flushDebugFrame: () =>
+        releaseFlush === null ? Promise.resolve() : flushDebugFrame(),
+    };
+    const simulated = vi.fn();
+    const world = {
+      update: simulated,
+      getSystems: () => [system],
+      entityManager: { getEntityByIndex: () => null, indexLookup: [] },
+    } as any;
+    installDebugHook(world);
+
+    // Three normal frames.
+    world.update(1 / 72, 1);
+    world.update(1 / 72, 2);
+    world.update(1 / 72, 3);
+
+    await ecsPause(world);
+    ecsSnapshot(world, { label: 'before' });
+    // The render loop keeps ticking while paused; nothing is simulated.
+    for (let tick = 0; tick < 10; tick++) {
+      world.update(1 / 72, 4 + tick);
+    }
+
+    // One step whose flush is still pending across several ticks.
+    releaseFlush = () => {};
+    const step = ecsStep(world, { count: 1 });
+    world.update(1 / 72, 20);
+    for (let tick = 0; tick < 5; tick++) {
+      world.update(1 / 72, 21 + tick);
+    }
+    releaseFlush!();
+    const result = await step;
+    releaseFlush = null;
+
+    expect(simulated).toHaveBeenCalledTimes(4);
+    expect(result).toEqual({ framesAdvanced: 1, totalFrame: 4 });
+
+    ecsSnapshot(world, { label: 'after' });
+    expect(ecsDiff(world, { from: 'before', to: 'after' }).frameDelta).toBe(1);
+    expect(ecsResume(world).framesWhilePaused).toBe(1);
+  });
+});

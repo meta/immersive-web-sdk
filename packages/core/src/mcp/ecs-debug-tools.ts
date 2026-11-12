@@ -102,9 +102,11 @@ export function installDebugHook(world: World): void {
   originalUpdate = world.update.bind(world);
   hookedWorld = world;
 
+  // frameCount counts simulated ECS frames: normal updates and debugger
+  // steps. Render-loop ticks that skip the ECS while paused, or while a step's
+  // flush is still in flight, don't count, so snapshot frames, diff
+  // frameDelta and ecs_step's totalFrame match what was simulated.
   world.update = (delta: number, time: number): void => {
-    debugState.frameCount++;
-
     if (debugState.paused && !debugState.stepResolve) {
       // Skip ECS updates; renderer.render() still runs after this
       return;
@@ -120,6 +122,7 @@ export function installDebugHook(world: World): void {
       debugState.stepResolve = null;
       debugState.stepReject = null;
       debugState.stepInFlight = true;
+      debugState.frameCount++;
       try {
         prepareDebugSystems(world, debugState.stepDelta);
         originalUpdate!(debugState.stepDelta, time);
@@ -141,6 +144,7 @@ export function installDebugHook(world: World): void {
       return;
     }
 
+    debugState.frameCount++;
     originalUpdate!(delta, time);
   };
 }
