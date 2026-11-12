@@ -44,6 +44,18 @@ interface FrameworkMCPRuntime {
 
   /** Resolves the target names of emulated hand sequences in the scene. */
   targetResolver?: MCPTargetResolver;
+
+  /** Draw fresh frames before pixels are captured (on-demand render mode). */
+  requestRender?(frames?: number): Promise<void>;
+
+  /** Draw every frame until the hold with the returned id is released. */
+  acquireRenderHold?(): string;
+
+  /** Release a hold from `acquireRenderHold`. */
+  releaseRenderHold?(id: string): boolean;
+
+  /** `'continuous'` or `'on-demand'`. */
+  readonly renderMode?: string;
 }
 
 declare global {

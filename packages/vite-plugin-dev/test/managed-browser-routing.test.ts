@@ -154,6 +154,7 @@ let harnessCommandToken: string | undefined;
 async function createHarness(
   managedBrowser: ReturnType<typeof createManagedBrowser>['browser'],
   nativeXRControl = false,
+  workspaceOptions: Record<string, unknown> = {},
 ) {
   const handlers = new Map<string, Array<(...args: any[]) => unknown>>();
   const httpServer = {
@@ -174,7 +175,7 @@ async function createHarness(
   mocks.launchManagedBrowser.mockResolvedValueOnce(managedBrowser);
   const plugin = iwsdkDev({
     nativeXRControl,
-    workspace: { enabled: true },
+    workspace: { enabled: true, ...workspaceOptions },
   });
   plugin.configResolved?.({
     command: 'serve',
@@ -492,6 +493,10 @@ describe('managed browser WebSocket routing', () => {
     expect(
       mocks.setRuntimeSessionBrowserState.mock.calls.at(-1)?.[2]?.audioMuted,
     ).toBe(false);
+    // A headed session is watched by a person, so it always draws every frame.
+    expect(
+      mocks.setRuntimeSessionBrowserState.mock.calls.at(-1)?.[2]?.renderMode,
+    ).toBe('continuous');
 
     sendJson(socket, {
       id: 'mute',
@@ -511,6 +516,32 @@ describe('managed browser WebSocket routing', () => {
     expect(
       mocks.setRuntimeSessionBrowserState.mock.calls.at(-1)?.[2]?.audioMuted,
     ).toBe(true);
+  });
+
+  test('publishes on-demand rendering for a headless session', async () => {
+    const managed = createManagedBrowser();
+    await createHarness(managed.browser, false, { headless: true });
+    expect(
+      mocks.setRuntimeSessionBrowserState.mock.calls.at(-1)?.[2]?.renderMode,
+    ).toBe('on-demand');
+  });
+
+  test('publishes continuous rendering when IWSDK_DEV_RENDER_MODE opts out', async () => {
+    const previous = process.env.IWSDK_DEV_RENDER_MODE;
+    process.env.IWSDK_DEV_RENDER_MODE = 'continuous';
+    try {
+      const managed = createManagedBrowser();
+      await createHarness(managed.browser, false, { headless: true });
+      expect(
+        mocks.setRuntimeSessionBrowserState.mock.calls.at(-1)?.[2]?.renderMode,
+      ).toBe('continuous');
+    } finally {
+      if (previous === undefined) {
+        delete process.env.IWSDK_DEV_RENDER_MODE;
+      } else {
+        process.env.IWSDK_DEV_RENDER_MODE = previous;
+      }
+    }
   });
 
   test('relaunches the managed browser with the dev-session mute state', async () => {

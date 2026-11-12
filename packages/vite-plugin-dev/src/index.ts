@@ -107,6 +107,7 @@ import {
   resolveInjectionRuntimeId,
 } from './injection-bundler.js';
 import { ManagedBrowserLifecycle } from './managed-browser/lifecycle.js';
+import { resolveManagedRenderMode } from './managed-browser/render-mode.js';
 import { createRelayHandler } from './mcp-relay.js';
 import { reportSessionStart, reportSessionEnd } from './metavr-telemetry.js';
 import {
@@ -1440,6 +1441,9 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           connectedClientCount: managed.length,
           lastTransitionAt: lifecycle.stateEnteredAt,
           audioMuted: managedBrowserAudioMuted,
+          renderMode: resolveManagedRenderMode(
+            pluginOptions.workspace?.headless ?? false,
+          ),
           ...(lifecycle.issue
             ? {
                 lastError: createBrowserIssue(

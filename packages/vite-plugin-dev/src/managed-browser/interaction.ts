@@ -19,6 +19,7 @@ import {
 } from './application-surface.js';
 import { errorMessage, parseUrl } from './internals.js';
 import { describeElements, readApplicationIdentity } from './page-probes.js';
+import { captureFreshApplicationFrame } from './render-mode.js';
 
 const MAX_SNAPSHOT_RECIPES = 2_000;
 
@@ -637,8 +638,20 @@ export class ManagedInteractionSurface {
     options: BrowserScreenshotOptions,
     timeoutMs: number,
   ): Promise<BrowserScreenshotCapture> {
+    const frame = await resolveApplicationFrame(this.options.page);
+    // An on-demand app has nothing current on its canvas: draw a fresh frame
+    // (holding rendering where the emulator would clear it) before capturing.
+    return captureFreshApplicationFrame(frame, timeoutMs, (remainingMs) =>
+      this.captureRenderedApplicationImage(frame, options, remainingMs),
+    );
+  }
+
+  private async captureRenderedApplicationImage(
+    frame: Frame,
+    options: BrowserScreenshotOptions,
+    timeoutMs: number,
+  ): Promise<BrowserScreenshotCapture> {
     const { page, screenshotSize } = this.options;
-    const frame = await resolveApplicationFrame(page);
     const format = options.format ?? 'png';
     const quality = Math.min(100, Math.max(20, options.quality ?? 90));
     const screenshotOptions =

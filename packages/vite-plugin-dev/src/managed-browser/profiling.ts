@@ -27,6 +27,7 @@ import {
   summarizeFrameTimes,
   type BrowserEnvironmentDescriptor,
 } from './page-probes.js';
+import { acquireApplicationRenderHold } from './render-mode.js';
 
 const MAX_TRACE_ARTIFACT_BYTES = 100 * 1024 * 1024;
 
@@ -466,6 +467,16 @@ async function startProfileInFrame(
   frame: Frame,
   mode: BrowserProfileResult['mode'],
 ): Promise<void> {
+  // A profile measures real frame cost, so draw every frame while it runs.
+  // The hold id lives on the page next to the profile state it belongs to.
+  const renderHold = await acquireApplicationRenderHold(frame);
+  await frame.evaluate((id) => {
+    const runtimeWindow = window as any;
+    runtimeWindow.FRAMEWORK_MCP_RUNTIME?.releaseRenderHold?.(
+      runtimeWindow.__IWSDK_PROFILE_RENDER_HOLD,
+    );
+    runtimeWindow.__IWSDK_PROFILE_RENDER_HOLD = id;
+  }, renderHold);
   await frame.evaluate(
     ({ maxSamples, mode }) => {
       const runtimeWindow = window as any;
@@ -556,6 +567,16 @@ async function stopProfileInFrame(frame: Frame): Promise<{
   marks: Array<{ name: string; startTime: number }>;
   visibilityEvents: Array<{ at: number; value: string }>;
 }> {
+  await frame
+    .evaluate(() => {
+      const runtimeWindow = window as any;
+      const id = runtimeWindow.__IWSDK_PROFILE_RENDER_HOLD;
+      delete runtimeWindow.__IWSDK_PROFILE_RENDER_HOLD;
+      if (id != null) {
+        runtimeWindow.FRAMEWORK_MCP_RUNTIME?.releaseRenderHold?.(id);
+      }
+    })
+    .catch(() => {});
   const result = await frame.evaluate((maxSamples) => {
     const runtimeWindow = window as any;
     const state = runtimeWindow.__IWSDK_BROWSER_PROFILE;

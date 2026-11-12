@@ -24,6 +24,7 @@ import {
   resolveApplicationFrame,
 } from './application-surface.js';
 import { errorMessage, parseUrl } from './internals.js';
+import type { ManagedRenderMode } from './render-mode.js';
 
 const MANAGED_BROWSER_STARTUP_TIMEOUT_MS = 45_000;
 
@@ -834,6 +835,7 @@ export async function navigateAndVerifyManagedPage({
   managedWorkspaceToken,
   page,
   readiness,
+  renderMode = 'continuous',
   waitForRuntime = true,
   signal,
   traceMcp,
@@ -844,6 +846,7 @@ export async function navigateAndVerifyManagedPage({
   managedWorkspaceToken: string | null;
   page: Page;
   readiness: ManagedBrowserReadiness;
+  renderMode?: ManagedRenderMode;
   waitForRuntime?: boolean;
   signal?: AbortSignal;
   traceMcp: boolean;
@@ -878,11 +881,15 @@ export async function navigateAndVerifyManagedPage({
       console.error(`[unhandledrejection] ${text}`);
     });
   });
-  await page.addInitScript((traceEnabled: boolean) => {
-    (window as any).__IWER_MCP_MANAGED = true;
-    (window as any).__IWSDK_MCP_TRACE = traceEnabled;
-    (window as any).__IWSDK_MANAGED_BROWSER_TARGET = true;
-  }, traceMcp);
+  await page.addInitScript(
+    ({ renderMode, traceEnabled }) => {
+      (window as any).__IWER_MCP_MANAGED = true;
+      (window as any).__IWSDK_MCP_TRACE = traceEnabled;
+      (window as any).__IWSDK_MANAGED_BROWSER_TARGET = true;
+      (window as any).__IWSDK_RENDER_MODE = renderMode;
+    },
+    { renderMode, traceEnabled: traceMcp },
+  );
   try {
     await page.goto(url, { waitUntil: 'commit' });
   } catch (error) {

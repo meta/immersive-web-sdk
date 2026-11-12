@@ -208,6 +208,43 @@ function serializeRunnerResult(value: unknown): unknown {
   return JSON.parse(serialized);
 }
 
+/** The part of a Playwright frame {@link withRenderHold} needs. */
+interface RenderHoldFrame {
+  evaluate<R, A>(fn: (arg: A) => R | Promise<R>, arg: A): Promise<R>;
+}
+
+/**
+ * Run `fn` with the managed app drawing every frame, then release the hold,
+ * also when `fn` throws. Apps without render holds (non-IWSDK runtimes, older
+ * @iwsdk/core) always draw continuously, so `fn` simply runs.
+ */
+export async function withRenderHold<T>(
+  frame: RenderHoldFrame,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const id = await frame
+    .evaluate(() => {
+      const runtime = (globalThis as any).FRAMEWORK_MCP_RUNTIME;
+      return typeof runtime?.acquireRenderHold === 'function'
+        ? (runtime.acquireRenderHold() as string)
+        : null;
+    }, undefined)
+    .catch(() => null);
+  try {
+    return await fn();
+  } finally {
+    if (id != null) {
+      await frame
+        .evaluate((holdId: string) => {
+          (globalThis as any).FRAMEWORK_MCP_RUNTIME?.releaseRenderHold?.(
+            holdId,
+          );
+        }, id)
+        .catch(() => {});
+    }
+  }
+}
+
 export async function handleBrowserRun(
   scriptArgument: string | undefined,
   options: CliOptions,
@@ -396,15 +433,20 @@ export async function handleBrowserRun(
             'browser run script must export a default async function or named run function',
           );
         }
-        const result = await run({
-          browser,
-          cdp,
-          context,
-          frame: frame ?? page.mainFrame(),
-          page,
-          signal: abortController.signal,
-          workspaceRoot,
-        });
+        // Scripts may capture pixels themselves (page.screenshot), which the
+        // managed session's on-demand rendering would leave stale.
+        const appFrame = frame ?? page.mainFrame();
+        const result = await withRenderHold(appFrame, async () =>
+          run({
+            browser,
+            cdp,
+            context,
+            frame: appFrame,
+            page,
+            signal: abortController.signal,
+            workspaceRoot,
+          }),
+        );
         return createSuccess({
           operation: 'browser.run',
           result: serializeRunnerResult(result),

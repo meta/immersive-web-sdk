@@ -401,6 +401,14 @@ export interface RuntimeBrowserState {
   lastError?: RuntimeIssueInfo;
   /** Dev-session tab mute state; it survives reloads and browser relaunches. */
   audioMuted?: boolean;
+  /**
+   * The render mode the managed session starts the app in: `on-demand` for
+   * headless sessions (frames are drawn only when a tool needs pixels) unless
+   * `IWSDK_DEV_RENDER_MODE=continuous`, and `continuous` for headed sessions.
+   * This is session configuration, not a live readout: the app can switch
+   * modes while it runs.
+   */
+  renderMode?: 'continuous' | 'on-demand';
 }
 
 export interface RuntimeBrowserProbeResult {

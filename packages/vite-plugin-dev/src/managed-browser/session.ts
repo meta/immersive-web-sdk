@@ -41,6 +41,7 @@ import {
   type BrowserProfileRequest,
   type BrowserProfileResult,
 } from './profiling.js';
+import { resolveManagedRenderMode } from './render-mode.js';
 import {
   collectRuntimePreflightEvidence,
   collectRuntimePublishEvidence,
@@ -225,6 +226,7 @@ export async function launchManagedBrowser(
       managedWorkspaceToken: bootstrap.token,
       page,
       readiness,
+      renderMode: resolveManagedRenderMode(headless),
       waitForRuntime: managedAccess?.runtimeIdentity == null,
       signal,
       traceMcp,

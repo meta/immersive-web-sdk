@@ -30,6 +30,10 @@ import {
   sampleRuntimeFrameTimes,
   summarizeFrameTimes,
 } from './page-probes.js';
+import {
+  createRenderHoldTracker,
+  requestApplicationRender,
+} from './render-mode.js';
 
 export interface ManagedRuntimePublishRequest {
   expectedDocumentHash: string;
@@ -186,65 +190,75 @@ export async function collectRuntimePreflightEvidence(
       };
     });
     const frame = await resolveApplicationFrame(page);
-    const runtimeDeadline = Date.now() + 20_000;
-    let hierarchy: any = null;
-    let hierarchyEntries: any[] = [];
-    let runtimeHashes: string[] = [];
-    let renderStats: Record<string, unknown> = { available: false };
-    let lastRuntimeError: unknown = null;
-    while (Date.now() < runtimeDeadline) {
-      try {
-        hierarchy = await frame.evaluate(readRuntimeHierarchy);
-        ({ entries: hierarchyEntries, runtimeHashes } =
-          flattenRuntimeHierarchy(hierarchy));
-        renderStats = await frame.evaluate(readRuntimeRenderStats);
-        if (runtimeHashes.length > 0) {
-          break;
+    // Evidence reads real draw calls and frame cost, so the app draws every
+    // frame while it is collected. The runtime may not exist yet, so the hold
+    // is retried inside the readiness loop below.
+    const renderHold = createRenderHoldTracker();
+    try {
+      const runtimeDeadline = Date.now() + 20_000;
+      let hierarchy: any = null;
+      let hierarchyEntries: any[] = [];
+      let runtimeHashes: string[] = [];
+      let renderStats: Record<string, unknown> = { available: false };
+      let lastRuntimeError: unknown = null;
+      while (Date.now() < runtimeDeadline) {
+        try {
+          await renderHold.ensure(frame);
+          await requestApplicationRender(frame, 1, 5_000);
+          hierarchy = await frame.evaluate(readRuntimeHierarchy);
+          ({ entries: hierarchyEntries, runtimeHashes } =
+            flattenRuntimeHierarchy(hierarchy));
+          renderStats = await frame.evaluate(readRuntimeRenderStats);
+          if (runtimeHashes.length > 0) {
+            break;
+          }
+        } catch (error) {
+          lastRuntimeError = error;
         }
-      } catch (error) {
-        lastRuntimeError = error;
+        await page.waitForTimeout(50);
       }
-      await page.waitForTimeout(50);
-    }
-    if (hierarchy == null) {
-      throw new Error(
-        `IWSDK app runtime bridge is unavailable: ${errorMessage(
-          lastRuntimeError ?? 'timed out',
-        )}`,
+      if (hierarchy == null) {
+        throw new Error(
+          `IWSDK app runtime bridge is unavailable: ${errorMessage(
+            lastRuntimeError ?? 'timed out',
+          )}`,
+        );
+      }
+      const frameTimes = await frame.evaluate(sampleRuntimeFrameTimes, {
+        sampleFrames: request.sampleFrames,
+        warmupFrames: request.warmupFrames,
+      });
+      const environmentRead = await frame.evaluate(
+        readEnvironmentDescriptor,
+        'renderer' as const,
       );
+      assertBrowserEnvironmentDescriptor(environmentRead.environment);
+      const presentation = await collectPresentationSnapshot(frame, {
+        frameTimes,
+        hierarchyObjectCount: hierarchyEntries.length,
+        renderStats,
+        warmupFrames: request.warmupFrames,
+      });
+      return {
+        ...presentation,
+        collectedAt: Date.now(),
+        editor,
+        environment: {
+          ...environmentRead.environment,
+          canvas:
+            environmentRead.canvas == null
+              ? null
+              : {
+                  height: environmentRead.canvas.backingHeight,
+                  width: environmentRead.canvas.backingWidth,
+                },
+        },
+        renderStats,
+        runtimeHashes,
+      };
+    } finally {
+      await renderHold.release();
     }
-    const frameTimes = await frame.evaluate(sampleRuntimeFrameTimes, {
-      sampleFrames: request.sampleFrames,
-      warmupFrames: request.warmupFrames,
-    });
-    const environmentRead = await frame.evaluate(
-      readEnvironmentDescriptor,
-      'renderer' as const,
-    );
-    assertBrowserEnvironmentDescriptor(environmentRead.environment);
-    const presentation = await collectPresentationSnapshot(frame, {
-      frameTimes,
-      hierarchyObjectCount: hierarchyEntries.length,
-      renderStats,
-      warmupFrames: request.warmupFrames,
-    });
-    return {
-      ...presentation,
-      collectedAt: Date.now(),
-      editor,
-      environment: {
-        ...environmentRead.environment,
-        canvas:
-          environmentRead.canvas == null
-            ? null
-            : {
-                height: environmentRead.canvas.backingHeight,
-                width: environmentRead.canvas.backingWidth,
-              },
-      },
-      renderStats,
-      runtimeHashes,
-    };
   });
 }
 
@@ -491,122 +505,133 @@ export async function collectRuntimePublishEvidence(
     );
     await page.waitForTimeout(250);
 
-    let live: {
-      hierarchy: any;
-      hierarchyObjectCount: number;
-      nodes: Awaited<ReturnType<typeof readRuntimeNodes>>;
-      renderStats: Record<string, unknown> & { frameTimeSamplesMs: number[] };
-      runtimeHashes: string[];
-    } | null = null;
-    let runtimeFrame: Frame | null = null;
-    let lastLiveError: unknown = null;
-    let runtimeObservedAt: number | null = null;
-    const liveDeadline = Date.now() + 20_000;
-    while (Date.now() < liveDeadline) {
-      try {
-        const candidateFrame = await resolveApplicationFrame(page);
-        if (
-          new URL(candidateFrame.url()).searchParams.get(
-            '__iwsdk_publish_reload',
-          ) !== reloadToken
-        ) {
-          throw new Error('App runtime reload is still in progress');
-        }
-        const hierarchy = await candidateFrame.evaluate(readRuntimeHierarchy);
-        const { entries, runtimeHashes } = flattenRuntimeHierarchy(hierarchy);
-        const nodes = await candidateFrame.evaluate(
-          readRuntimeNodes,
-          request.nodeIds.map((nodeId) => ({
-            entry:
-              entries.find((candidate) => candidate.sceneNodeId === nodeId) ??
-              null,
-            nodeId,
-          })),
-        );
-        const renderStats = await candidateFrame.evaluate(
-          readRuntimeRenderStats,
-        );
-        if (runtimeHashes.length > 0) {
-          runtimeObservedAt ??= Date.now();
-          const allNodesPresent = nodes.every(
-            (entry) => entry.hierarchy != null,
-          );
-          if (allNodesPresent || Date.now() - runtimeObservedAt >= 3_000) {
-            const frameTimeSamplesMs = await candidateFrame.evaluate(
-              sampleRuntimeFrameTimes,
-              { sampleFrames: 8, warmupFrames: 2 },
-            );
-            live = {
-              hierarchy,
-              hierarchyObjectCount: entries.length,
-              nodes,
-              renderStats: { ...renderStats, frameTimeSamplesMs },
-              runtimeHashes,
-            };
-            runtimeFrame = candidateFrame;
-            break;
+    // Evidence reads real draw calls and frame cost, so the app draws every
+    // frame while it is collected. The reload drops a hold with its page, and
+    // the reloaded runtime may not exist on the first attempts, so the hold
+    // is re-taken on each candidate frame until it sticks.
+    const renderHold = createRenderHoldTracker();
+    try {
+      let live: {
+        hierarchy: any;
+        hierarchyObjectCount: number;
+        nodes: Awaited<ReturnType<typeof readRuntimeNodes>>;
+        renderStats: Record<string, unknown> & { frameTimeSamplesMs: number[] };
+        runtimeHashes: string[];
+      } | null = null;
+      let runtimeFrame: Frame | null = null;
+      let lastLiveError: unknown = null;
+      let runtimeObservedAt: number | null = null;
+      const liveDeadline = Date.now() + 20_000;
+      while (Date.now() < liveDeadline) {
+        try {
+          const candidateFrame = await resolveApplicationFrame(page);
+          if (
+            new URL(candidateFrame.url()).searchParams.get(
+              '__iwsdk_publish_reload',
+            ) !== reloadToken
+          ) {
+            throw new Error('App runtime reload is still in progress');
           }
+          await renderHold.ensure(candidateFrame);
+          await requestApplicationRender(candidateFrame, 1, 5_000);
+          const hierarchy = await candidateFrame.evaluate(readRuntimeHierarchy);
+          const { entries, runtimeHashes } = flattenRuntimeHierarchy(hierarchy);
+          const nodes = await candidateFrame.evaluate(
+            readRuntimeNodes,
+            request.nodeIds.map((nodeId) => ({
+              entry:
+                entries.find((candidate) => candidate.sceneNodeId === nodeId) ??
+                null,
+              nodeId,
+            })),
+          );
+          const renderStats = await candidateFrame.evaluate(
+            readRuntimeRenderStats,
+          );
+          if (runtimeHashes.length > 0) {
+            runtimeObservedAt ??= Date.now();
+            const allNodesPresent = nodes.every(
+              (entry) => entry.hierarchy != null,
+            );
+            if (allNodesPresent || Date.now() - runtimeObservedAt >= 3_000) {
+              const frameTimeSamplesMs = await candidateFrame.evaluate(
+                sampleRuntimeFrameTimes,
+                { sampleFrames: 8, warmupFrames: 2 },
+              );
+              live = {
+                hierarchy,
+                hierarchyObjectCount: entries.length,
+                nodes,
+                renderStats: { ...renderStats, frameTimeSamplesMs },
+                runtimeHashes,
+              };
+              runtimeFrame = candidateFrame;
+              break;
+            }
+          }
+        } catch (error) {
+          lastLiveError = error;
         }
-      } catch (error) {
-        lastLiveError = error;
+        await page.waitForTimeout(100);
       }
-      await page.waitForTimeout(100);
-    }
-    if (live == null || runtimeFrame == null) {
-      throw new Error(
-        `App runtime did not become publish-ready: ${errorMessage(
-          lastLiveError ?? 'timed out',
-        )}`,
+      if (live == null || runtimeFrame == null) {
+        throw new Error(
+          `App runtime did not become publish-ready: ${errorMessage(
+            lastLiveError ?? 'timed out',
+          )}`,
+        );
+      }
+      const environmentRead = await runtimeFrame.evaluate(
+        readEnvironmentDescriptor,
+        'largest' as const,
       );
+      assertBrowserEnvironmentDescriptor(environmentRead.environment);
+      if (
+        environmentRead.canvas == null ||
+        environmentRead.canvasIndex == null ||
+        environmentRead.canvasIndex < 0
+      ) {
+        throw new Error('App runtime did not render a canvas');
+      }
+      const canvases = runtimeFrame.locator('canvas');
+      const canvasCount = await canvases.count();
+      if (environmentRead.canvasIndex >= canvasCount) {
+        throw new Error('App runtime frame has no canvas to capture');
+      }
+      const captureBytes = Buffer.from(
+        await canvases
+          .nth(environmentRead.canvasIndex)
+          .screenshot({ type: 'png' }),
+      );
+      const capture = await inspectPngCapture(captureBytes);
+      const presentation = await collectPresentationSnapshot(runtimeFrame, {
+        frameTimes: live.renderStats.frameTimeSamplesMs,
+        hierarchyObjectCount: live.hierarchyObjectCount,
+        renderStats: live.renderStats,
+        warmupFrames: 2,
+      });
+      return {
+        camera: presentation.camera,
+        capture,
+        collectedAt: Date.now(),
+        editor,
+        environment: {
+          ...environmentRead.environment,
+          canvas: environmentRead.canvas,
+        },
+        framing: presentation.framing,
+        hierarchy: live.hierarchy,
+        hierarchyObjectCount: presentation.hierarchyObjectCount,
+        nodes: live.nodes,
+        performance: presentation.performance,
+        renderStats: live.renderStats as Record<string, unknown>,
+        reloadStartedAt,
+        runtimeReloadStartedAt,
+        runtimeHashes: live.runtimeHashes,
+      };
+    } finally {
+      await renderHold.release();
     }
-    const environmentRead = await runtimeFrame.evaluate(
-      readEnvironmentDescriptor,
-      'largest' as const,
-    );
-    assertBrowserEnvironmentDescriptor(environmentRead.environment);
-    if (
-      environmentRead.canvas == null ||
-      environmentRead.canvasIndex == null ||
-      environmentRead.canvasIndex < 0
-    ) {
-      throw new Error('App runtime did not render a canvas');
-    }
-    const canvases = runtimeFrame.locator('canvas');
-    const canvasCount = await canvases.count();
-    if (environmentRead.canvasIndex >= canvasCount) {
-      throw new Error('App runtime frame has no canvas to capture');
-    }
-    const captureBytes = Buffer.from(
-      await canvases
-        .nth(environmentRead.canvasIndex)
-        .screenshot({ type: 'png' }),
-    );
-    const capture = await inspectPngCapture(captureBytes);
-    const presentation = await collectPresentationSnapshot(runtimeFrame, {
-      frameTimes: live.renderStats.frameTimeSamplesMs,
-      hierarchyObjectCount: live.hierarchyObjectCount,
-      renderStats: live.renderStats,
-      warmupFrames: 2,
-    });
-    return {
-      camera: presentation.camera,
-      capture,
-      collectedAt: Date.now(),
-      editor,
-      environment: {
-        ...environmentRead.environment,
-        canvas: environmentRead.canvas,
-      },
-      framing: presentation.framing,
-      hierarchy: live.hierarchy,
-      hierarchyObjectCount: presentation.hierarchyObjectCount,
-      nodes: live.nodes,
-      performance: presentation.performance,
-      renderStats: live.renderStats as Record<string, unknown>,
-      reloadStartedAt,
-      runtimeReloadStartedAt,
-      runtimeHashes: live.runtimeHashes,
-    };
   });
 }
 

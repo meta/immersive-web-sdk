@@ -13,6 +13,7 @@ import {
   handleBrowserRun,
   protectManagedOwnership,
   selectManagedBrowserPage,
+  withRenderHold,
 } from '../src/commands/browser.js';
 
 const temporaryPaths: string[] = [];
@@ -308,5 +309,64 @@ describe('browser run command', () => {
         'target-1',
       ),
     ).rejects.toThrow('found 2');
+  });
+});
+
+describe('browser run render hold', () => {
+  function holdFrame(runtime?: object) {
+    const pageWindow: Record<string, unknown> = runtime
+      ? { FRAMEWORK_MCP_RUNTIME: runtime }
+      : {};
+    return {
+      evaluate: vi.fn(async (fn: (arg: unknown) => unknown, arg: unknown) => {
+        const previous = (globalThis as any).FRAMEWORK_MCP_RUNTIME;
+        (globalThis as any).FRAMEWORK_MCP_RUNTIME =
+          pageWindow.FRAMEWORK_MCP_RUNTIME;
+        try {
+          return await fn(arg);
+        } finally {
+          (globalThis as any).FRAMEWORK_MCP_RUNTIME = previous;
+        }
+      }),
+    };
+  }
+
+  function fakeRuntime() {
+    const holds = new Set<string>();
+    return {
+      holds,
+      acquireRenderHold: vi.fn(() => {
+        holds.add('hold-1');
+        return 'hold-1';
+      }),
+      releaseRenderHold: vi.fn((id: string) => holds.delete(id)),
+    };
+  }
+
+  test('holds rendering while the script runs and releases it afterwards', async () => {
+    const runtime = fakeRuntime();
+    const result = await withRenderHold(holdFrame(runtime), async () => {
+      expect(runtime.holds.size).toBe(1);
+      return 'done';
+    });
+    expect(result).toBe('done');
+    expect(runtime.holds.size).toBe(0);
+  });
+
+  test('releases the hold when the script throws', async () => {
+    const runtime = fakeRuntime();
+    await expect(
+      withRenderHold(holdFrame(runtime), async () => {
+        throw new Error('script failed');
+      }),
+    ).rejects.toThrow('script failed');
+    expect(runtime.releaseRenderHold).toHaveBeenCalledWith('hold-1');
+    expect(runtime.holds.size).toBe(0);
+  });
+
+  test('runs scripts unchanged on apps without render holds', async () => {
+    await expect(withRenderHold(holdFrame(), async () => 'done')).resolves.toBe(
+      'done',
+    );
   });
 });

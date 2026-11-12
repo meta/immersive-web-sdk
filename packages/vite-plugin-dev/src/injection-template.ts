@@ -22,6 +22,10 @@ import {
   initMCPBridge,
   initMCPClient,
 } from './mcp/ws-client.js';
+import {
+  configureOnDemandEmulator,
+  type OnDemandEmulatorWindow,
+} from './on-demand-emulator.js';
 import type { ProcessedDevOptions } from './types.js';
 
 type XRDeviceConfig = ConstructorParameters<typeof XRDevice>[0];
@@ -232,6 +236,14 @@ function initDevRuntime(config: ProcessedDevOptions): void {
       ? META_VR_GLASSES_WITH_GAZE
       : deviceConfig || metaQuest3;
     const xrDevice = new XRDevice(finalDeviceConfig);
+
+    // Managed sessions can render on demand: keep drawn frames on the
+    // emulator's canvas and draw the AR room only when the app draws.
+    configureOnDemandEmulator(
+      xrDevice,
+      window as OnDemandEmulatorWindow,
+      config.verbose ? (message) => console.log(message) : undefined,
+    );
 
     if (config.verbose) {
       console.log(
