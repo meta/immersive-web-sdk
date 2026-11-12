@@ -7,6 +7,7 @@
 
 import { RayIntersector, SphereIntersector } from '@pmndrs/pointer-events';
 import {
+  beginSphereIntersectionPass,
   patchedExecuteIntersection,
   patchedIntersectRayPointerCapture,
   patchedIntersectSpherePointerCapture,
@@ -25,3 +26,11 @@ RayIntersector.prototype.intersectPointerCapture =
 SphereIntersector.prototype.intersectPointerCapture =
   patchedIntersectSpherePointerCapture;
 SphereIntersector.prototype.executeIntersection = patchedExecuteIntersection;
+const startSphereIntersection = SphereIntersector.prototype.startIntersection;
+SphereIntersector.prototype.startIntersection = function (
+  this: SphereIntersector,
+  ...args: Parameters<SphereIntersector['startIntersection']>
+) {
+  beginSphereIntersectionPass();
+  return startSphereIntersection.apply(this, args);
+};

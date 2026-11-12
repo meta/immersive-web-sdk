@@ -38,6 +38,33 @@ const boxCenterHelper = new Vector3();
 const vec0_0001 = new Vector3(0.0001, 0.0001, 0.0001);
 const invertedMatrixHelper = new Matrix4();
 
+/**
+ * One sphere-pointer traversal (from `startIntersection` to the end of the
+ * scene walk) tests many objects that share ancestors. `updateWorldMatrix(true,
+ * false)` per object recomposed the whole ancestor chain every time; within a
+ * pass the scene does not change, so each object's world matrix is brought up
+ * to date once.
+ */
+let intersectionPass = 0;
+const worldMatrixPass = new WeakMap<Object3D, number>();
+
+/** Start a new sphere-intersection pass. Called from `startIntersection`. */
+export function beginSphereIntersectionPass(): void {
+  intersectionPass++;
+}
+
+/** `object.updateWorldMatrix(true, false)`, once per pass per object. */
+function updateWorldMatrixOncePerPass(object: Object3D): void {
+  if (worldMatrixPass.get(object) === intersectionPass) {
+    return;
+  }
+  if (object.parent != null) {
+    updateWorldMatrixOncePerPass(object.parent);
+  }
+  object.updateWorldMatrix(false, false);
+  worldMatrixPass.set(object, intersectionPass);
+}
+
 export function patchedIntersectRayPointerCapture(
   this: any,
   { intersection, object }: PointerCapture,
@@ -224,7 +251,12 @@ function patchedIntersectSphereWithObject(
   object: Object3D,
   target: any,
 ) {
-  object.updateWorldMatrix(true, false);
+  // Groups and other non-mesh nodes have nothing to test; their children
+  // update their ancestors' matrices when they need them.
+  if (object.spherecast == null && !(object instanceof Mesh)) {
+    return;
+  }
+  updateWorldMatrixOncePerPass(object);
   if (object.spherecast != null) {
     object.spherecast(pointerSphere, target);
     return;
@@ -264,7 +296,6 @@ function patchedIntersectSphereWithObject(
   ) {
     return;
   }
-  invertedMatrixHelper.copy(object.matrixWorld).invert();
   const intersection = patchedIntersectSphereMesh(
     pointerSphere,
     object,
