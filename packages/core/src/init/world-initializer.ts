@@ -89,6 +89,10 @@ import {
   type SkinnedMesh,
 } from '../runtime/index.js';
 import {
+  RuntimeSettings,
+  RuntimeSettingsSystem,
+} from '../runtime-settings/index.js';
+import {
   SceneUnderstandingSystem,
   XRAnchor,
   XRMesh,
@@ -662,6 +666,8 @@ export function manageOfferFlow(world: World, mode: 'once' | 'always') {
  */
 function registerCoreSystems(world: World) {
   world
+    .registerComponent(RuntimeSettings)
+    .registerSystem(RuntimeSettingsSystem)
     .registerComponent(RayInteractable)
     .registerComponent(PokeInteractable)
     .registerComponent(Hovered)
@@ -934,7 +940,10 @@ export function setupRenderLoop(world: World, renderer: WebGLRenderer) {
 
   const skeletons = new Set<Skeleton>();
 
+  const runtimeSettings = world.getSystem(RuntimeSettingsSystem);
+
   const render = () => {
+    runtimeSettings?.sync();
     const draw = world.beginRenderTick();
     timer.update();
     const delta = timer.getDelta();
