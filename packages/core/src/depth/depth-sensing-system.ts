@@ -12,6 +12,7 @@ import { type IUniform, Mesh, Texture, Vector2 } from '../runtime/three.js';
 import { DepthOccludable, OcclusionShadersMode } from './depth-occludable.js';
 import { DepthTextures } from './depth-textures.js';
 import { DepthPreprocessingPass } from './occlusion/preprocessing-pass.js';
+import { addOnBeforeCompile } from './on-before-compile.js';
 
 type ShaderUniforms = { [uniform: string]: IUniform };
 
@@ -191,18 +192,14 @@ export class DepthSensingSystem extends createSystem(
           continue;
         }
         material.transparent = true;
-        const existingCallback = material.onBeforeCompile?.bind(material);
-        material.onBeforeCompile = (shader: any, renderer: any) => {
-          if (existingCallback) {
-            existingCallback(shader, renderer);
-          }
+        addOnBeforeCompile(material, (shader: any) => {
           // Only inject occlusion if not already present
           if (!shader.uniforms.occlusionEnabled) {
             DepthSensingSystem.addOcclusionToShader(shader);
           }
           material.userData.shader = shader;
           entityUniforms.add(shader.uniforms);
-        };
+        });
         material.needsUpdate = true;
       }
     });
