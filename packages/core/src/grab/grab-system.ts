@@ -83,6 +83,9 @@ export class GrabSystem extends createSystem(
     useHandPinchForGrab: { type: Types.Boolean, default: true },
   },
 ) {
+  /** Which grabbable component created each entity's Handle, by entity index. */
+  private handleSources = new Map<number, GrabbableComponent>();
+
   init() {
     // Ensure Handle component is registered in the world before queries rely on it
     if (!Handle.bitmask) {
@@ -103,8 +106,22 @@ export class GrabSystem extends createSystem(
       this.initializeDistanceHandle(entity);
     });
 
+    // Removing the grabbable that created the Handle removes the Handle too,
+    // which restores the object's pointer events (its ray was denied while
+    // grabbable). Another grabbable left on the entity gets its own Handle.
+    this.queries.oneHandGrabbables.subscribe('disqualify', (entity) =>
+      this.releaseHandle(entity, OneHandGrabbable),
+    );
+    this.queries.twoHandsGrabbables.subscribe('disqualify', (entity) =>
+      this.releaseHandle(entity, TwoHandsGrabbable),
+    );
+    this.queries.distanceGrabbables.subscribe('disqualify', (entity) =>
+      this.releaseHandle(entity, DistanceGrabbable),
+    );
+
     // Unified cleanup for any handle
     this.queries.handles.subscribe('disqualify', (entity) => {
+      this.handleSources.delete(entity.index);
       const h = Handle.data.instance[entity.index] as
         | HandleStore<unknown>
         | undefined;
@@ -281,6 +298,7 @@ export class GrabSystem extends createSystem(
     handle.bind(obj);
     obj.pointerEventsType = { deny: 'ray' };
     entity.addComponent(Handle, { instance: handle });
+    this.handleSources.set(entity.index, OneHandGrabbable);
   }
 
   private initializeTwoHandsHandle(entity: Entity) {
@@ -333,6 +351,7 @@ export class GrabSystem extends createSystem(
     handle.bind(obj);
     obj.pointerEventsType = { deny: 'ray' };
     entity.addComponent(Handle, { instance: handle });
+    this.handleSources.set(entity.index, TwoHandsGrabbable);
   }
 
   private initializeDistanceHandle(entity: Entity) {
@@ -424,5 +443,29 @@ export class GrabSystem extends createSystem(
     handle.bind(obj);
     obj.pointerEventsType = { deny: 'grab' };
     entity.addComponent(Handle, { instance: handle });
+    this.handleSources.set(entity.index, DistanceGrabbable);
+  }
+
+  private releaseHandle(entity: Entity, removed: GrabbableComponent) {
+    // A destroyed entity has no components left; its Handle cleanup has run.
+    if (!entity.active || !entity.hasComponent(Handle)) {
+      return;
+    }
+    if (this.handleSources.get(entity.index) !== removed) {
+      return;
+    }
+    entity.removeComponent(Handle);
+    if (entity.hasComponent(OneHandGrabbable)) {
+      this.initializeOneHandHandle(entity);
+    } else if (entity.hasComponent(TwoHandsGrabbable)) {
+      this.initializeTwoHandsHandle(entity);
+    } else if (entity.hasComponent(DistanceGrabbable)) {
+      this.initializeDistanceHandle(entity);
+    }
   }
 }
+
+type GrabbableComponent =
+  | typeof OneHandGrabbable
+  | typeof TwoHandsGrabbable
+  | typeof DistanceGrabbable;
