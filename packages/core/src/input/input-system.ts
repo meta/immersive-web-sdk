@@ -17,6 +17,7 @@ import { Mesh, Object3D, Object3DEventMap } from '../runtime/index.js';
 import { Transform } from '../transform/index.js';
 import {
   Hovered,
+  PokeHand,
   PokeInteractable,
   Pressed,
   RayInteractable,
@@ -69,6 +70,11 @@ export class InputSystem extends createSystem(
   private rayDescendants: Object3D[] = [];
   /** Descendants for touch/poke pointer intersection */
   private touchDescendants: Object3D[] = [];
+  /** Touch descendants each hand may poke (see PokeInteractable.hand) */
+  private touchDescendantsByHand: { left: Object3D[]; right: Object3D[] } = {
+    left: [],
+    right: [],
+  };
   /** Descendants for grab pointer intersection */
   private grabDescendants: Object3D[] = [];
   private shouldSetIntersectables = false;
@@ -166,6 +172,8 @@ export class InputSystem extends createSystem(
   private updateDescendantArrays(): void {
     this.rayDescendants.length = 0;
     this.touchDescendants.length = 0;
+    this.touchDescendantsByHand.left.length = 0;
+    this.touchDescendantsByHand.right.length = 0;
     this.grabDescendants.length = 0;
 
     if (!this.shouldSetIntersectables) {
@@ -173,6 +181,7 @@ export class InputSystem extends createSystem(
       (this.scene as any).interactableDescendants = undefined;
       (this.scene as any).rayDescendants = undefined;
       (this.scene as any).touchDescendants = undefined;
+      (this.scene as any).touchDescendantsByHand = undefined;
       (this.scene as any).grabDescendants = undefined;
       return;
     }
@@ -196,6 +205,13 @@ export class InputSystem extends createSystem(
       const obj = entity.object3D;
       if (obj) {
         this.touchDescendants.push(obj);
+        const hand = entity.getValue(PokeInteractable, 'hand');
+        if (hand !== PokeHand.Right) {
+          this.touchDescendantsByHand.left.push(obj);
+        }
+        if (hand !== PokeHand.Left) {
+          this.touchDescendantsByHand.right.push(obj);
+        }
       }
     }
 
@@ -216,6 +232,7 @@ export class InputSystem extends createSystem(
     // Set type-specific arrays on scene
     (this.scene as any).rayDescendants = this.rayDescendants;
     (this.scene as any).touchDescendants = this.touchDescendants;
+    (this.scene as any).touchDescendantsByHand = this.touchDescendantsByHand;
     (this.scene as any).grabDescendants = this.grabDescendants;
 
     // Also set legacy interactableDescendants as union for backwards compatibility

@@ -7,7 +7,7 @@
 
 // Import from the leaf module rather than '../ecs/index.js': the barrel pulls
 // in builtin-components, which imports this file, forming a cycle.
-import { createComponent } from '../ecs/component.js';
+import { Types, createComponent } from '../ecs/component.js';
 
 /**
  * Marks an entity as eligible for ray-based pointer interaction.
@@ -38,22 +38,45 @@ export const RayInteractable = createComponent(
 );
 
 /**
+ * Which hands can poke a {@link PokeInteractable}.
+ *
+ * @category Input
+ */
+export const PokeHand = {
+  /** Either hand or controller. */
+  Both: 'both',
+  /** Only the left hand or controller. */
+  Left: 'left',
+  /** Only the right hand or controller. */
+  Right: 'right',
+} as const;
+
+/**
  * Marks an entity as eligible for poke/touch interaction.
  *
  * @remarks
  * - Used for UI elements that can be poked/touched with finger or controller.
  * - Auto-selects when finger crosses the surface (distance <= 0).
  * - Uses hysteresis (separate enter/exit thresholds) to prevent flickering.
+ * - `hand` limits poking to one hand, for example a wrist menu on the left
+ *   hand that only the right index finger should press.
  *
  * @category Input
  * @example Create a pokeable button
  * ```ts
  * entity.addComponent(PokeInteractable);
  * ```
+ * @example Let only the right hand press a wrist-mounted menu
+ * ```ts
+ * entity.addComponent(PokeInteractable, { hand: PokeHand.Right });
+ * ```
  */
 export const PokeInteractable = createComponent(
   'PokeInteractable',
-  {},
+  {
+    /** Hands that can poke this entity. More details in {@link PokeHand}. */
+    hand: { type: Types.Enum, enum: PokeHand, default: PokeHand.Both },
+  },
   'Marks an entity as eligible for poke/touch interaction.',
 );
 

@@ -7,7 +7,12 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { InputSystem } from '../../src/input/input-system.js';
-import { Hovered, Pressed } from '../../src/input/state-tags.js';
+import {
+  Hovered,
+  PokeHand,
+  PokeInteractable,
+  Pressed,
+} from '../../src/input/state-tags.js';
 import { Object3D } from '../../src/runtime/three.js';
 
 function createHarness() {
@@ -70,6 +75,7 @@ describe('InputSystem cleanup', () => {
     system.shouldSetIntersectables = true;
     system.rayDescendants = [];
     system.touchDescendants = [];
+    system.touchDescendantsByHand = { left: [], right: [] };
     system.grabDescendants = [];
     system.scene = scene;
     system.input = {
@@ -98,6 +104,50 @@ describe('InputSystem cleanup', () => {
     expect(snapshots).toEqual([[], [explicitRay, distanceOnly]]);
     expect(xr.gazeCandidates).toBe(system.rayDescendants);
     expect(scene.rayDescendants).toBe(system.rayDescendants);
+  });
+
+  it('lists each poke target only for the hands that may poke it (#62)', () => {
+    const both = new Object3D();
+    const leftOnly = new Object3D();
+    const rightOnly = new Object3D();
+    const poke = (object3D: Object3D, hand: string) => ({
+      object3D,
+      getValue: (component: unknown, key: string) =>
+        component === PokeInteractable && key === 'hand' ? hand : undefined,
+    });
+    const scene: Record<string, any> = {};
+    const system = Object.create(InputSystem.prototype) as any;
+    system.shouldSetIntersectables = true;
+    system.rayDescendants = [];
+    system.touchDescendants = [];
+    system.touchDescendantsByHand = { left: [], right: [] };
+    system.grabDescendants = [];
+    system.scene = scene;
+    system.input = { xr: {}, update: vi.fn() };
+    system.world = { renderer: { xr: {} } };
+    system.queries = {
+      rayInteractables: { entities: new Set() },
+      distanceGrabbables: { entities: new Set() },
+      pokeInteractables: {
+        entities: new Set([
+          poke(both, PokeHand.Both),
+          poke(leftOnly, PokeHand.Left),
+          poke(rightOnly, PokeHand.Right),
+        ]),
+      },
+      oneHandGrabbables: { entities: new Set() },
+      twoHandsGrabbables: { entities: new Set() },
+    };
+
+    system.update(0, 0);
+
+    expect(scene.touchDescendants).toEqual([both, leftOnly, rightOnly]);
+    expect(scene.touchDescendantsByHand.left).toEqual([both, leftOnly]);
+    expect(scene.touchDescendantsByHand.right).toEqual([both, rightOnly]);
+
+    // Lists are rebuilt each frame, not appended to.
+    system.update(0, 1);
+    expect(scene.touchDescendantsByHand.left).toEqual([both, leftOnly]);
   });
 
   it('detaches pointer listeners without mutating a destroyed entity', () => {

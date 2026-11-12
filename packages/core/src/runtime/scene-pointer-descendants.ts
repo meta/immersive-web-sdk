@@ -11,6 +11,8 @@ export type ScenePointerDescendants = {
   interactableDescendants?: Object3D[];
   rayDescendants?: Object3D[];
   touchDescendants?: Object3D[];
+  /** Touch descendants each hand may poke (PokeInteractable.hand). */
+  touchDescendantsByHand?: { left: Object3D[]; right: Object3D[] };
   grabDescendants?: Object3D[];
   screenSpaceDescendants?: Object3D[];
 };

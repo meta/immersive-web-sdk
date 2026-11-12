@@ -256,7 +256,9 @@ it.
 
 When the request asks for a poke (near touch) on a control, press it with the
 emulated hand's index fingertip by its element ID. The panel entity needs
-`PokeInteractable`:
+`PokeInteractable`. Its `hand` field (`"both"`, the default, `"left"` or
+`"right"`) limits which hand can poke it, for example a wrist menu that only
+the other hand should press:
 
 ```bash
 npx @iwsdk/cli xr set-input-mode --input-json '{"mode":"hand"}'

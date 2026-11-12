@@ -94,6 +94,8 @@ export class MultiPointer {
     interactableDescendants?: Object3D[];
     rayDescendants?: Object3D[];
     touchDescendants?: Object3D[];
+    /** Touch descendants per hand; preferred over touchDescendants when set. */
+    touchDescendantsByHand?: { left: Object3D[]; right: Object3D[] };
     grabDescendants?: Object3D[];
   };
 
@@ -346,7 +348,7 @@ export class MultiPointer {
     // Touch pointer
     if (this.pointerStates.get('touch') !== InteractorState.DISABLED) {
       this.sceneWithDescendants.interactableDescendants =
-        this.sceneWithDescendants.touchDescendants;
+        this.touchCandidates();
       this.touch.pointer.move(this.scene, this.nativeEvent);
       this.markPointerMoved('touch', this.touch.pointer);
     }
@@ -374,7 +376,7 @@ export class MultiPointer {
         break;
       case 'touch':
         this.sceneWithDescendants.interactableDescendants =
-          this.sceneWithDescendants.touchDescendants;
+          this.touchCandidates();
         break;
     }
 
@@ -597,6 +599,14 @@ export class MultiPointer {
   /**
    * Get the policy for ray visual rendering
    */
+  /** Objects this hand may poke: its own list when the scene has one. */
+  private touchCandidates(): Object3D[] | undefined {
+    return (
+      this.sceneWithDescendants.touchDescendantsByHand?.[this.handedness] ??
+      this.sceneWithDescendants.touchDescendants
+    );
+  }
+
   getPolicyForRay() {
     return { forceHideRay: this.shouldHideRay() };
   }
