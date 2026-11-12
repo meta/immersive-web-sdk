@@ -1091,3 +1091,16 @@ describe('GazePointer diagnostics', () => {
     expect(warnings().filter((m) => m.includes('NOT granted'))).toHaveLength(2);
   });
 });
+
+describe('GazePointer raycaster', () => {
+  it('gives the raycaster the viewing camera so sprites can be hit (#57)', () => {
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    const camera = new PerspectiveCamera();
+    const xrOrigin = new XROrigin();
+    const scene = new Scene();
+    scene.add(xrOrigin);
+    const pointer = new GazePointer(xrOrigin, scene, camera);
+    expect((pointer.pointer.intersector as any).raycaster.camera).toBe(camera);
+    vi.restoreAllMocks();
+  });
+});

@@ -660,11 +660,13 @@ export class GazePointer {
     // BVH-accelerated firstHitOnly raycast (matches hand RayPointer).
     const raycaster = (
       this.pointer.intersector as unknown as {
-        raycaster?: { firstHitOnly?: boolean };
+        raycaster?: { firstHitOnly?: boolean; camera?: PerspectiveCamera };
       }
     ).raycaster;
     if (raycaster) {
       raycaster.firstHitOnly = true;
+      // Sprite.raycast needs the viewing camera (see RayPointer).
+      raycaster.camera = camera;
     }
   }
 

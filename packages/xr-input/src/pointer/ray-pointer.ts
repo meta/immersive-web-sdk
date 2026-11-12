@@ -81,6 +81,9 @@ export class RayPointer {
     const raycaster = (this.pointer.intersector as any).raycaster;
     if (raycaster) {
       raycaster.firstHitOnly = true;
+      // Sprite.raycast needs the viewing camera, and the XR ray intersector
+      // never sets one (the screen intersector does, via setFromCamera).
+      raycaster.camera = camera;
     }
     this.ray = new Mesh(
       new CylinderGeometry(0.001, 0.001, 1, 6, 1, true)

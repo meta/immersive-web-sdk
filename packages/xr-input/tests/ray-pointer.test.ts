@@ -13,6 +13,8 @@ import {
   PerspectiveCamera,
   Quaternion,
   Scene,
+  Sprite,
+  SpriteMaterial,
   Vector3,
   type Intersection,
 } from 'three';
@@ -94,6 +96,39 @@ describe('RayPointer', () => {
 
     expect(clicks).toBe(1);
     pointer.dispose();
+  });
+
+  test('raycasts sprites in XR without a missing-camera error (#57)', () => {
+    const scene = new Scene();
+    const root = new Group();
+    (root as any).pointerEvents = 'auto';
+    const material = new SpriteMaterial();
+    const sprite = new Sprite(material);
+    sprite.position.z = -2;
+    root.add(sprite);
+    scene.add(root);
+    scene.updateMatrixWorld(true);
+
+    const camera = new PerspectiveCamera();
+    camera.updateMatrixWorld(true);
+    const raySpace = new Group();
+    raySpace.updateMatrixWorld(true);
+    const pointer = new RayPointer(
+      camera,
+      {
+        raySpaces: { left: raySpace, right: new Group() },
+      } as unknown as XROrigin,
+      'left',
+    );
+
+    expect((pointer.pointer.intersector as any).raycaster.camera).toBe(camera);
+    const intersection = pointer.pointer.computeIntersection('pointer', scene, {
+      timeStamp: 0,
+    });
+
+    expect(intersection.object).toBe(sprite);
+    pointer.dispose();
+    material.dispose();
   });
 
   test('ignores invisible meshes when choosing the nearest ray target', () => {
