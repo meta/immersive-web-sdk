@@ -573,6 +573,15 @@ export class MultiPointer {
       if (state === InteractorState.HOVER) {
         this.pointerStates.set(this.activeKind!, InteractorState.NORMAL);
       }
+      // The selected object went away (e.g. the app disposed it) and the
+      // button was released off any target. Release anyway, as the touch
+      // lifecycle does, or the selection lock never ends.
+      if (state === InteractorState.SELECT && buttonUp) {
+        this.buttonEvent.timeStamp = this.nativeEvent.timeStamp;
+        this.buttonEvent.button = button;
+        entry.pointer.up(this.buttonEvent);
+        this.pointerStates.set(this.activeKind!, InteractorState.NORMAL);
+      }
       return;
     }
 
