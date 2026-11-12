@@ -270,6 +270,24 @@ Assert: Neither `Hovered` nor `Pressed` present.
 
 ### Suite 5: Ray Interaction on Panel
 
+**Setup: aim the left controller away from the panel.** The left controller's
+default pose, (-0.25, 1.5, -0.4) facing -Z, points its ray at the panel, so the
+panel would stay `Hovered` through Suites 5–7 whatever the right controller does.
+Turn it to face -X (yaw 90), away from the panel; Suites 5–7 do not move it
+again.
+
+```bash
+npx @iwsdk/cli xr set-transform --input-json '{"device":"controller-left","position":{"x":-0.25,"y":1.5,"z":-0.4},"orientation":{"pitch":0,"roll":0,"yaw":90}}' 2>/dev/null
+```
+
+Then: `sleep 0.5`
+
+```bash
+npx @iwsdk/cli ecs query --input-json '{"entityIndex":<panel>,"components":["Hovered"]}' 2>/dev/null
+```
+
+Assert: `Hovered` absent before Test 5.1.
+
 **Test 5.1: Ray Hover**
 
 ```bash
@@ -354,6 +372,13 @@ Assert: Both `Hovered` and `Pressed` present.
 
 ```bash
 npx @iwsdk/cli xr animate-to --input-json '{"device":"controller-right","position":{"x":0.3,"y":1.5,"z":-0.3},"duration":0.3}' --timeout 20000 2>/dev/null
+```
+
+The rest position still faces -Z, and from there the ray reaches the panel.
+Turn the controller away so only the poke release is measured:
+
+```bash
+npx @iwsdk/cli xr set-transform --input-json '{"device":"controller-right","position":{"x":0.3,"y":1.5,"z":-0.3},"orientation":{"pitch":0,"roll":0,"yaw":-90}}' 2>/dev/null
 ```
 
 Then: `sleep 0.5`
@@ -642,13 +667,24 @@ If at any point a transient error occurs (server crash, WebSocket timeout, conne
 1. Stop the dev server: `cd $IWSDK_REPO_ROOT/examples/poke && npx @iwsdk/cli dev down`
 2. Restart: re-run Step 2 to start a fresh dev server
 3. Re-run the Pre-test Setup (reload, accept session)
-4. Retry the failed suite
+4. If the failed suite is 5, 6 or 7, re-run the Suite 5 setup step first: the
+   reload puts the left controller back at its default pose, where its ray
+   hovers the panel
+5. Retry the failed suite
 
 Only give up after one retry attempt per suite. If the same suite fails twice, mark it FAIL and continue to the next suite.
 
 ---
 
 ## Known Issues & Workarounds
+
+### Stray controller rays hover the panel
+
+Both controllers' default poses face -Z, and the panel sits in front of the
+player, so either ray can hover it. Suites 5–7 turn the left controller away
+first and turn the right controller away in Test 6.3. If the panel unexpectedly
+keeps `Hovered`, check `xr get-transform` for both controllers before suspecting
+the interaction system.
 
 ### Poke timing sensitivity
 

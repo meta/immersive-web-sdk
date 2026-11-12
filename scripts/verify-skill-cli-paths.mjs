@@ -24,7 +24,7 @@ const SKILLS_DIR = path.join(ROOT, '.claude', 'skills');
 const INSPECT_CWD = path.join(ROOT, 'examples', 'poke');
 const CLI_ENTRYPOINT = path.join(ROOT, 'packages', 'cli', 'bin', 'iwsdk.js');
 
-const RUNTIME_DOMAINS = new Set(['xr', 'browser', 'scene', 'ecs']);
+const RUNTIME_DOMAINS = new Set(['xr', 'browser', 'scene', 'ecs', 'ui']);
 const NON_TOOL_SUBCOMMANDS = new Set([
   'mcp inspect',
   'mcp stdio',
@@ -73,9 +73,13 @@ function loadCliPaths() {
 }
 
 function listSkillFiles() {
-  return readdirSync(SKILLS_DIR, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && entry.name.startsWith('test-'))
-    .map((entry) => path.join(SKILLS_DIR, entry.name, 'SKILL.md'));
+  return [
+    ...readdirSync(SKILLS_DIR, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && entry.name.startsWith('test-'))
+      .map((entry) => path.join(SKILLS_DIR, entry.name, 'SKILL.md')),
+    // Agent guidance that teaches runtime CLI invocations.
+    path.join(SKILLS_DIR, 'iwsdk-dev', 'references', 'headless-rendering.md'),
+  ];
 }
 
 function extractInvocations(text) {

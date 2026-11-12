@@ -68,7 +68,8 @@ IWSDK supports two usage modes built on the same managed runtime/editor workspac
 
 Collaborate mode is the default. It opens one visible managed browser containing
 the runtime preview and editor, so the dev server does not also open a separate
-normal-browser window. Select agent mode explicitly for unattended headless work.
+normal-browser window. Select agent mode explicitly for unattended headless work;
+it renders on demand (see [Modes](./modes#rendering-in-headless-sessions)).
 
 See [Modes](./modes) for the full deep dive.
 

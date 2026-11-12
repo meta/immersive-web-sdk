@@ -21,6 +21,7 @@ const REPO_ROOT = path.resolve(PACKAGE_ROOT, '..', '..');
 const DEV_FILES = [
   'SKILL.md',
   'references/api-reference.md',
+  'references/headless-rendering.md',
   'references/iterate.md',
   'references/planner.md',
 ] as const;
@@ -115,6 +116,7 @@ describe('@iwsdk/create packed contract', () => {
       'dist/guidance/files/.agents/skills/iwsdk-dev/SKILL.md',
       'dist/guidance/files/.agents/skills/iwsdk-dev/references/iterate.md',
       'dist/guidance/files/.agents/skills/iwsdk-dev/references/planner.md',
+      'dist/guidance/files/.agents/skills/iwsdk-dev/references/headless-rendering.md',
       'dist/guidance/files/.agents/skills/iwsdk-native-xr-test/SKILL.md',
       'dist/guidance/files/.agents/skills/iwsdk-glasses-test/SKILL.md',
       'dist/guidance/files/.agents/skills/iwsdk-ui/SKILL.md',

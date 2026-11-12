@@ -211,7 +211,9 @@ replacing their visible collaboration window. Do not start an untouched or
 knowingly non-typechecking app. Exercise the real paths rather than inferring
 behavior from code. Confirm `npx @iwsdk/cli xr status` is active before making pose,
 controller/hand alignment, or immersive-interaction claims; a flat screenshot
-outside XR cannot prove them.
+outside XR cannot prove them. Headless sessions draw only when a tool needs
+pixels; read references/headless-rendering.md before relying on frame rate,
+frame timing, or which frame a screenshot shows.
 
 Verify:
 

@@ -373,7 +373,7 @@ Three.js Object3D UUIDs regenerate on page reload. Always call `npx @iwsdk/cli s
 
 ### ecs_step timeout
 
-`npx @iwsdk/cli ecs step` has a 5-second timeout per step. If render loop is inactive, steps may fail.
+Steps advance on the app's animation loop, and each step waits up to 5 seconds for its frame. A per-step timeout means the loop is not running (the page has not finished loading, or an exception stopped it); splitting the step will not help, so check `browser logs` first. A large `count` can also exceed the CLI's whole-command timeout (30 s); split it into smaller steps or pass a larger `--timeout`. On-demand rendering in headless sessions does not affect stepping: systems tick even on frames that are not drawn.
 
 ### Entity indices change on reload
 

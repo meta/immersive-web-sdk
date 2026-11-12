@@ -91,6 +91,40 @@ update visibilityState → world.update(delta,time) → renderer.render(scene,ca
 
 Within `world.update`, systems run by ascending priority. Use negative priorities for input/physics that must precede visual updates.
 
+## Render modes
+
+`world.renderMode` decides whether each tick draws:
+
+- `'continuous'` (the default): every tick draws. Apps you ship use this.
+- `'on-demand'`: systems still run every tick, but a tick draws only when
+  something asks for a frame. Object world matrices, skinned-mesh bones and the
+  XR camera pose still update every tick, so raycasts, grabbing, physics and UI
+  behave the same. Headless development sessions use this mode so a machine
+  without a GPU does not software-rasterize every frame.
+
+```ts
+// Draw the next frame (or the next n frames) even in on-demand mode.
+await world.requestRender();
+
+// Draw every frame until released; holds are counted.
+const release = world.holdRender();
+// ... capture video, read pixels over several frames ...
+release();
+```
+
+`requestRender()` resolves on the tick after the frame is drawn, once the
+browser has presented it. That suits page-level captures such as a browser
+screenshot, but by then the WebGL drawing buffer may already be cleared. Code
+that reads pixels back from the canvas itself (for example `toDataURL()` or
+`readPixels`) should draw and read in the same task, by calling
+`renderer.render()` and reading right after it, or create the renderer with
+`preserveDrawingBuffer: true`.
+
+Headless development sessions start in on-demand mode (opt out with
+`IWSDK_DEV_RENDER_MODE=continuous`). The runtime-only `RuntimeSettings`
+component switches the mode live; see
+[AI modes](/ai/modes#rendering-in-headless-sessions).
+
 ## Levels
 
 ```ts

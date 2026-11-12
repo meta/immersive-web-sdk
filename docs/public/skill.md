@@ -174,6 +174,15 @@ auto-detects GPU availability first:
 **No manual patching required** in 0.4.x. Use the normal generated app workflow:
 `npm run dev` or `npx @iwsdk/cli dev restart --open --foreground`.
 
+### On-Demand Rendering
+
+IWSDK 1.1 and later: headless managed sessions render on demand (earlier
+versions draw every frame): systems run every frame, and the
+app draws only when a tool needs pixels (`browser screenshot` draws a fresh
+frame itself). Software rendering therefore no longer limits the frame rate of
+agent sessions. Set `IWSDK_DEV_RENDER_MODE=continuous` to draw every frame, and
+use `browser profile` rather than headless frame rates to judge performance.
+
 ### Environment Variable Override
 
 ```bash

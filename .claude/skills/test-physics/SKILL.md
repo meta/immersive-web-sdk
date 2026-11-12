@@ -147,6 +147,10 @@ npx @iwsdk/cli ecs snapshot --input-json '{"label":"before-fall"}' 2>/dev/null
 npx @iwsdk/cli ecs step --input-json '{"count":50}' 2>/dev/null
 ```
 
+If that command times out as a whole, run it as 10 calls with `{"count":5}` (or
+pass a larger `--timeout`); the result is the same. A per-step timeout instead
+means the app's loop is not running; check `browser logs`.
+
 ```bash
 npx @iwsdk/cli ecs snapshot --input-json '{"label":"after-fall"}' 2>/dev/null
 ```

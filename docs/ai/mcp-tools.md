@@ -446,7 +446,7 @@ is out of reach. The result lists the select events the application saw, step ti
 press contact times, warnings, and the final hand state. Pass `dryRun: true` to check
 a plan without moving anything. A sequence gives up 28 seconds after it is sent, with
 a partial result; `xr_cancel_sequence` stops it sooner. A UIKit click needs the
-fingertip to leave within 800 ms; slow headless frames can stretch a press past that,
+fingertip to leave within 800 ms; a stalled frame can stretch a press past that,
 so press again when `presses[0].contactMs` is 800 or more.
 
 ```bash

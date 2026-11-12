@@ -55,6 +55,7 @@ separate manual runtime view.
 | Headless       | Yes                                         |
 | Viewport       | Fixed to `screenshotSize` (default 800x800) |
 | DevUI          | Off                                         |
+| Rendering      | On demand (see below)                       |
 | Normal browser | Does not open                               |
 | Screenshots    | Exact viewport size                         |
 
@@ -64,6 +65,33 @@ npx @iwsdk/cli dev up --ai-mode agent \
 ```
 
 Use this mode for unattended automation or deterministic screenshot dimensions.
+
+## Rendering in Headless Sessions
+
+A headless managed session (agent mode, or `--headless`) renders **on demand**.
+Every ECS system, input, physics and UI update still runs on every frame, but the
+app draws a frame only when a tool needs pixels. On a machine without a GPU,
+where every draw is software-rasterized, this keeps the app at the browser's
+frame rate instead of a few frames per second, and keeps commands responsive.
+
+- `browser screenshot` draws a fresh frame first, so it always shows the
+  current state. In XR, the emulator keeps the drawn frame on the canvas
+  (`XRDevice.frameClearEnabled`), so one frame is enough. In emulated AR, the
+  synthetic room behind the app (`XRDevice.shouldDrawEnvironment`) draws only
+  on frames the app draws, so the two always match.
+- `ecs pause`, `ecs step`, then `browser screenshot` captures an exact
+  simulation frame. `browser filmstrip` captures several in one image.
+- `scene_get_render_stats` (`scene render-stats`) draws one fresh frame
+  before it reads the stats. `browser profile`, runtime evidence and
+  `browser run` scripts draw every frame while they run.
+- The runtime-only `RuntimeSettings` component switches the mode live:
+  `ecs find` it, then `ecs set-component` its `renderMode` field to
+  `"continuous"` or `"on-demand"`. It is never saved into scene files.
+- Start with `IWSDK_DEV_RENDER_MODE=continuous` to draw every frame from the
+  start. Headed sessions, including collaborate mode, always draw every frame.
+
+Do not judge performance from a headless session's frame rate; use
+`browser profile` or a device.
 
 ## Workspace-Only Mode
 
@@ -84,6 +112,7 @@ Playwright at startup; browser commands can launch it lazily.
 | `headless`    | `false`                  | `true`                   |
 | `viewport`    | `null` (resizable)       | Fixed (`screenshotSize`) |
 | `devUI`       | `true`                   | `false`                  |
+| Rendering     | Every frame              | On demand                |
 | `server.open` | `false`                  | `false`                  |
 | Screenshot    | Downscaled to fit bounds | Exact size               |
 
@@ -93,6 +122,8 @@ Playwright at startup; browser commands can launch it lazily.
 - `--headed` / `--headless`
 - `--open` / `--no-open`
 - `--screenshot-width <pixels>` / `--screenshot-height <pixels>`
+- `IWSDK_DEV_RENDER_MODE=continuous` (environment): draw every frame in a
+  headless session
 
 The managed workspace and MCP endpoint remain available for every
 manifest-first development server even when no AI mode is selected.

@@ -587,6 +587,9 @@ describe('common starter project files', () => {
     expect(paths).toContain('.agents/skills/iwsdk-glasses-test/SKILL.md');
     expect(paths).toContain('.agents/skills/iwsdk-dev/references/planner.md');
     expect(paths).toContain('.agents/skills/iwsdk-dev/references/iterate.md');
+    expect(paths).toContain(
+      '.agents/skills/iwsdk-dev/references/headless-rendering.md',
+    );
     expect(paths).toContain('.agents/skills/iwsdk-build-model/SKILL.md');
     expect(paths).toContain(
       '.agents/skills/iwsdk-build-model/assets/hardsurface.ts.template',

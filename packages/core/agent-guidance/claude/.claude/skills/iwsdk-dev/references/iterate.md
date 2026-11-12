@@ -88,7 +88,9 @@ the output bounded. The existing scaffold rules are already in context:
    and recovery when the request needs them.
 4. Run one batched typecheck and fix errors together.
 5. Start the managed runtime directly with
-   `npx @iwsdk/cli dev up --headless --timeout 45000`.
+   `npx @iwsdk/cli dev up --headless --timeout 45000`. Headless sessions draw
+   only when a tool needs pixels; read references/headless-rendering.md before
+   relying on frame rate, frame timing, or which frame a screenshot shows.
 6. Exercise the changed path with real user input and query only the named state
    needed to prove it. Direct ECS mutation may prepare/reset a scenario but is
    not interaction proof.
@@ -150,7 +152,7 @@ npx @iwsdk/cli xr run-sequence --input-json '{"device":"hand-right","steps":[{"p
 ```
 
 Query `Grabbed` between the grab and the release. A press result whose
-`presses[0].contactMs` is 800 or more did not click. Slow headless frames can
+`presses[0].contactMs` is 800 or more did not click. A stalled frame can
 stretch a press that far, so run that press once more before changing code.
 
 If a scene/source/UI edit happens after the managed runtime started and live

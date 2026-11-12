@@ -20,7 +20,9 @@ When you call `World.create(container, options)` IWSDK:
 7. Initializes `AssetManager`.
 8. Starts the render loop (`renderer.setAnimationLoop`): each tick sets
    `visibilityState`, runs `world.update(delta, time)`, invokes registered
-   `world.onXRFrame` callbacks when an XR frame exists, then renders.
+   `world.onXRFrame` callbacks when an XR frame exists, then renders. In
+   `'on-demand'` render mode a tick draws only when a frame was requested; see
+   [Render modes](./world#render-modes).
 9. If `options.xr.offer` is 'once' or 'always', IWSDK offers an XR session after init (and re‑offers on end if 'always'). Otherwise, call `world.launchXR()` manually when the user presses your XR button.
 10. Preloads assets (if provided) and requests an initial level load via `world.loadLevel(url?)`. Later scene swaps can use either `world.loadLevel(url)` or `world.loadSceneDocument(document)`.
 
@@ -110,5 +112,5 @@ requestAnimationFrame / XRAnimationFrame
      │   ├─ systems @ priority … -5, -4, -3, 0, 1 …
      │   └─ queries keep sets up to date (qualify/disqualify emitted)
      ├─ world.onXRFrame callbacks (active XR sessions only)
-     └─ renderer.render(scene,camera)
+     └─ renderer.render(scene,camera)   (on-demand mode: only when requested)
 ```
