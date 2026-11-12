@@ -46,6 +46,8 @@ export class AudioSystem extends createSystem(
     Entity,
     (AudioInstance<AmbientAudio> | AudioInstance<PositionalAudio>)[]
   > = new Map();
+  /** The src that failed to load, per entity; retried only once src changes. */
+  private failedSources = new Map<Entity, string>();
 
   init(): void {
     // Create and attach AudioListener to camera
@@ -58,6 +60,7 @@ export class AudioSystem extends createSystem(
 
     // Handle entity lifecycle
     this.queries.audioEntities.subscribe('disqualify', (entity) => {
+      this.failedSources.delete(entity);
       this.cleanupEntity(entity);
     });
   }
@@ -115,7 +118,8 @@ export class AudioSystem extends createSystem(
         !AudioSource.data._loading[index]
       ) {
         const src = AudioSource.data.src[index];
-        if (src) {
+        // A failed load is not retried every frame; setting a new src retries.
+        if (src && this.failedSources.get(entity) !== src) {
           this.loadAudio(entity, src);
         }
         return; // Skip further processing until loaded
@@ -167,8 +171,13 @@ export class AudioSystem extends createSystem(
 
       AudioSource.data._buffer[index] = buffer;
       AudioSource.data._loaded[index] = 1;
+      this.failedSources.delete(entity);
     } catch (error) {
-      console.error(`Failed to load audio: ${src}`, error);
+      this.failedSources.set(entity, src);
+      console.error(
+        `Failed to load audio: ${src}. Set a different src to retry.`,
+        error,
+      );
     } finally {
       AudioSource.data._loading[index] = 0;
     }
