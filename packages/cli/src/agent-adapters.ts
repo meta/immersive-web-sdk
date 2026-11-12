@@ -6,9 +6,15 @@
  */
 
 import { existsSync } from 'fs';
-import { copyFile, mkdir, readFile, writeFile } from 'fs/promises';
+import { mkdir, readFile, writeFile } from 'fs/promises';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import {
+  GuidanceSourceError,
+  installedGuidanceTools,
+  ownedSkillNames,
+  resolveProjectGuidance,
+  syncAgentGuidance,
+} from './agent-guidance.js';
 import {
   ALL_MANAGED_MCP_SERVER_NAMES,
   getManagedMcpServerRegistry,
@@ -157,6 +163,19 @@ async function syncClaudeSettings(
   await writeJsonObject(filePath, value);
 }
 
+/** Skills IWSDK has shipped, so prune leaves a developer's own alone. */
+async function readOwnedSkillNames(
+  workspaceRoot: string,
+): Promise<Set<string>> {
+  try {
+    return ownedSkillNames(
+      (await resolveProjectGuidance(workspaceRoot)).manifest,
+    );
+  } catch {
+    return new Set();
+  }
+}
+
 async function pruneClaudeSettings(workspaceRoot: string): Promise<void> {
   const filePath = path.join(workspaceRoot, CLAUDE_SETTINGS_FILE);
   if (!existsSync(filePath)) {
@@ -165,9 +184,17 @@ async function pruneClaudeSettings(workspaceRoot: string): Promise<void> {
   const { value } = await readJsonObject(filePath);
   const permissions = value.permissions;
   if (isRecord(permissions) && Array.isArray(permissions.allow)) {
-    const filteredAllow = permissions.allow.filter(
-      (rule) => !isManagedClaudePermission(rule),
-    );
+    const ownedSkills = await readOwnedSkillNames(workspaceRoot);
+    const filteredAllow = permissions.allow.filter((rule) => {
+      const skill =
+        typeof rule === 'string'
+          ? rule.match(/^Skill\((iwsdk-[^)]*)\)$/u)?.[1]
+          : undefined;
+      return (
+        !isManagedClaudePermission(rule) &&
+        !(skill != null && ownedSkills.has(skill))
+      );
+    });
     if (filteredAllow.length === 0) {
       delete permissions.allow;
     } else {
@@ -318,33 +345,61 @@ async function pruneOpenCodeSkillPermissions(
   await writeJsonObject(filePath, value);
 }
 
-function bundledAgentsPath(): string {
-  return fileURLToPath(new URL('../guidance/AGENTS.md', import.meta.url));
+/**
+ * Without --tools, keep the coding tools the project already has guidance
+ * for; a project without any gets all of them.
+ */
+async function existingGuidanceTools(workspaceRoot: string): Promise<AiTool[]> {
+  try {
+    const installed = await installedGuidanceTools(
+      workspaceRoot,
+      await resolveProjectGuidance(workspaceRoot),
+    );
+    return installed.length > 0 ? installed : [...SUPPORTED_AI_TOOLS];
+  } catch {
+    return [...SUPPORTED_AI_TOOLS];
+  }
 }
 
 async function syncInstructions(
   workspaceRoot: string,
   tools: AiTool[],
-): Promise<string[]> {
-  const created: string[] = [];
-  const agentsPath = path.join(workspaceRoot, AGENTS_FILE);
-  if (!existsSync(agentsPath)) {
-    await copyFile(bundledAgentsPath(), agentsPath);
-    created.push(AGENTS_FILE);
-  }
-  if (tools.includes('claude')) {
-    const claudePath = path.join(workspaceRoot, CLAUDE_FILE);
-    const nestedClaudePath = path.join(workspaceRoot, '.claude', CLAUDE_FILE);
-    if (!existsSync(claudePath) && !existsSync(nestedClaudePath)) {
-      await writeFile(
-        claudePath,
-        '@AGENTS.md\n\n# Claude Code\n\nUse matching project skills under `.claude/skills/`.\n',
-      );
-      created.push(CLAUDE_FILE);
+): Promise<AdapterGuidanceResult> {
+  try {
+    const source = await resolveProjectGuidance(workspaceRoot);
+    const result = await syncAgentGuidance({
+      projectRoot: workspaceRoot,
+      source,
+      tools,
+    });
+    return {
+      status: 'synced',
+      version: result.version,
+      origin: result.origin,
+      changed: result.changed,
+      skipped: result.skipped.map((entry) => entry.path),
+    };
+  } catch (error) {
+    if (error instanceof GuidanceSourceError) {
+      return {
+        status: 'unavailable',
+        code: error.code,
+        message: error.message,
+      };
     }
+    throw error;
   }
-  return created;
 }
+
+export type AdapterGuidanceResult =
+  | {
+      status: 'synced';
+      version: string;
+      origin: string;
+      changed: boolean;
+      skipped: string[];
+    }
+  | { status: 'unavailable'; code: string; message: string };
 
 export async function syncAgentAdapters({
   workspaceRoot,
@@ -355,20 +410,19 @@ export async function syncAgentAdapters({
   workspaceRoot: string;
   tools: AiTool[];
   serverNames: string[];
-  createdInstructions: string[];
+  guidance: AdapterGuidanceResult;
 }> {
   const normalizedWorkspaceRoot = normalizeWorkspaceRoot(workspaceRoot);
   const appliedTools = tools ?? [...SUPPORTED_AI_TOOLS];
+  // Decide which tools get guidance before the MCP files below exist.
+  const guidanceTools =
+    tools ?? (await existingGuidanceTools(normalizedWorkspaceRoot));
   const result = await syncMcpAdapters({
     workspaceRoot: normalizedWorkspaceRoot,
     tools: appliedTools,
     command,
     args,
   });
-  const createdInstructions = await syncInstructions(
-    normalizedWorkspaceRoot,
-    appliedTools,
-  );
   await Promise.all([
     ...(appliedTools.includes('claude')
       ? [syncClaudeSettings(normalizedWorkspaceRoot, result.serverNames)]
@@ -380,7 +434,12 @@ export async function syncAgentAdapters({
       ? [syncOpenCodeSkillPermissions(normalizedWorkspaceRoot)]
       : []),
   ]);
-  return { ...result, createdInstructions };
+  // After the settings writes above: guidance also edits .claude/settings.json.
+  const guidance = await syncInstructions(
+    normalizedWorkspaceRoot,
+    guidanceTools,
+  );
+  return { ...result, guidance };
 }
 
 export async function pruneAgentAdapters({

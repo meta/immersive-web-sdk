@@ -14,7 +14,7 @@ import { ModuleKind, ScriptTarget, transpileModule } from 'typescript';
 import { expect, test } from 'vitest';
 
 const templateUrl = new URL(
-  '../guidance/claude/.claude/skills/iwsdk-build-model/assets/hardsurface.ts.template',
+  '../../core/agent-guidance/claude/.claude/skills/iwsdk-build-model/assets/hardsurface.ts.template',
   import.meta.url,
 );
 

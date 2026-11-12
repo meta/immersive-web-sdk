@@ -1,0 +1,301 @@
+{
+  "description": "Hashes of guidance files written by IWSDK releases before guidance was stamped. Regenerate with scripts/gen-legacy-guidance-hashes.mjs.",
+  "sources": [
+    "@iwsdk/create@0.5.0",
+    "@iwsdk/create@0.5.1",
+    "@iwsdk/create@0.5.2",
+    "@iwsdk/create@0.5.3",
+    "@iwsdk/create@1.0.0",
+    "@iwsdk/create@1.0.0-rc.0",
+    "@iwsdk/create@1.0.0-rc.1",
+    "@iwsdk/create@1.0.0-rc.2",
+    "@iwsdk/create@1.0.1",
+    "@iwsdk/create@1.0.1-rc.0",
+    "@iwsdk/create@1.1.0-rc.0",
+    "@iwsdk/create@1.1.0-rc.1",
+    "@iwsdk/create@1.1.0-rc.2",
+    "@iwsdk/starter-assets@0.3.0",
+    "@iwsdk/starter-assets@0.3.1",
+    "@iwsdk/starter-assets@0.3.2",
+    "@iwsdk/starter-assets@0.4.0",
+    "@iwsdk/starter-assets@0.4.1",
+    "@iwsdk/starter-assets@0.4.2",
+    "main@2d9f5b5f (unreleased pre-stamp build)"
+  ],
+  "units": {
+    ".agents/skills/iwsdk-build-model": [
+      "95fc72ddf1f3915aa71a839558a3ce051b803214b25ad8c594e882068a3d7917"
+    ],
+    ".agents/skills/iwsdk-compose-scene": [
+      "6e2e45c34565498dc9f241e80f9e7dbb6f0ee1d72aec69be5dd87ce1993e76d4",
+      "b976d52f456e5185c066967dd4e5c5b9082da946407ee4dc94bb77f8520c8e59"
+    ],
+    ".agents/skills/iwsdk-debug": [
+      "7dd8250ca95e23b6f0696a86a3dfcb2d038ac730a7578118fb21290c6169c3f0",
+      "d78da2111e0ca6c6bb7589a5650b710c127270b951761e14c832c428aecd373b",
+      "d9d217af07b017e1fcde7dca1c1688b3d46f0c33fec84ee62f67fc2201d8f31b"
+    ],
+    ".agents/skills/iwsdk-depth-occlusion": [
+      "12d5c9ffea64aa8977206d13657d97e69c6ad7b90ac26b87af38d084ebd98532",
+      "819e3f213766f12b567fa8ffd5e343f1a17f83973642067d82ebd7c5dee1dbe3"
+    ],
+    ".agents/skills/iwsdk-dev": [
+      "8268ad0b1bc0cba03b93a206081286f6b321cd116c4cb8b4738cab706cbb70ed",
+      "9026837aa339197b35d25f42e4ab17c1566ba0fd9ce7a77a351cc44b52e77d32",
+      "d8597ec3d0428a90e590998a432ad27f0d6be08cefc2c7114288f9376a3b6835"
+    ],
+    ".agents/skills/iwsdk-glasses-test": [
+      "86e1e324dd71e8dd832b5d446e6bdc03bb5150cf5128c0650838cf6227b79817"
+    ],
+    ".agents/skills/iwsdk-grab": [
+      "288fe9de71d11e74f68a6465294a3349459500b6b9d0bdaabf9991a90ec3f22f",
+      "3b53706700800b6cb43a99b4d4f110295a7a2ff07d2f806b50454ed4b992c784",
+      "9770128bcfc5d57cedab5a7bfa4163887312a622d79adb62a53b01ef22fb776c",
+      "ad099acb82205620cb9cce44f245f40baf7e6808038d7d94ff9d873f316473d2"
+    ],
+    ".agents/skills/iwsdk-hosting": [
+      "9e866989c506da5cf54ba96bb02c52d1b901e162ab8f32ad9f97ed84aa4dcc8b"
+    ],
+    ".agents/skills/iwsdk-native-xr-test": [
+      "e27a023e60ce73eb008823804d7966ea89e4b0df817cfa1bd85428fa05afbeff"
+    ],
+    ".agents/skills/iwsdk-physics": [
+      "5d66b2f83041f75889735be1e18747b078f2df32025ba1039cb77efbea3c2cb3",
+      "99122d53675ee97f6bd3463b82daa6c5979cd3dab77dbad85136225938fecd6d",
+      "b9a0ff1b3938aa8ff425737dc42356934d7e5658eedba6c9305fec4f6a7903c6"
+    ],
+    ".agents/skills/iwsdk-planner": [
+      "3e67338b1f4406a7237d5c371e2b8f6228c715c7ae9569cf7a90add52b9c59a7",
+      "6f59ae3618bdea89cb296e071895aaca749921c89fb0df9481e840d8b435593a"
+    ],
+    ".agents/skills/iwsdk-pwa-packaging": [
+      "e4e859d1977962769195f6bfb52dc9b02f159dd743e2609ea8b6111dd847e7eb"
+    ],
+    ".agents/skills/iwsdk-ray": [
+      "6e6b7f9dad9b95c0aaa82664514c2cf30e0c928f65bc8b004d9eba2bfda217a7",
+      "92cc40054c80cf3255c37814a2781f19fb33a8d50c6675d830010bbe20ffdd1a",
+      "ec23dce5226ca91367042de7907fb3664c055a1ceb737fede2fd6710eab1f37f",
+      "eeaec95998da4f93c01b42d0f430586fe1534349525155f83db409b5d4d1a5c6"
+    ],
+    ".agents/skills/iwsdk-scene-composer": [
+      "11b28f78115d1cf82dbc4a50322f57ac2e789b9525a907be53fca0f907028a01",
+      "80e135e3456732090c71eb0c29bf9cd85cf0ce03946eccd3a044816f24ecef99"
+    ],
+    ".agents/skills/iwsdk-ui": [
+      "6f9291561935f9458ae802c7fb2ce5e48c92f3318a4daa8e4be48b3ff71dd52c",
+      "cda5711928721c7f47730e780681356e2a9a1b6beb6f9e3cacb5839f7fb454c5",
+      "da6cf2767f82e85b6fda572c625bda3039fb2f08c9581553706cba4788311748"
+    ],
+    ".claude/agents/iwsdk-project-code-reviewer.md": [
+      "5cdb818e2ef68de9b7e7eea6de9f7ee415bc5ea24b05d01b050a8239658857cb",
+      "89d22961dda0f695bb9e89867eb971d277738d76204b74d7cd3f0bdebdc9928d",
+      "976bd24f6ae91d050ed7bef71cdfb4cfab1fc41e4718d2042d9618860cb1161e",
+      "a2f49e032615d3537ce3fd69bba47c46539abdfd2c28c817bece14f04cc7bf02",
+      "b55fe187f2ac0a75eddf7b3cd71ba844e6a18b7d83b7a7a320e6535136834e75",
+      "d640d06f3aca4baa6b31110242e3dd53524d70cd7e28235dbac151b27b9bc986",
+      "f5985b1aede1d94dcc42ed50cdb18e2e938836827625997f68f8af9b30bcc88e"
+    ],
+    ".claude/rules/assets-and-manifest.md": [
+      "4d5488a3fa74648b9ded4a58fde8ed0ad7e94f15f62ac7768e5bee1c446fca41",
+      "67f9a27ebd92a204c962381281764df69572d3c2bcd61d9c1e0aad63823fb21d"
+    ],
+    ".claude/rules/ecs-api.md": [
+      "56f1044b9936f279404ef715676b734a119ef495824d5916737f3a00579acc64",
+      "6fa0e51b71ad0f030b4573d9eaeda5953d5bcc26f61bcfc3e01e9df1366c9832"
+    ],
+    ".claude/rules/scene-json.md": [
+      "172f1a062985b289dafbac26690ddc7e1781fa87af7b5095262e1c2cc0012ca2",
+      "c6b86df73c948f7f1ee1de79c63ed916ae2878bc0e8779a0ae64100392e727de",
+      "d23135ee564456efd85be7688347fb1464dd7f4e8fbcd167b3b916624ed52114",
+      "d507943047667757a27a1b58cff203b0e3d1bdc646b0f5998cf0851840dde550"
+    ],
+    ".claude/rules/uikitml.md": [
+      "101e26d6362ef8867f020086e5edae81ae70c45a11e53339171da8591f41f1a6",
+      "706d75d17deee1eb4fcc18d4f06c362a394f498e1d5d097ab84024561971054f"
+    ],
+    ".claude/skills/iwsdk-build-model": [
+      "95fc72ddf1f3915aa71a839558a3ce051b803214b25ad8c594e882068a3d7917"
+    ],
+    ".claude/skills/iwsdk-compose-scene": [
+      "6e2e45c34565498dc9f241e80f9e7dbb6f0ee1d72aec69be5dd87ce1993e76d4",
+      "b976d52f456e5185c066967dd4e5c5b9082da946407ee4dc94bb77f8520c8e59"
+    ],
+    ".claude/skills/iwsdk-debug": [
+      "11c58957bf3edcc6de4284613ec0fbbc464bd0d31fef58811275f1fdd3a39ec6",
+      "60e2348a508ddc367c2cb6d1b1bf84c3a3d57c45e494d1fa6df1d11ee39ca468",
+      "6fe876271516c2ad3fbbd16fcf34d21bba35ab01abb922ef1addffae0c6c865f",
+      "7dd8250ca95e23b6f0696a86a3dfcb2d038ac730a7578118fb21290c6169c3f0",
+      "c106e61be339f8758dac81ce67ab5adfc3cdfb52dbad80e837ea3fcfe2d9900f",
+      "d78da2111e0ca6c6bb7589a5650b710c127270b951761e14c832c428aecd373b",
+      "d9d217af07b017e1fcde7dca1c1688b3d46f0c33fec84ee62f67fc2201d8f31b"
+    ],
+    ".claude/skills/iwsdk-depth-occlusion": [
+      "12d5c9ffea64aa8977206d13657d97e69c6ad7b90ac26b87af38d084ebd98532",
+      "717af1bf654eca788fb51a970768683d4188b4310259d563536e2aa477459183",
+      "819e3f213766f12b567fa8ffd5e343f1a17f83973642067d82ebd7c5dee1dbe3",
+      "962d0e29077cb530b94d09fe1dc205cf77f82c0ddad5a518fcd22d59e6193df9"
+    ],
+    ".claude/skills/iwsdk-dev": [
+      "8268ad0b1bc0cba03b93a206081286f6b321cd116c4cb8b4738cab706cbb70ed",
+      "9026837aa339197b35d25f42e4ab17c1566ba0fd9ce7a77a351cc44b52e77d32",
+      "d8597ec3d0428a90e590998a432ad27f0d6be08cefc2c7114288f9376a3b6835"
+    ],
+    ".claude/skills/iwsdk-glasses-test": [
+      "86e1e324dd71e8dd832b5d446e6bdc03bb5150cf5128c0650838cf6227b79817"
+    ],
+    ".claude/skills/iwsdk-grab": [
+      "03516bb766b4f002dc47bc6bf874d7d0352a5373427733d24c627503c46c16d7",
+      "288fe9de71d11e74f68a6465294a3349459500b6b9d0bdaabf9991a90ec3f22f",
+      "3b53706700800b6cb43a99b4d4f110295a7a2ff07d2f806b50454ed4b992c784",
+      "81d873ab57403539716b61090edc809d4df1731d2ebecc5fcabf4f49d59039f1",
+      "9770128bcfc5d57cedab5a7bfa4163887312a622d79adb62a53b01ef22fb776c",
+      "ad099acb82205620cb9cce44f245f40baf7e6808038d7d94ff9d873f316473d2",
+      "b9f63e49d60e99a84736b89df06c0236fcb677f6b224c85c515e0510276abf36",
+      "f5e9f3df96f6e1c12423019c61914874717c48fb9b3a43d332f49e2e38288c4f"
+    ],
+    ".claude/skills/iwsdk-hosting": [
+      "9e866989c506da5cf54ba96bb02c52d1b901e162ab8f32ad9f97ed84aa4dcc8b"
+    ],
+    ".claude/skills/iwsdk-native-xr-test": [
+      "e27a023e60ce73eb008823804d7966ea89e4b0df817cfa1bd85428fa05afbeff"
+    ],
+    ".claude/skills/iwsdk-physics": [
+      "5d56df865778d2291e70e7d676769a92de402358f3bf532fa405fa43101da9ac",
+      "5d66b2f83041f75889735be1e18747b078f2df32025ba1039cb77efbea3c2cb3",
+      "99122d53675ee97f6bd3463b82daa6c5979cd3dab77dbad85136225938fecd6d",
+      "b9a0ff1b3938aa8ff425737dc42356934d7e5658eedba6c9305fec4f6a7903c6",
+      "d6f9132e1fbe1b3e54c18a316b9dd6c5472218b30d40328e967412f0e2b8002a"
+    ],
+    ".claude/skills/iwsdk-planner": [
+      "3e67338b1f4406a7237d5c371e2b8f6228c715c7ae9569cf7a90add52b9c59a7",
+      "453270bacfed1205b4ba8c07ed0f48ec414dc1da22f889d3debfb6db96d4f6ca",
+      "6f59ae3618bdea89cb296e071895aaca749921c89fb0df9481e840d8b435593a",
+      "7788746c5c3337618fdf3315702e7cde15747a25208f2e21799a7c4aa6a9b8d6",
+      "c78bef6e4f913f5d08b549af8fae890be9abae68aa833075eed9bc649effd1b4",
+      "d0f8738c34172d7b0cdadbf2972ccafd6e6b61838100e97d3a4d06affb3ae265",
+      "f1b2b5602a4110a51c719f63774d61597988aedb8a3983e08f4b9cf4af0772f0",
+      "fcedf3f16f5fb808b5ac02afc4ed058c1e80529657e4885edfd18abb4f849c6d"
+    ],
+    ".claude/skills/iwsdk-pwa-packaging": [
+      "e4e859d1977962769195f6bfb52dc9b02f159dd743e2609ea8b6111dd847e7eb"
+    ],
+    ".claude/skills/iwsdk-ray": [
+      "206100cb9e83bba0577f9780556645603530f29a94bcbccd375e48a27ff50f3d",
+      "6e6b7f9dad9b95c0aaa82664514c2cf30e0c928f65bc8b004d9eba2bfda217a7",
+      "6ed8ca72ca88f479bc5d4eff21d8c87f02aa91fdc62ff304d59e4f069d1db795",
+      "92cc40054c80cf3255c37814a2781f19fb33a8d50c6675d830010bbe20ffdd1a",
+      "c6f25dce04c154cd5fc921f3657297b24e76ef5c0533318cbe655259a57802fa",
+      "e7f81e23e363fe8086d325ee5b80ac1559229557231da39cba5bfe3a4c2c4ed3",
+      "ec23dce5226ca91367042de7907fb3664c055a1ceb737fede2fd6710eab1f37f",
+      "eeaec95998da4f93c01b42d0f430586fe1534349525155f83db409b5d4d1a5c6"
+    ],
+    ".claude/skills/iwsdk-scene-composer": [
+      "11b28f78115d1cf82dbc4a50322f57ac2e789b9525a907be53fca0f907028a01",
+      "80e135e3456732090c71eb0c29bf9cd85cf0ce03946eccd3a044816f24ecef99"
+    ],
+    ".claude/skills/iwsdk-ui": [
+      "30729d220dba85f6e56a88740f832307ca6a96d96333eed58083b89306101ae2",
+      "41fb75698eb186d75a79864e267855d96ee522f00ff14c89ba0b7c6ec6f8d968",
+      "6f9291561935f9458ae802c7fb2ce5e48c92f3318a4daa8e4be48b3ff71dd52c",
+      "8132c3e158585d00d3a6e55e7632d377e997c9fdf83f5b2df7ec7d22ff61b588",
+      "cda5711928721c7f47730e780681356e2a9a1b6beb6f9e3cacb5839f7fb454c5",
+      "da6cf2767f82e85b6fda572c625bda3039fb2f08c9581553706cba4788311748",
+      "fa4a7aa8823a25ed259123443b4ccb45c527fb2c87304a7c2b61928f08936e9c"
+    ],
+    ".cursor/rules/assets-and-manifest.mdc": [
+      "24492f0601d7df8b2d1e6e442811804de66d5b1a8030f7032aef2b3ef9c357d5",
+      "f031700fe13e021e7f1602a0b60905f1de6f3890938084b914c7ec4d938a1a3e"
+    ],
+    ".cursor/rules/ecs-api.mdc": [
+      "5156f3fb0616d37090e755caae210de8041791d0baa31c9bccedf656d66d2d55",
+      "f09a86b27ce781f8e69b6471051167bee392ac2f503526df33ded757940268f6"
+    ],
+    ".cursor/rules/iwsdk.mdc": [
+      "03950bed4747f8b570500438f9a190a8c255852af026dc2eef6bb1936909acef",
+      "15f922f2fa9a5ceae9e201a592a1176757d0a98642503c1879d4c418309d6b38",
+      "1afadded83562b8406371733c472a440055276ed5e706178af0e068838439d2a",
+      "1c1ed786e934200985a46fb05077bdbe2968f1fecb182dadc813f751a8badaae",
+      "928db56b3c5d28f2eaa285cd4a4ef4ecc58db0d936085e2a88baceaf4cc44691",
+      "b3066b127c1aa518bf46214439a78e803535cb33ca484e58bab38ff8ec7a0372",
+      "c330399a10ab35a9eef476f45e7a66687dca22da952a95fe59833eb43ddcaeb9",
+      "c58eab6f556040df00e19edaacc33d6de76ed65e216a8f2b3a37635ddc7d24ed"
+    ],
+    ".cursor/rules/scene-json.mdc": [
+      "58b19b1bd5e56657b1d688d533c08b873dd4fd7ef6453d69d3fae8ae59f3e57c",
+      "e79e73295fd24424a71e8080058690fc9f9976ea87629c146e75345170b69f23",
+      "f32c3e7d4024f56a3ff5ae32b42c236377551cbd3b2b231e84ada68362b68266",
+      "f8471b978997f984c0053f888fda2a92eda53dd4b1d9db928a70ae802e93e410"
+    ],
+    ".cursor/rules/uikitml.mdc": [
+      "571182fd945cfb8b2ece225032eb8d74842cef6574967e895b6a68d0803e1eb9",
+      "ce002bd4759a1d087c3e18fd3e2a9a009eb3bef5561d0a698f86726a1bd7f9c3"
+    ],
+    ".github/copilot-instructions.md": [
+      "166c857764eeb7a843e60eac1769d34428f402a3d0e469a5a1a2abf14934c735",
+      "597a88b098f2ad05bc6fffb4e265fc145fe277b8f2d2713f5accf57649e74f6d",
+      "6ff6f36e3332fe2650c00e1c66443e1ff6fd1ae576815601aa5fbd038eac8437",
+      "739c3a6ae05ac1dc9ff4b96613ab879495b62c055c86e14ee49b7c8e62961c26",
+      "7da70db196f0db93e070ed9c5647767590b2fb66b5e047e7f445f2a07cf64473",
+      "9495db0d2f4a434263af2e4d87fc503eb8eb8fac6361e359ed772c44b95876dd",
+      "9627aea8ac511a821aaab78f37e57ea0770037429fd3b46483862e181acd9817",
+      "b17b9dbc995d3db2e0c1eb727cc6fd14b39dc8d47af3da4e70d385187b8cfc36"
+    ],
+    ".github/instructions/assets-and-manifest.instructions.md": [
+      "5d20b9aa7c71c8b837c7052c39f782734fa4c7451ad33225e681d77c4dbf8df1",
+      "e97fee2cd59398559db2144ca607a9d203383e0aa9f6a5bb9b33a8c8e8278f0d"
+    ],
+    ".github/instructions/ecs-api.instructions.md": [
+      "183ce8226a5bc25b6accc4630eee3fb4b33dc166183f2c935cca9bd1adf68ace",
+      "724a02986ce0999bc31c02b4f1e4a7b6b83c9966f994979a340e36b6243d26fd"
+    ],
+    ".github/instructions/scene-json.instructions.md": [
+      "334130fb971e867db02e1267aad984379f875bfc3a5db099adfc01527f4db787",
+      "8803ab9001a0c2433d93b84f4053b0837133e869442c6412a702944700855965",
+      "c73f635cec34f9e99b2bc59ffe63583842d40e419a499225a56cbb7838d9bccd",
+      "e181a2b4b9bfb290dbddb7d2beb1853ff0c256ed3687b0b87f21ae7b28bb2ffd"
+    ],
+    ".github/instructions/uikitml.instructions.md": [
+      "d8b080be3a72641b6d39b36dfc4339fdd8032e4fa6f46523765c3cb1c820569b",
+      "f06c88f681a856a0b8b93b5552257dd316f189082dfc0a6bca87e2e642ecbb3e"
+    ],
+    "AGENTS.md": [
+      "166c857764eeb7a843e60eac1769d34428f402a3d0e469a5a1a2abf14934c735",
+      "597a88b098f2ad05bc6fffb4e265fc145fe277b8f2d2713f5accf57649e74f6d",
+      "6ff6f36e3332fe2650c00e1c66443e1ff6fd1ae576815601aa5fbd038eac8437",
+      "739c3a6ae05ac1dc9ff4b96613ab879495b62c055c86e14ee49b7c8e62961c26",
+      "73a192fd0369cf616b39e930fb1251829c003c5c0892f7fe96e0939d7e03a431",
+      "7da70db196f0db93e070ed9c5647767590b2fb66b5e047e7f445f2a07cf64473",
+      "9495db0d2f4a434263af2e4d87fc503eb8eb8fac6361e359ed772c44b95876dd",
+      "9627aea8ac511a821aaab78f37e57ea0770037429fd3b46483862e181acd9817",
+      "a2411b08a270e5a129a64757992e581b6e8033d7d6d59ce969da3bba1606ebdb",
+      "b17b9dbc995d3db2e0c1eb727cc6fd14b39dc8d47af3da4e70d385187b8cfc36",
+      "ba7bd189a9d4421a1eb90fda6cae9492a2b1f0c6b5c8747dda7ea1c556c4620f"
+    ],
+    "CLAUDE.md": [
+      "2b32dbe4feca8dcbc406fb7d0a1ca28626f5271340e860f4cfbb89039e2fde7d",
+      "4449bb532039c3d9c43dea0647470d7a3f90bdd9b42db70716663eb7c531ad09",
+      "478fd5c08892761aa754e6cfa5c7905c288c77b1aee11528030e16aa7860509d",
+      "5d1797e83ff921de71d465e5cb67f03d516587dd7283a5632f861e90efa56663",
+      "65f74b5d725c8f00cadab13f315b78dd18b40aad0c6a0e2fe9fdad33dd61c427",
+      "740d10321d6f4c2a46f4ab9bcdd194478ad9c28c73648172ba3fa84fb492cb54",
+      "8f2c56ca95a87be48590e9d5630fb124ec09b7991e1b4b694cb6ed99d99d27b5",
+      "923d9767b5cc2272fb070ac806094bff6aeb2044538d937fece9ec0e285edfb6",
+      "cc64032385bbb9c12371ba813a9f61d0c334dda0bfc3886188fd2c4674733679",
+      "fe9ebd7fd6466596323909bc395a4a6421d56834b4c649862d30645a2507ec0d"
+    ],
+    "public/scenes/AGENTS.md": [
+      "4451a5b98ba38a835cca3fc49666cbe62ba77353f6b8d0ed7d46b691d35067c1",
+      "5598df2b51565744d3fe40411d4a2816d6821e6356a03d68b1c859626d847b21",
+      "84da2a181a623c0e1c8d82e8288bc83074df03e70781959ebf9c7694ef93c2a1",
+      "a9e2135ca99c543cbdf8d63c68e6f92350911d30b97115d8ec0e900a123cd4d1"
+    ],
+    "public/ui/AGENTS.md": [
+      "3765ef052a9dae8b1dd5631fa789965fc797a581d18a0c2343c744bb8c44a4be",
+      "abe74e27fdcd33f9fbdfa6fef5b11cd1427fe15c66fec1a0b884f3a09b750266"
+    ],
+    "src/AGENTS.md": [
+      "0b6b6554212a990bf7fa8747f1bac863e3a5b574e3de3e88504e4ed51de48561",
+      "b60c812e637c6f5bd8f4480f83d7c28a93e042abac20fee504238e8981fa2b6f"
+    ]
+  }
+}

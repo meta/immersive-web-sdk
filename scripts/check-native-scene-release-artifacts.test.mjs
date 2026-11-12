@@ -48,7 +48,7 @@ test('allows retired-surface names only in exact packaged migration resources', 
   assert.equal(
     isIntentionalMigrationReference(
       'tarball',
-      'package/dist/guidance/claude/.claude/skills/iwsdk-migrate-0-5/SKILL.md',
+      'package/dist/guidance/files/.claude/skills/iwsdk-migrate-0-5/SKILL.md',
       '@iwsdk/vite-plugin-metaspatial',
     ),
     true,
@@ -56,7 +56,7 @@ test('allows retired-surface names only in exact packaged migration resources', 
   assert.equal(
     isIntentionalMigrationReference(
       'tarball',
-      'package/dist/guidance/codex/.agents/skills/iwsdk-migrate-0-5/SKILL.md',
+      'package/dist/agent-guidance/files/.agents/skills/iwsdk-migrate-0-5/SKILL.md',
       'Meta Spatial Editor',
     ),
     true,
@@ -64,7 +64,7 @@ test('allows retired-surface names only in exact packaged migration resources', 
   assert.equal(
     isIntentionalMigrationReference(
       'tarball',
-      'package/dist/guidance/claude/CLAUDE.md',
+      'package/dist/guidance/files/CLAUDE.md',
       '- Replacing GLXF or Meta Spatial Editor with native IWSDK scenes',
     ),
     true,
@@ -73,7 +73,7 @@ test('allows retired-surface names only in exact packaged migration resources', 
   assert.equal(
     isIntentionalMigrationReference(
       'tarball',
-      'package/dist/guidance/claude/CLAUDE.md',
+      'package/dist/guidance/files/CLAUDE.md',
       'Install @iwsdk/vite-plugin-metaspatial',
     ),
     false,
@@ -81,7 +81,7 @@ test('allows retired-surface names only in exact packaged migration resources', 
   assert.equal(
     isIntentionalMigrationReference(
       'tarball',
-      'package/dist/guidance/claude/.claude/skills/iwsdk-ui/SKILL.md',
+      'package/dist/guidance/files/.claude/skills/iwsdk-ui/SKILL.md',
       'Use Meta Spatial Editor',
     ),
     false,
@@ -89,7 +89,7 @@ test('allows retired-surface names only in exact packaged migration resources', 
   assert.equal(
     isIntentionalMigrationReference(
       'docs',
-      'package/dist/guidance/claude/.claude/skills/iwsdk-migrate-0-5/SKILL.md',
+      'package/dist/guidance/files/.claude/skills/iwsdk-migrate-0-5/SKILL.md',
       'Meta Spatial Editor',
     ),
     false,

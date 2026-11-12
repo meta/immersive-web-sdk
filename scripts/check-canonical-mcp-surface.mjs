@@ -19,7 +19,7 @@ const MCP_SURFACE_MARKERS_PATH = path.join(
 );
 const INCLUDE_TARGETS = [
   'docs/ai',
-  'packages/create/guidance',
+  'packages/core/agent-guidance',
   'packages/create/template',
   'packages/create/src/installer.ts',
   'packages/cli/src/help.ts',

@@ -43,11 +43,10 @@
   "files": [
     "bin/iwsdk.js",
     "dist",
-    "guidance",
     "README.md"
   ],
   "scripts": {
-    "prebuild": "node scripts/gen-version.cjs",
+    "prebuild": "node scripts/gen-version.cjs && node ../core/scripts/build-agent-guidance.mjs dist/agent-guidance",
     "build": "tsc -p tsconfig.json --emitDeclarationOnly && rollup -c",
     "clean": "rm -rf dist",
     "test": "npm run build && vitest run",

@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import { GuidanceSourceError } from './agent-guidance.js';
 import { parseArgv } from './argv.js';
 import {
   createFailure,
@@ -19,6 +20,7 @@ import {
   handleAdapterStatus,
   handleAdapterSync,
 } from './commands/adapter.js';
+import { handleAgentsCheck, handleAgentsSync } from './commands/agents.js';
 import { handleBrowserRun } from './commands/browser.js';
 import {
   handleDevDown,
@@ -38,6 +40,7 @@ import {
 import { handleRuntimeOperation } from './commands/runtime.js';
 import { handleStatus } from './commands/status.js';
 import {
+  buildAgentsCommandHelp,
   buildBrowserRunHelp,
   buildDevCommandHelp,
   buildMcpInspectHelp,
@@ -79,6 +82,11 @@ export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
 
       if (command === 'mcp' && subcommand === 'inspect') {
         stdout.write(`${buildMcpInspectHelp().join('\n')}\n`);
+        return 0;
+      }
+
+      if (command === 'agents') {
+        stdout.write(`${buildAgentsCommandHelp().join('\n')}\n`);
         return 0;
       }
 
@@ -145,6 +153,15 @@ export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
           result = await handleAdapterPrompt(parsed.options, context);
         } else {
           throw new Error('Usage: iwsdk adapter sync|status|prune|prompt');
+        }
+        break;
+      case 'agents':
+        if (subcommand === 'sync') {
+          result = await handleAgentsSync(parsed.options, context);
+        } else if (subcommand === 'check') {
+          result = await handleAgentsCheck(parsed.options, context);
+        } else {
+          throw new Error(buildAgentsCommandHelp().join('\n'));
         }
         break;
       case 'reference':
@@ -227,9 +244,11 @@ export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
           ? createFailure(error.message, error.code, {
               owner: error.owner,
             })
-          : createFailure(
-              error instanceof Error ? error.message : String(error),
-            );
+          : error instanceof GuidanceSourceError
+            ? createFailure(error.message, error.code)
+            : createFailure(
+                error instanceof Error ? error.message : String(error),
+              );
     writeJson(stderr, failure);
     return 1;
   }

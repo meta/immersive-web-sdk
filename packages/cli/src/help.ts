@@ -343,6 +343,27 @@ export function buildDevCommandHelp(action?: string): string[] {
   ];
 }
 
+export function buildAgentsCommandHelp(): string[] {
+  return [
+    'Usage: iwsdk agents sync|check [--tools claude,codex,...] [--force] [--workspace <path>]',
+    '',
+    'Installs the coding-agent guidance (AGENTS.md block, skills, rules) that ships',
+    'with the installed @iwsdk/core, so it always matches the IWSDK release in use.',
+    '',
+    'Subcommands:',
+    '  sync    Install or refresh the guidance. Files IWSDK wrote and nobody edited',
+    '          are replaced, retired IWSDK files are removed, and edited files are',
+    '          reported and left alone.',
+    '  check   Report differences without writing; exits 1 when the guidance is not',
+    '          current (for CI).',
+    '',
+    'Options:',
+    '  --tools <list>      claude, cursor, copilot, codex, opencode (default: all)',
+    '  --force             also replace edited files and files IWSDK does not own',
+    '  --workspace <path>  project directory (default: nearest package.json)',
+  ];
+}
+
 export function usageLines(): string[] {
   return [
     'Usage: iwsdk <command> [subcommand] [--help]',
@@ -353,6 +374,7 @@ export function usageLines(): string[] {
     '  runtime status|targets|wait|recover|pair-headset',
     '  dev down|logs|open|status',
     '  adapter sync|status|prune|prompt',
+    '  agents sync|check [--tools <list>] [--force]',
     '  reference status|warmup|inspect|search|relationship|api|file|components|systems|dependents|examples',
     '  mcp stdio|inspect [--tool <mcpName>]',
     '  xr <action>',

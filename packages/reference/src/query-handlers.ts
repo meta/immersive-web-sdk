@@ -230,7 +230,7 @@ function getIwsdkPathPriority(filePath: string): number {
   }
   if (
     normalized.startsWith('packages/create/template/') ||
-    normalized.startsWith('packages/create/guidance/')
+    normalized.startsWith('packages/core/agent-guidance/')
   ) {
     return 4;
   }

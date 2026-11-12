@@ -36,6 +36,42 @@ supports repository-scoped permissions, sync preapproves only IWSDK-managed MCP
 namespaces and skill loading. Copilot tool approval remains an explicit VS Code
 action because it has no supported repository config for that choice.
 
+`adapter sync` also installs the project's agent guidance (below).
+
+## Agent guidance
+
+`@iwsdk/core` ships the coding-agent guidance for its release: a managed block in
+`AGENTS.md`, the IWSDK skills, path-scoped rules, and the project code-review
+subagent. `iwsdk agents sync` installs it from the installed `@iwsdk/core`, so the
+guidance always matches the IWSDK version in `node_modules`. Run it after
+upgrading IWSDK, or in a project that added IWSDK by hand.
+
+- Files IWSDK wrote and nobody edited are replaced; each carries a stamp with the
+  release and a content hash. Retired IWSDK skills and rules are removed.
+- Files a developer edited, and same-named files IWSDK did not write, are reported
+  and left alone. `--force` replaces them.
+- An existing `AGENTS.md` keeps its own text; IWSDK guidance lives between
+  `<!-- BEGIN iwsdk-agent-guidance -->` and `<!-- END iwsdk-agent-guidance -->`.
+  `CLAUDE.md` gets an `@AGENTS.md` import.
+- Guidance written by releases before stamps is recognized by hash and upgraded.
+- Each file is replaced as a whole, through a temporary copy, so an interrupted
+  sync never leaves a half-updated skill. Files written by a newer IWSDK release
+  are never rolled back, and an `AGENTS.md` whose markers are broken is left for
+  you to fix.
+- A project that lists `@iwsdk/core` must have it installed; otherwise the
+  command asks you to install dependencies first. A project that does not list
+  it yet gets the copy bundled with the CLI.
+- Without `--tools`, a project keeps the coding tools it already has guidance
+  for (a project with none gets all five). `--tools claude,codex` picks them.
+- `iwsdk agents check` writes nothing and exits 1 when sync would change files,
+  for CI. Edited files are reported but are not drift.
+- Run it as `npx @iwsdk/cli@latest agents sync` in apps whose installed
+  `@iwsdk/cli` predates the command.
+
+The command prints a short notice on stderr naming the entry skill and every
+skill path, so a coding agent can read the guidance in the same session that
+installed it.
+
 - `iwsdk adapter status` reports MCP, instruction, and permission state.
 - `iwsdk adapter prune` removes managed MCP/permission entries and preserves
   editable instruction files.

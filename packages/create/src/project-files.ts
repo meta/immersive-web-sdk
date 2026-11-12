@@ -41,13 +41,11 @@ export async function buildStarterProjectFiles({
     language === 'ts' ? 'common' : 'common-js',
   );
   const files = await readDirectoryFiles(sourceDirectory);
-  for (const guidanceGroup of GUIDANCE_GROUPS) {
-    files.push(
-      ...(await readDirectoryFiles(
-        path.join(templateRoot, '..', 'guidance', guidanceGroup),
-      )),
-    );
-  }
+  files.push(
+    ...(await readDirectoryFiles(
+      path.join(templateRoot, '..', 'guidance', 'files'),
+    )),
+  );
   const sceneSource = path.join(
     templateRoot,
     'scenes',
@@ -181,16 +179,6 @@ function templateOutputPath(relativePath: string): string {
 function isTextTemplate(filePath: string): boolean {
   return !filePath.endsWith('.mp3') && !filePath.endsWith('.png');
 }
-
-const GUIDANCE_GROUPS = [
-  'common',
-  'claude',
-  'agents',
-  'codex',
-  'cursor',
-  'copilot',
-  'scoped-agents',
-] as const;
 
 function resolvePackagedTemplateRoot(): string {
   const adjacent = fileURLToPath(new URL('./template/', import.meta.url));

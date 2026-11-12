@@ -58,7 +58,7 @@
     "dist/visibility/**"
   ],
   "scripts": {
-    "prebuild": "node -p \"'export const VERSION = ' + JSON.stringify(require('./package.json').version) + ';'\" > src/version.ts",
+    "prebuild": "node -p \"'export const VERSION = ' + JSON.stringify(require('./package.json').version) + ';'\" > src/version.ts && node scripts/build-agent-guidance.mjs",
     "build": "rollup -c",
     "doc": "typedoc",
     "format": "prettier --write ./src/**/*",

@@ -159,7 +159,7 @@ function isIntentionalMigrationReference(container, filePath, line) {
   }
 
   if (
-    /^package\/dist\/guidance\/(?:claude\/\.claude|codex\/\.agents)\/skills\/iwsdk-migrate-0-5\/SKILL\.md$/.test(
+    /^package\/dist\/(?:guidance|agent-guidance)\/files\/\.(?:claude|agents)\/skills\/iwsdk-migrate-0-5\/SKILL\.md$/.test(
       filePath,
     )
   ) {
@@ -167,7 +167,9 @@ function isIntentionalMigrationReference(container, filePath, line) {
   }
 
   return (
-    filePath === 'package/dist/guidance/claude/CLAUDE.md' &&
+    /^package\/dist\/(?:guidance|agent-guidance)\/files\/CLAUDE\.md$/.test(
+      filePath,
+    ) &&
     line.trim() ===
       '- Replacing GLXF or Meta Spatial Editor with native IWSDK scenes'
   );

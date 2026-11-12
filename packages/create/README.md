@@ -204,8 +204,11 @@ JavaScript output, target scene seeds, and agent guidance in its own package.
 It writes `iwsdk.config.json` and the selected `main.iwsdk.scene.json` locally;
 scaffolding does not fetch a remote recipe.
 
-Claude guidance is the canonical Agent Skills source. The package build derives
-the `.agents/skills` tree used by Codex, Cursor, Copilot, and OpenCode and
-translates path-scoped rules into each selected harness's native format.
+Agent guidance comes from `@iwsdk/core` (`packages/core/agent-guidance`), so a
+new app receives the same stamped files that `npx @iwsdk/cli agents sync`
+installs and later refreshes. Claude guidance is the canonical Agent Skills
+source; the core build derives the `.agents/skills` tree used by Codex, Cursor,
+Copilot, and OpenCode and translates path-scoped rules into each harness's
+native format.
 
 </details>

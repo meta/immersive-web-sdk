@@ -181,7 +181,7 @@ export async function readAdapterStatus(
   return status;
 }
 
-function resolveAdapterTools(options: CliOptions): AiTool[] {
+export function resolveAdapterTools(options: CliOptions): AiTool[] {
   if (typeof options.tools === 'string') {
     const requested = options.tools
       .split(',')
@@ -215,8 +215,14 @@ export async function handleAdapterSync(
   io: ResolvedCliIo,
 ): Promise<CliSuccess<unknown>> {
   const workspaceRoot = await resolveWorkspace(io, options.workspace);
-  const tools = resolveAdapterTools(options);
-  const result = await syncAgentAdapters({ workspaceRoot, tools });
+  const result = await syncAgentAdapters({
+    workspaceRoot,
+    // Undefined keeps the guidance tools the project already has.
+    tools:
+      typeof options.tools === 'string'
+        ? resolveAdapterTools(options)
+        : undefined,
+  });
   return createSuccess({
     ...result,
     adapters: await readAdapterStatus(workspaceRoot),

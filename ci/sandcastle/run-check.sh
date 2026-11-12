@@ -3,7 +3,7 @@
 set -euo pipefail
 
 readonly IWSDK_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-readonly NODE_VERSION="24.18.1"
+readonly NODE_VERSION="24.22.1"
 readonly NPM_VERSION="10.9.0"
 readonly PNPM_VERSION="10.18.3"
 readonly XR_INPUT_PROFILES_VERSION="1.0.20"

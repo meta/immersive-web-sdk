@@ -72,7 +72,7 @@ temp/
 examples/**/.claude/
 packages/**/.claude/
 # ...except the canonical guidance @iwsdk/create scaffolds into new apps
-!packages/create/guidance/claude/.claude/
+!packages/core/agent-guidance/claude/.claude/
 .codex/
 .cursor/
 .mcp.json

@@ -21,4 +21,4 @@ package-lock.json
 
 # scaffolded agent guidance: hand-formatted, and was outside Prettier while it
 # matched the .gitignore rule for package .claude dirs
-packages/create/guidance/claude/.claude/
+packages/core/agent-guidance/claude/.claude/
