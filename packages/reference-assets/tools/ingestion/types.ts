@@ -21,12 +21,13 @@ export interface TypeScriptChunk {
     | 'const'
     | 'variable'
     | 'component'
-    | 'system';
+    | 'system'
+    | 'doc';
   name: string;
   start_line: number;
   end_line: number;
   file_path: string;
-  language: 'typescript' | 'javascript';
+  language: 'typescript' | 'javascript' | 'markdown';
   module_path?: string;
   class_name?: string;
   imports: string[];

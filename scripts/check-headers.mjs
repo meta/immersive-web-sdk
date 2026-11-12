@@ -55,8 +55,6 @@ const EXCLUDE_PATHS = [
   '.vitepress/cache',
   'public',
   '.pnpm-store',
-  // Generated reference corpus, already excluded from source control.
-  path.join('packages', 'reference-assets', 'data'),
 ];
 
 // Files to exclude

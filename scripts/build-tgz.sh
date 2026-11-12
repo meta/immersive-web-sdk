@@ -5,17 +5,14 @@
 # LICENSE file in the root directory of this source tree.
 
 # Build script to create standalone tgz files for all packages.
-# By default this fails fast when any package build, pack, or artifact
-# validation step fails. Use --skip-reference-assets for a faster development
-# build that relies on separately hosted reference corpus payloads.
+# Fails fast when any package build, pack, or artifact validation step fails.
 
 set -euo pipefail
 
-SKIP_REFERENCE_ASSETS=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --skip-reference-assets)
-            SKIP_REFERENCE_ASSETS=1
+            # Accepted for older callers; the corpus is always built and bundled.
             ;;
         *)
             echo "Unknown argument: $1" >&2
@@ -24,13 +21,6 @@ while [ $# -gt 0 ]; do
     esac
     shift
 done
-
-if [ "$SKIP_REFERENCE_ASSETS" -eq 1 ]; then
-    # A bootstrap `pnpm install` runs workspace prepare hooks. Carry the skip
-    # decision into that lifecycle so reference-assets does not rebuild its
-    # 50+ MB corpus as an install side effect.
-    export IWSDK_REFERENCE_ASSETS_SKIP_BUILD=1
-fi
 
 echo "🚀 Building standalone tgz packages..."
 
@@ -272,11 +262,6 @@ build_leaf_packages() {
     for package in "${LEAF_PACKAGES[@]}"; do
         local package_dir="$PACKAGES_DIR/$package"
 
-        if [ "$package" = "reference-assets" ] && [ "$SKIP_REFERENCE_ASSETS" -eq 1 ]; then
-            echo "   ⏭️  Skipping $package (bundle/runtime warmup expects separately hosted corpus payload)"
-            continue
-        fi
-
         if [ ! -d "$package_dir" ]; then
             echo "❌ Package directory not found: $package_dir" >&2
             exit 1
@@ -284,12 +269,19 @@ build_leaf_packages() {
 
         echo "   Building $package..."
 
-        local build_script="build"
         if [ "$package" = "reference-assets" ]; then
-            build_script="build:payload"
+            # Private producer: build the corpus that @iwsdk/reference bundles.
+            cd "$package_dir"
+            rm -rf dist
+            if ! "${PNPM_CMD[@]}" run build; then
+                echo "❌ Build failed for $package" >&2
+                exit 1
+            fi
+            echo "     ✅ Corpus built"
+            continue
         fi
 
-        build_and_pack_package "$package_dir" "$build_script" "$package"
+        build_and_pack_package "$package_dir" "build" "$package"
     done
 }
 

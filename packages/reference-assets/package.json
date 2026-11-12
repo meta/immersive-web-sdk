@@ -1,25 +1,15 @@
 {
   "name": "@iwsdk/reference-assets",
   "version": "1.1.0-rc.1",
-  "description": "Producer pipeline and versioned corpus payloads for @iwsdk/reference",
-  "private": false,
+  "description": "Producer pipeline for the reference corpus that @iwsdk/reference bundles",
+  "private": true,
   "type": "module",
   "scripts": {
     "build:tools": "tsc -p tsconfig.tools.json",
     "ingest": "npm run build:tools && node dist-tools/tools/ingest.js",
-    "build:payload": "node ./scripts/build-payload.mjs",
-    "build:payload:if-ready": "node ./scripts/build-payload.mjs --if-ready",
-    "build": "node ./scripts/build-assets.mjs",
-    "build:model": "node ./scripts/build-model.mjs",
-    "build:if-ready": "node ./scripts/build-assets.mjs --if-ready",
-    "build:model:if-ready": "node ./scripts/build-model.mjs --if-ready",
-    "prepare": "npm run build:if-ready",
+    "build": "npm run ingest",
     "test": "vitest run"
   },
-  "files": [
-    "dist",
-    "README.md"
-  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/facebook/immersive-web-sdk.git",
@@ -29,10 +19,8 @@
     "node": ">=20.19.0 <21.0.0-0 || >=22.12.0 <23.0.0-0 || >=24.0.0"
   },
   "devDependencies": {
-    "@huggingface/transformers": "^3.1.2",
     "@types/node": "^20.11.0",
     "glob": "^12.0.0",
-    "tar": "^7.5.22",
     "ts-morph": "^27.0.2",
     "typescript": "^5.8.3",
     "vitest": "^4.1.10"

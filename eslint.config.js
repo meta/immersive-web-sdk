@@ -109,7 +109,6 @@ export default [
       '**/*.d.ts',
       '**/version.ts', // Generated version files
       '**/generated-profiles.ts', // Generated gamepad profiles
-      'packages/reference-assets/data/**', // Generated reference corpus payload
       'packages/reference-assets/tools/.temp/**', // Producer scratch workspace
     ],
   },

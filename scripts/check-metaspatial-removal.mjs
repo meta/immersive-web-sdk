@@ -54,7 +54,7 @@ const SKIPPED_DIRS = new Set([
   'node_modules',
 ]);
 
-const SKIPPED_PATH_PREFIXES = ['packages/reference-assets/data/'];
+const SKIPPED_PATH_PREFIXES = [];
 
 const BINARY_EXTENSIONS = new Set([
   '.avif',

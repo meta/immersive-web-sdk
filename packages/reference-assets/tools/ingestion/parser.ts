@@ -121,10 +121,10 @@ export class TypeScriptParser {
   ): TypeScriptChunk[] {
     const className = cls.getName() || 'AnonymousClass';
     const classChunk: TypeScriptChunk = {
-      content: cls.getText(),
+      content: cls.getText(true),
       chunk_type: 'class',
       name: className,
-      start_line: cls.getStartLineNumber(),
+      start_line: cls.getStartLineNumber(true),
       end_line: cls.getEndLineNumber(),
       file_path: filePath,
       language,
@@ -170,10 +170,10 @@ export class TypeScriptParser {
   ): TypeScriptChunk {
     const funcName = func.getName() || 'anonymous';
     return {
-      content: func.getText(),
+      content: func.getText(true),
       chunk_type: 'function',
       name: funcName,
-      start_line: func.getStartLineNumber(),
+      start_line: func.getStartLineNumber(true),
       end_line: func.getEndLineNumber(),
       file_path: filePath,
       language,
@@ -201,10 +201,10 @@ export class TypeScriptParser {
     imports: string[],
   ): TypeScriptChunk {
     return {
-      content: method.getText(),
+      content: method.getText(true),
       chunk_type: 'method',
       name: `${className}.${method.getName()}`,
-      start_line: method.getStartLineNumber(),
+      start_line: method.getStartLineNumber(true),
       end_line: method.getEndLineNumber(),
       file_path: filePath,
       language,
@@ -234,10 +234,10 @@ export class TypeScriptParser {
   ): TypeScriptChunk {
     const name = iface.getName();
     return {
-      content: iface.getText(),
+      content: iface.getText(true),
       chunk_type: 'interface',
       name,
-      start_line: iface.getStartLineNumber(),
+      start_line: iface.getStartLineNumber(true),
       end_line: iface.getEndLineNumber(),
       file_path: filePath,
       language,
@@ -266,10 +266,10 @@ export class TypeScriptParser {
   ): TypeScriptChunk {
     const name = typeAlias.getName();
     return {
-      content: typeAlias.getText(),
+      content: typeAlias.getText(true),
       chunk_type: 'type',
       name,
-      start_line: typeAlias.getStartLineNumber(),
+      start_line: typeAlias.getStartLineNumber(true),
       end_line: typeAlias.getEndLineNumber(),
       file_path: filePath,
       language,
@@ -298,10 +298,10 @@ export class TypeScriptParser {
   ): TypeScriptChunk {
     const name = enumDecl.getName();
     return {
-      content: enumDecl.getText(),
+      content: enumDecl.getText(true),
       chunk_type: 'enum',
       name,
-      start_line: enumDecl.getStartLineNumber(),
+      start_line: enumDecl.getStartLineNumber(true),
       end_line: enumDecl.getEndLineNumber(),
       file_path: filePath,
       language,
@@ -336,14 +336,14 @@ export class TypeScriptParser {
       }
 
       chunks.push({
-        content: varStatement.getText(),
+        content: varStatement.getText(true),
         chunk_type:
           initializer.getKind() === SyntaxKind.ArrowFunction ||
           initializer.getKind() === SyntaxKind.FunctionExpression
             ? 'function'
             : 'const',
         name: declaration.getName(),
-        start_line: varStatement.getStartLineNumber(),
+        start_line: varStatement.getStartLineNumber(true),
         end_line: varStatement.getEndLineNumber(),
         file_path: filePath,
         language,
@@ -466,10 +466,10 @@ export class TypeScriptParser {
 
         const name = declaration.getName();
         chunks.push({
-          content: varStatement.getText(),
+          content: varStatement.getText(true),
           chunk_type: isComponent ? 'component' : 'system',
           name,
-          start_line: varStatement.getStartLineNumber(),
+          start_line: varStatement.getStartLineNumber(true),
           end_line: varStatement.getEndLineNumber(),
           file_path: filePath,
           language,
