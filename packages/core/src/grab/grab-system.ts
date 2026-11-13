@@ -86,6 +86,8 @@ export class GrabSystem extends createSystem(
   /** Which grabbable component created each entity's Handle, by entity index. */
   private handleSources = new Map<number, GrabbableComponent>();
 
+  private handleBindings = new WeakMap<Entity, () => void>();
+
   init() {
     // Ensure Handle component is registered in the world before queries rely on it
     if (!Handle.bitmask) {
@@ -127,9 +129,11 @@ export class GrabSystem extends createSystem(
         | undefined;
       if (h) {
         try {
+          this.handleBindings.get(entity)?.();
           h.cancel();
         } catch {}
       }
+      this.handleBindings.delete(entity);
       if (entity.object3D) {
         entity.object3D.pointerEventsType = 'all';
       }
@@ -295,7 +299,7 @@ export class GrabSystem extends createSystem(
       projectRays: false,
       multitouch: false,
     }));
-    handle.bind(obj);
+    this.handleBindings.set(entity, handle.bind(obj));
     obj.pointerEventsType = { deny: 'ray' };
     entity.addComponent(Handle, { instance: handle });
     this.handleSources.set(entity.index, OneHandGrabbable);
@@ -348,7 +352,7 @@ export class GrabSystem extends createSystem(
       projectRays: false,
       multitouch: true,
     }));
-    handle.bind(obj);
+    this.handleBindings.set(entity, handle.bind(obj));
     obj.pointerEventsType = { deny: 'ray' };
     entity.addComponent(Handle, { instance: handle });
     this.handleSources.set(entity.index, TwoHandsGrabbable);
@@ -440,7 +444,7 @@ export class GrabSystem extends createSystem(
       ),
       detachOnGrab,
     );
-    handle.bind(obj);
+    this.handleBindings.set(entity, handle.bind(obj));
     obj.pointerEventsType = { deny: 'grab' };
     entity.addComponent(Handle, { instance: handle });
     this.handleSources.set(entity.index, DistanceGrabbable);
