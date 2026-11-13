@@ -1,5 +1,9 @@
 # @iwsdk/reference-assets
 
+## 1.1.0
+
+## 1.1.0-rc.2
+
 ## 1.1.0-rc.1
 
 ## 1.1.0-rc.0

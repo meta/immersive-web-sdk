@@ -1,6 +1,6 @@
 {
   "name": "@iwsdk/reference",
-  "version": "1.1.0-rc.1",
+  "version": "1.1.0",
   "description": "Reference CLI/MCP server for searching IWSDK source, examples, guides and dependency types, with the corpus bundled in the package",
   "type": "module",
   "main": "dist/index.js",

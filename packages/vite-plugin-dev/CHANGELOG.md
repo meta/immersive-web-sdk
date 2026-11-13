@@ -1,5 +1,78 @@
 # @iwsdk/vite-plugin-dev
 
+## 1.1.0
+
+### Minor Changes
+
+- 3c6c2f3: The emulator now uses IWER 2.6.0's built-in GLTS rooms as its environments: `dev.emulator.environment` accepts `sunlit_living_room` (the new default for AR projects), `home_office`, `conference_room`, `open_office`, `kitchen`, `bedroom`, `music_studio` and `open_studio`, and the DevUI environment menu lists only these rooms. The legacy capture rooms are no longer offered; configurations that still name one get a deprecation warning and load its replacement (`living_room` → `sunlit_living_room`, `meeting_room` → `conference_room`, `music_room` → `music_studio`, `office_large` → `open_office`, `office_small` → `home_office`). The emulator runtime is now code-split: the room you pick and the GLTS runtime load on demand, and the capture data is no longer shipped.
+- a1ab306: Agents and scripts can now drive the emulator's hands the way a person moves them, so an app's real poke, pinch and grab code reacts. The emulator moves to IWER 2.7.0, and its hand tools are new MCP tools and `iwsdk xr` commands: `xr_run_sequence` (`xr run-sequence`) runs a whole interaction in one call (press a button with the index fingertip, pinch-grab an object, carry it, set it down, gesture), with `xr_cancel_sequence` and `xr_list_targets`; `xr_set_hand_pose`, `xr_get_hand_state` and `xr_microgesture` shape, read and gesture a hand. `xr_set_transform` and `xr_animate_to` also place a hand by a point on it (`anchor`) and orient it by direction or `"auto"`, `xr_set_select_value` ramps over `duration`, and `xr_set_device_state` takes each hand's `poseId` and `pinchValue`. The schemas mirror IWER's, and a misspelt key inside a union now names that key instead of reporting "a supported shape". Hand sequences get a 40 s command timeout, and the default timeout of a pose fade, select ramp or animation grows by its `duration`.
+
+  Sequence steps name their targets: IWSDK registers a target resolver with the emulator that finds interactable entities by name (`Map Pin 1`), the UIKitML element IDs inside them (`counter-button`), scene node IDs and UUIDs, and reports surface points, normals and boxes relative to the XR origin (`MCPRuntime.targetResolver`, `SceneTargetResolver`). The generated agent skills include hand recipes for pressing UI and pinch-grabbing.
+
+- 035efa5: Add a tab mute control to the managed browser. Chromium's app-mode window hides its own tab mute button, so the workspace's Runtime/Editor bar now has a speaker button, and agents get the matching `browser_set_muted` MCP tool (`iwsdk browser set-muted --muted <true|false>`). Muting silences Web Audio and media elements in every frame without pausing the app, persists across reloads and managed-browser relaunches for the dev session, and is reported as `browser.audioMuted` by `runtime_get_status`.
+- fcf7825: Move to Three.js r185 (`super-three@0.185.0`, `@types/three` 0.185). Apps pin the same version: update `three` and its override to `npm:super-three@0.185.0` (new projects from `@iwsdk/create` get it). The r185 changes are handled so apps see no warnings or visual changes: scene `shadowMapType: 'pcf-soft'` uses `PCFShadowMap` (soft since r182, which deprecated `PCFSoftShadowMap`), the render loop uses `Timer` instead of the deprecated `Clock`, the `room` IBL keeps its lighting, controller and hand visuals compile with r183+'s vec4 vertex colors (and still with older Three.js for `@iwsdk/xr-input`), and production builds no longer bundle the unused Draco and Basis decoders that r185's loaders reference.
+
+### Patch Changes
+
+- 7a92e16: New `DomeFade` node component (`{ start, end }`, meters) fades a node's meshes into the level's `DomeGradient` sky with horizontal distance from the node's origin, so a floor has no visible edge. Each faded pixel samples the live sky from the camera, so dome edits (colors, tilt, dither) reach it without a recompile. It patches per-node copies of MeshBasic, Lambert, Phong, Standard, Physical and Toon materials (sources are never changed or disposed), skips and counts other materials, does nothing without a visible `DomeGradient`, and hides the faded meshes, not child nodes, with the sky during AR passthrough. `scene_get_render_stats` reports each fade in `sceneEnvironment.domeFades` with its `inactiveReason`. Scene validation rejects a `DomeFade` whose `start` is not less than its `end`, and the editor viewport renders `DomeFade` the same way the runtime does. The generated agent guidance, the reviewer agent and the CLI's `AGENTS.md` point hand-built sky fades at `DomeFade`.
+- 0251c03: Add `ContactShadow` and `ShadowCatcher`, node components that ground content without hand-built shadow meshes. `ContactShadow` draws a soft round blob under its node (`size`, `opacity`, `color`, `height`); `ShadowCatcher` is an invisible floor that shows only the shadows it receives, for AR passthrough (`size`, `opacity`, `color`; it needs `environment.shadows` and a light with `castShadow`). The new `GroundShadowSystem` builds their meshes, which move and scale with the node, never cast shadows or take ray, grab or touch pointer hits, and stay visible in AR. Meshes marked runtime-only, as both are, are left out of auto-detected physics shapes, locomotion collision, gaze target bounds and `entity.dispose()`. The editor viewport renders both, and its selection and framing bounds, geometry lens and preview ghosting leave them out, as do the framing bounds and asset mesh counts in `scene_get_render_stats`, the emulator's hand targets and the grab setup warning. Render stats count them in `sceneEnvironment.groundShadows`, and scene validation rejects a `size` that is not positive. Scenes that use the components need @iwsdk/core 1.1.0. The generated agent guidance points to them instead of canvas blob cards and `ShadowMaterial` planes.
+- a57296b: Production builds no longer bundle every Lucide icon. Since 1.0, the UIKitML kit put all of about 1,600 Lucide icon components into every app (most of the starter's 6.7 MB main chunk). `vite build` now keeps only the icons used in static `public/**/*.uikitml`, the icons Horizon components use internally, and any listed in the new `iwsdkDev({ bundle: { icons: [...] } })` option for remote or generated UIKitML (`'all'` keeps every icon). If UIKitML in a production build names an icon that was left out, the `@iwsdk/core` parse error now points to that option. The dev server and editor still have every icon.
+- c59bf0b: The dev server's runtime WebSocket (`/__iwer_mcp`) now requires a per-session command credential on every command. Before, any script running in the app page (an app dependency, for example) and any other local user could connect and run runtime, editor and managed-browser commands. The dev server writes a random secret to `.iwsdk/runtime/command-credential.json` and deletes it when it stops. The file is never served over HTTP, and on macOS and Linux it is readable only by your user (mode 0600); on Windows it takes the project folder's permissions. The `iwsdk` CLI and `iwsdk mcp stdio` read it and send it with each command, and the server removes it before relaying a command to a page. A command without it fails with `runtime_unauthorized` and is not executed. Browser bridges keep their own rules (the managed browser's session identity, a headset's pairing token), and a CLI holding a stale session still gets `stale_runtime_owner`. Use the CLI and the dev plugin from the same IWSDK release: an older CLI sends no credential.
+
+  Scene routes now resolve symbolic links before they read or write. The managed editor can no longer open, save, flatten, import or list a scene through a link that leads outside `public/scenes` (or a `public/scenes` that leads outside the project), and its file picker refuses a `public/` subfolder linked outside `public/`. Links that stay inside `public/scenes` keep working.
+
+- Updated dependencies [a57296b]
+- Updated dependencies [08250e6]
+- Updated dependencies [08250e6]
+- Updated dependencies [7a92e16]
+- Updated dependencies [96b451a]
+- Updated dependencies [08250e6]
+- Updated dependencies [0251c03]
+- Updated dependencies [3c6c2f3]
+- Updated dependencies [a1ab306]
+- Updated dependencies [a57296b]
+- Updated dependencies [5db9b65]
+- Updated dependencies [fcf7825]
+- Updated dependencies [e551c3d]
+- Updated dependencies [ee50d96]
+- Updated dependencies [a57296b]
+  - @iwsdk/core@1.1.0
+  - @iwsdk/scene-composition@1.1.0
+
+## 1.1.0-rc.2
+
+### Minor Changes
+
+- a1ab306: Agents and scripts can now drive the emulator's hands the way a person moves them, so an app's real poke, pinch and grab code reacts. The emulator moves to IWER 2.7.0, and its hand tools are new MCP tools and `iwsdk xr` commands: `xr_run_sequence` (`xr run-sequence`) runs a whole interaction in one call (press a button with the index fingertip, pinch-grab an object, carry it, set it down, gesture), with `xr_cancel_sequence` and `xr_list_targets`; `xr_set_hand_pose`, `xr_get_hand_state` and `xr_microgesture` shape, read and gesture a hand. `xr_set_transform` and `xr_animate_to` also place a hand by a point on it (`anchor`) and orient it by direction or `"auto"`, `xr_set_select_value` ramps over `duration`, and `xr_set_device_state` takes each hand's `poseId` and `pinchValue`. The schemas mirror IWER's, and a misspelt key inside a union now names that key instead of reporting "a supported shape". Hand sequences get a 40 s command timeout, and the default timeout of a pose fade, select ramp or animation grows by its `duration`.
+
+  Sequence steps name their targets: IWSDK registers a target resolver with the emulator that finds interactable entities by name (`Map Pin 1`), the UIKitML element IDs inside them (`counter-button`), scene node IDs and UUIDs, and reports surface points, normals and boxes relative to the XR origin (`MCPRuntime.targetResolver`, `SceneTargetResolver`). The generated agent skills include hand recipes for pressing UI and pinch-grabbing.
+
+- 035efa5: Add a tab mute control to the managed browser. Chromium's app-mode window hides its own tab mute button, so the workspace's Runtime/Editor bar now has a speaker button, and agents get the matching `browser_set_muted` MCP tool (`iwsdk browser set-muted --muted <true|false>`). Muting silences Web Audio and media elements in every frame without pausing the app, persists across reloads and managed-browser relaunches for the dev session, and is reported as `browser.audioMuted` by `runtime_get_status`.
+
+### Patch Changes
+
+- 7a92e16: New `DomeFade` node component (`{ start, end }`, meters) fades a node's meshes into the level's `DomeGradient` sky with horizontal distance from the node's origin, so a floor has no visible edge. Each faded pixel samples the live sky from the camera, so dome edits (colors, tilt, dither) reach it without a recompile. It patches per-node copies of MeshBasic, Lambert, Phong, Standard, Physical and Toon materials (sources are never changed or disposed), skips and counts other materials, does nothing without a visible `DomeGradient`, and hides the faded meshes, not child nodes, with the sky during AR passthrough. `scene_get_render_stats` reports each fade in `sceneEnvironment.domeFades` with its `inactiveReason`. Scene validation rejects a `DomeFade` whose `start` is not less than its `end`, and the editor viewport renders `DomeFade` the same way the runtime does. The generated agent guidance, the reviewer agent and the CLI's `AGENTS.md` point hand-built sky fades at `DomeFade`.
+- 0251c03: Add `ContactShadow` and `ShadowCatcher`, node components that ground content without hand-built shadow meshes. `ContactShadow` draws a soft round blob under its node (`size`, `opacity`, `color`, `height`); `ShadowCatcher` is an invisible floor that shows only the shadows it receives, for AR passthrough (`size`, `opacity`, `color`; it needs `environment.shadows` and a light with `castShadow`). The new `GroundShadowSystem` builds their meshes, which move and scale with the node, never cast shadows or take ray, grab or touch pointer hits, and stay visible in AR. Meshes marked runtime-only, as both are, are left out of auto-detected physics shapes, locomotion collision, gaze target bounds and `entity.dispose()`. The editor viewport renders both, and its selection and framing bounds, geometry lens and preview ghosting leave them out, as do the framing bounds and asset mesh counts in `scene_get_render_stats`, the emulator's hand targets and the grab setup warning. Render stats count them in `sceneEnvironment.groundShadows`, and scene validation rejects a `size` that is not positive. Scenes that use the components need @iwsdk/core 1.1.0. The generated agent guidance points to them instead of canvas blob cards and `ShadowMaterial` planes.
+- a57296b: Production builds no longer bundle every Lucide icon. Since 1.0, the UIKitML kit put all of about 1,600 Lucide icon components into every app (most of the starter's 6.7 MB main chunk). `vite build` now keeps only the icons used in static `public/**/*.uikitml`, the icons Horizon components use internally, and any listed in the new `iwsdkDev({ bundle: { icons: [...] } })` option for remote or generated UIKitML (`'all'` keeps every icon). If UIKitML in a production build names an icon that was left out, the `@iwsdk/core` parse error now points to that option. The dev server and editor still have every icon.
+- c59bf0b: The dev server's runtime WebSocket (`/__iwer_mcp`) now requires a per-session command credential on every command. Before, any script running in the app page (an app dependency, for example) and any other local user could connect and run runtime, editor and managed-browser commands. The dev server writes a random secret to `.iwsdk/runtime/command-credential.json` and deletes it when it stops. The file is never served over HTTP, and on macOS and Linux it is readable only by your user (mode 0600); on Windows it takes the project folder's permissions. The `iwsdk` CLI and `iwsdk mcp stdio` read it and send it with each command, and the server removes it before relaying a command to a page. A command without it fails with `runtime_unauthorized` and is not executed. Browser bridges keep their own rules (the managed browser's session identity, a headset's pairing token), and a CLI holding a stale session still gets `stale_runtime_owner`. Use the CLI and the dev plugin from the same IWSDK release: an older CLI sends no credential.
+
+  Scene routes now resolve symbolic links before they read or write. The managed editor can no longer open, save, flatten, import or list a scene through a link that leads outside `public/scenes` (or a `public/scenes` that leads outside the project), and its file picker refuses a `public/` subfolder linked outside `public/`. Links that stay inside `public/scenes` keep working.
+
+- Updated dependencies [a57296b]
+- Updated dependencies [08250e6]
+- Updated dependencies [08250e6]
+- Updated dependencies [7a92e16]
+- Updated dependencies [96b451a]
+- Updated dependencies [08250e6]
+- Updated dependencies [0251c03]
+- Updated dependencies [a1ab306]
+- Updated dependencies [a57296b]
+- Updated dependencies [5db9b65]
+- Updated dependencies [e551c3d]
+- Updated dependencies [a57296b]
+  - @iwsdk/core@1.1.0-rc.2
+  - @iwsdk/scene-composition@1.1.0-rc.2
+
 ## 1.1.0-rc.1
 
 ### Patch Changes
