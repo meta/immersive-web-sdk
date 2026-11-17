@@ -296,7 +296,9 @@ from the same origin. Do not point this setting at Vite's `/@fs/` escape hatch:
 paths outside the workspace are rejected by its filesystem allow-list, and a
 separate HTTP server also needs explicit CORS headers (and HTTPS when the app is
 HTTPS). Production applications should own or mirror every critical asset
-rather than depending on a sample CDN's availability.
+rather than depending on a sample CDN's availability. To keep the app running
+with no connection after one online visit, see
+[Run Your Web Experience Offline](/guides/08b-offline).
 
 IWSDK repository tests override the base URL with a server backed by the exact
 packed bytes for deterministic offline coverage. The named CDN release check

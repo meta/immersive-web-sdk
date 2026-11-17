@@ -79,6 +79,7 @@ Open the URL in Meta Quest Browser and test the experience. Use [remote debuggin
 ## Related Resources
 
 - [Build & Deploy](/guides/08-build-deploy) covers production builds and GitHub Pages deployment for an IWSDK project.
+- [Run Your Web Experience Offline](/guides/08b-offline) keeps a copy of the site on the device, so it loads with no connection after one online visit.
 - [Submit WebXR content for the Browser new tab page](https://developers.meta.com/horizon/documentation/web/browser-new-tab/)
 - [Send a web link to Meta Quest with Web Launch](https://developers.meta.com/horizon/documentation/web/web-launch/)
 - [Progressive Web Apps](https://developers.meta.com/horizon/documentation/web/pwa-overview/) for optional Meta Horizon Store distribution

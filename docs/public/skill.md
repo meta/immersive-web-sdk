@@ -786,7 +786,9 @@ npm run build
 In generated apps, this runs a Vite build. The `dist/` folder is deployable as
 static files. It is not guaranteed to be fully offline/self-contained: some
 runtime assets, such as XR controller profile visuals, may still be fetched
-externally unless the app bundles them or provides a custom asset loader.
+externally unless the app bundles them or provides a custom asset loader. To
+make a build run with no connection after one online visit, including those
+files, follow [Run Your Web Experience Offline](/guides/08b-offline).
 
 ### GitHub Pages Deployment (no Actions required)
 

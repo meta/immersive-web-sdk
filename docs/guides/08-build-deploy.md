@@ -28,6 +28,8 @@ This creates a `dist/` folder with your application. The build automatically:
 - Excludes Havok when `world.features.physics` is `false`
 - Retains only bundled fonts referenced by static UIKitML under `public/`
 
+To keep the build running with no connection after one online visit, see [Run Your Web Experience Offline](/guides/08b-offline).
+
 ### Inspecting the Production Bundle
 
 Vite prints each emitted file and its compressed size. For a repeatable local

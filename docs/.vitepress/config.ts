@@ -148,6 +148,10 @@ gtag('config', 'G-V03QDNGKY3');`,
               text: '08a · Host Your Web Experience',
               link: '/guides/08a-web-hosting',
             },
+            {
+              text: '08b · Run Your Web Experience Offline',
+              link: '/guides/08b-offline',
+            },
           ],
         },
         {
