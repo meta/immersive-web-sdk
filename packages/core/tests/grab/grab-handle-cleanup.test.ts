@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import { RayPointer, XROrigin } from '@iwsdk/xr-input';
 import { signal } from '@preact/signals-core';
 import { describe, expect, it, vi } from 'vitest';
 import { World } from '../../src/ecs/world.js';
@@ -13,11 +14,13 @@ import { GrabSystem } from '../../src/grab/grab-system.js';
 import { Handle } from '../../src/grab/handles.js';
 import { OneHandGrabbable } from '../../src/grab/one-hand-grabbable.js';
 import { TwoHandsGrabbable } from '../../src/grab/two-hands-grabbable.js';
+import { RayInteractable } from '../../src/input/state-tags.js';
 import { LevelTag } from '../../src/level/level-tag.js';
 import {
   BoxGeometry,
   Mesh,
   MeshBasicMaterial,
+  PerspectiveCamera,
   Scene,
 } from '../../src/runtime/three.js';
 import { Transform } from '../../src/transform/transform-component.js';
@@ -56,6 +59,7 @@ function createGrabWorld(): World {
     .registerComponent(OneHandGrabbable)
     .registerComponent(TwoHandsGrabbable)
     .registerComponent(DistanceGrabbable)
+    .registerComponent(RayInteractable)
     .registerSystem(GrabSystem);
   world.scene = new Scene();
   world.sceneEntity = world.createTransformEntity(world.scene);
@@ -71,6 +75,47 @@ function createGrabbableMesh(world: World) {
 }
 
 describe('GrabSystem handle cleanup (#59)', () => {
+  it.each([
+    ['OneHandGrabbable', OneHandGrabbable],
+    ['TwoHandsGrabbable', TwoHandsGrabbable],
+    ['DistanceGrabbable', DistanceGrabbable],
+  ] as const)(
+    'cancels a ray click moved off the target after removing %s',
+    (_, component) => {
+      const world = createGrabWorld();
+      const { mesh, entity } = createGrabbableMesh(world);
+      mesh.position.z = -2;
+      mesh.pointerEvents = 'auto';
+      entity.addComponent(component).removeComponent(component);
+      entity.addComponent(RayInteractable);
+
+      const xrOrigin = new XROrigin();
+      const ray = new RayPointer(new PerspectiveCamera(), xrOrigin, 'left');
+      const click = vi.fn();
+      mesh.addEventListener('click', click);
+      world.scene.updateMatrixWorld(true);
+      ray.pointer.move(world.scene, { timeStamp: 0 });
+      expect(ray.pointer.getIntersection()?.object).toBe(mesh);
+      ray.pointer.down({ button: 0, timeStamp: 0 });
+
+      xrOrigin.raySpaces.left.position.x = 5;
+      xrOrigin.updateMatrixWorld(true);
+      ray.pointer.move(world.scene, { timeStamp: 50 });
+      ray.pointer.up({ button: 0, timeStamp: 100 });
+      expect(click).not.toHaveBeenCalled();
+
+      xrOrigin.raySpaces.left.position.x = 0;
+      xrOrigin.updateMatrixWorld(true);
+      ray.pointer.move(world.scene, { timeStamp: 200 });
+      ray.pointer.down({ button: 0, timeStamp: 200 });
+      ray.pointer.up({ button: 0, timeStamp: 300 });
+      expect(click).toHaveBeenCalledTimes(1);
+      ray.dispose();
+      mesh.geometry.dispose();
+      mesh.material.dispose();
+    },
+  );
+
   it('removes the Handle and restores ray events when OneHandGrabbable is removed', () => {
     const world = createGrabWorld();
     const { mesh, entity } = createGrabbableMesh(world);
