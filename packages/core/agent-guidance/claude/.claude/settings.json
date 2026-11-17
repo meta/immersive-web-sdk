@@ -13,6 +13,7 @@
       "Skill(iwsdk-grab)",
       "Skill(iwsdk-hosting)",
       "Skill(iwsdk-native-xr-test)",
+      "Skill(iwsdk-offline)",
       "Skill(iwsdk-physics)",
       "Skill(iwsdk-pwa-packaging)",
       "Skill(iwsdk-dev)",

@@ -34,7 +34,7 @@ it is served at `/manifest.webmanifest` with no further wiring.
 | Field | Why it matters here |
 | ----- | ------------------- |
 | `name` / `short_name` | `short_name` is the launcher label; keep it under ~12 characters or it truncates |
-| `start_url` / `scope` | must match the hosting path — `/` at an origin root, `/<path>/` on a subpath deployment |
+| `start_url` / `scope` | must match the hosting path — `/` at an origin root, `/<path>/` on a subpath deployment; with an offline copy (`iwsdk-offline`), both must also sit inside the service worker's scope |
 | `display` | `standalone` for both modes; `browser` forces a URL bar |
 | `background_color` | painted before first frame — match the app's clear color or launch flashes white |
 | `theme_color` | colors the custom tab bar on a 2D panel; add `theme_color_dark` if the app is dark-first |

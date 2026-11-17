@@ -174,4 +174,5 @@ trip:
 | [`references/existing-hosts.md`](references/existing-hosts.md) | Route B — per-host publish recipes and their gotchas |
 
 Packaging the hosted app into a signed Quest APK is the `iwsdk-pwa-packaging`
-skill; this skill only gets it online.
+skill, and keeping an offline copy on the device — with the `sw.js` cache
+headers that copy needs — is `iwsdk-offline`. This skill only gets it online.

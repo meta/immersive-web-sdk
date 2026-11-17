@@ -1,0 +1,72 @@
+/**
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+// scripts/write-service-worker.mjs: run after the build, once every output file is in dist/.
+//   node scripts/write-service-worker.mjs dist scripts/sw.js.template
+import { createHash } from 'node:crypto';
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join, relative, sep } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+// Never listed: the worker itself, source maps, files only crawlers or link previews fetch, and
+// the AGENTS.md guidance an IWSDK project keeps under public/.
+const LEFT_OUT = [
+  /^sw\.js$/,
+  /\.map$/,
+  /^(robots\.txt|sitemap\.xml|og-image\.png)$/,
+  /(^|\/)AGENTS\.md$/,
+];
+// Listed, but kept only once the page fetches them: files that only some users need.
+const ON_REQUEST = [/^fonts\/(ja|ko|zh)-/, /^levels\/extra-/];
+
+function* walk(dir) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) yield* walk(full);
+    else yield full;
+  }
+}
+
+export function writeServiceWorker(dist, template) {
+  const files = {};
+  const onRequest = {};
+  const paths = [...walk(dist)]
+    .map((full) => relative(dist, full).split(sep).join('/'))
+    .sort();
+  for (const path of paths) {
+    if (LEFT_OUT.some((rule) => rule.test(path))) continue;
+    const hash = createHash('sha256')
+      .update(readFileSync(join(dist, path)))
+      .digest('hex');
+    (ON_REQUEST.some((rule) => rule.test(path)) ? onRequest : files)[path] =
+      hash;
+  }
+  // The release is named by its contents, so an unchanged build writes a byte-identical sw.js.
+  const release = createHash('sha256')
+    .update(JSON.stringify({ files, onRequest }))
+    .digest('hex')
+    .slice(0, 16);
+  const worker = readFileSync(template, 'utf8')
+    .replace("'__RELEASE__'", () => JSON.stringify(release))
+    .replace('__FILES__', () => JSON.stringify(files, null, 2))
+    .replace('__ON_REQUEST__', () => JSON.stringify(onRequest, null, 2));
+  writeFileSync(join(dist, 'sw.js'), worker);
+  return { release, files, onRequest };
+}
+
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  const { release, files, onRequest } = writeServiceWorker(
+    process.argv[2] ?? 'dist',
+    process.argv[3] ?? 'scripts/sw.js.template',
+  );
+  console.log(
+    `sw.js: release ${release}, ${Object.keys(files).length} files, ${Object.keys(onRequest).length} on request`,
+  );
+}

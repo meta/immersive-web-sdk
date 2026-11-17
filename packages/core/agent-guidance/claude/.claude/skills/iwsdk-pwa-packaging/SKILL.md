@@ -80,6 +80,12 @@ it on the headset after sideloading (step 4).
 `index.html` ships `<link rel="icon" href="data:," />` and no manifest link, so
 the app is not installable until step 3 adds them.
 
+**Optional: launch offline.** The TWA loads `<DOMAIN>` over the network, so with
+no connection an installed app shows an error page instead of the app. If it
+must launch offline, add an offline copy with the `iwsdk-offline` skill before
+packaging: one online launch then keeps the release on the device. Keep the
+manifest's `start_url` and `scope` inside the service worker's scope.
+
 Then confirm the app itself is sound before wrapping it — `npm run --if-present typecheck`,
 and `npm run build` producing a `dist/` you have actually loaded. Packaging a
 broken build wastes a full round trip through hosting, signing, and upload.
@@ -191,6 +197,10 @@ retry the identical command. Tool download, auth, and flag reference:
 | App logic, assets, styling, manifest text, icons, asset links | republish `<DOMAIN>`; installed TWA picks it up next launch |
 | Package id, app name, launcher icon, version, **app mode**, signing | rebuild the APK and re-upload |
 
+With an offline copy (`iwsdk-offline`), a republished release installs in the
+background during a launch and takes over when the app is idle, or on the
+launch after that.
+
 ## Security
 
 The keystore and the app secret never go near `public/` or `dist/`. After every
@@ -213,6 +223,7 @@ updated — only replaced by a new Store entry.
 | [`references/store-upload.md`](references/store-upload.md) | Step 5 — `ovr-platform-util`, auth, channels, the DDA blocker |
 | [`references/troubleshooting.md`](references/troubleshooting.md) | Anything installed but misbehaving — stuck loading, URL bar, will-not-launch |
 
-Getting the app online is the `iwsdk-hosting` skill. Building the app itself is
+Getting the app online is the `iwsdk-hosting` skill, and keeping it working
+offline is `iwsdk-offline`. Building the app itself is
 `iwsdk-planner` and the other `iwsdk-*` skills — do not re-derive IWSDK
 patterns here.

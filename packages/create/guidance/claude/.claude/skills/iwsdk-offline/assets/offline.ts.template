@@ -1,0 +1,86 @@
+/**
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+// src/offline.ts: the page's side. Call startOffline() first thing at startup, and keepOfflineCopy()
+// once the first screen is up. isIdle() is your app's own test: would a reload now interrupt nothing?
+
+export function startOffline(isIdle: () => boolean): void {
+  if (!('serviceWorker' in navigator)) return;
+  const hadCopy = navigator.serviceWorker.controller != null;
+  navigator.serviceWorker
+    .getRegistration()
+    .then((registration) => {
+      if (registration == null) return;
+      // A release that finished installing on an earlier visit takes over before anything starts.
+      if (registration.waiting != null && hadCopy)
+        takeOver(registration.waiting);
+      else watch(registration, isIdle);
+    })
+    .catch(() => {});
+}
+
+export function keepOfflineCopy(isIdle: () => boolean): void {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker
+    .register('./sw.js', { scope: './' })
+    .then((registration) => {
+      watch(registration, isIdle);
+      // Tell the worker what the page fetched before it took control, so it can keep optional files.
+      new PerformanceObserver((list) => {
+        const fetched = list.getEntries().map((entry) => entry.name);
+        navigator.serviceWorker.ready.then((ready) =>
+          ready.active?.postMessage({ fetched }),
+        );
+      }).observe({ type: 'resource', buffered: true });
+    })
+    .catch(() => {
+      // No offline copy (storage turned off, some private windows): the app still runs online.
+    });
+}
+
+const watched = new WeakSet<ServiceWorkerRegistration>();
+
+function watch(
+  registration: ServiceWorkerRegistration,
+  isIdle: () => boolean,
+): void {
+  if (watched.has(registration)) return;
+  watched.add(registration);
+  const follow = (worker: ServiceWorker | null) => {
+    if (worker == null) return;
+    const settled = () => {
+      // Otherwise the release waits, and the next load takes it at startup.
+      if (
+        worker.state === 'installed' &&
+        navigator.serviceWorker.controller != null &&
+        isIdle()
+      ) {
+        takeOver(worker);
+      }
+    };
+    if (worker.state === 'installed') settled();
+    else worker.addEventListener('statechange', settled);
+  };
+  follow(registration.waiting);
+  follow(registration.installing); // an update the navigation started before this script ran
+  registration.addEventListener('updatefound', () =>
+    follow(registration.installing),
+  );
+}
+
+let asked: ServiceWorker | null = null;
+
+function takeOver(worker: ServiceWorker): void {
+  if (asked === worker) return;
+  asked = worker;
+  navigator.serviceWorker.addEventListener(
+    'controllerchange',
+    () => location.reload(),
+    { once: true },
+  );
+  worker.postMessage('take-over');
+}

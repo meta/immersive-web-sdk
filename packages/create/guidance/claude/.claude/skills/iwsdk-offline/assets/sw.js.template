@@ -1,0 +1,205 @@
+/**
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+// scripts/sw.js.template: copied to dist/sw.js by write-service-worker.mjs, with the placeholders filled in.
+// Plain JavaScript with no imports: it is copied, not bundled.
+const RELEASE = '__RELEASE__';
+const FILES = __FILES__; // path -> sha256: copied at install
+const ON_REQUEST = __ON_REQUEST__; // path -> sha256: kept the first time the page fetches it
+const PREFIX = 'myapp-release-'; // every release's cache; activation deletes all but its own
+const CACHE = PREFIX + RELEASE;
+const HASH = 'x-content-sha256'; // each cached copy carries its hash, so a later release can reuse it
+const KEPT = 'myapp-third-party'; // outside PREFIX, so no release's activation deletes it
+// Third-party paths kept once per device: IWSDK's controller models, and the three.js decoders it
+// fetches for Draco or KTX2 assets. Match three@ to your app's three.js revision.
+const PINNED =
+  /^https:\/\/(cdn\.jsdelivr\.net\/npm\/@webxr-input-profiles\/assets@1\.0\/|unpkg\.com\/three@0\.185\.0\/)/;
+const scope = new URL(self.registration.scope);
+
+const urlOf = (path) => new URL(path, scope).href;
+
+async function sha256(body) {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', body));
+  return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join(
+    '',
+  );
+}
+
+// What goes in the cache: a fresh Response carrying its hash. A redirected response cannot
+// answer a navigation, so the fetched one is never stored as it is.
+function copyOf(response, body, hash) {
+  const headers = new Headers(response.headers);
+  headers.set(HASH, hash);
+  return new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+// This exact file from the network, or null if this route has another version of it.
+async function fetchChecked(url, hash, mode) {
+  const response = await fetch(url, { cache: mode });
+  if (!response.ok) throw new Error(`${url}: ${response.status}`);
+  const body = await response.arrayBuffer();
+  return (await sha256(body)) === hash ? copyOf(response, body, hash) : null;
+}
+
+// This exact file as an earlier release holds it.
+async function heldCopy(url, hash) {
+  for (const name of await caches.keys()) {
+    if (!name.startsWith(PREFIX) || name === CACHE) continue;
+    const held = await (await caches.open(name)).match(url);
+    if (held?.headers.get(HASH) === hash) return held;
+  }
+  return null;
+}
+
+// With as little downloading as possible: an earlier release's copy, then the HTTP cache (which
+// holds what the page has just loaded), then the server, asked to revalidate.
+async function obtain(url, hash) {
+  const copy =
+    (await heldCopy(url, hash)) ??
+    (await fetchChecked(url, hash, 'default')) ??
+    (await fetchChecked(url, hash, 'no-cache'));
+  if (copy == null)
+    throw new Error(`${url}: the server has no copy with sha256 ${hash}`);
+  return copy;
+}
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    (async () => {
+      const cache = await caches.open(CACHE);
+      const queue = Object.entries(FILES);
+      const lane = async () => {
+        for (let next = queue.pop(); next != null; next = queue.pop()) {
+          const [path, hash] = next;
+          if ((await cache.match(urlOf(path)))?.headers.get(HASH) === hash)
+            continue; // a resumed install
+          await cache.put(urlOf(path), await obtain(urlOf(path), hash));
+        }
+      };
+      // Any failure fails the install, and the browser tries again on a later visit.
+      await Promise.all(Array.from({ length: 6 }, lane));
+      // Carry across what an earlier release kept on request, if it is unchanged. Fetch nothing else.
+      for (const [path, hash] of Object.entries(ON_REQUEST)) {
+        const held = await heldCopy(urlOf(path), hash);
+        if (held != null) await cache.put(urlOf(path), held);
+      }
+    })(),
+  );
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    (async () => {
+      for (const name of await caches.keys()) {
+        if (name.startsWith(PREFIX) && name !== CACHE)
+          await caches.delete(name);
+      }
+      await self.clients.claim(); // the first visit's page is served from the copy from now on
+    })(),
+  );
+});
+
+// A path relative to the scope, or null. The query string is ignored, so /?source=app is /.
+function scopedPath(href) {
+  const url = new URL(href);
+  if (url.origin !== scope.origin || !url.pathname.startsWith(scope.pathname))
+    return null;
+  return decodeURIComponent(url.pathname.slice(scope.pathname.length));
+}
+
+// Keeps an ON_REQUEST file the page fetched before this worker controlled it.
+async function keepReported(path) {
+  const cache = await caches.open(CACHE);
+  const hash = ON_REQUEST[path];
+  if ((await cache.match(urlOf(path)))?.headers.get(HASH) === hash) return;
+  await cache.put(urlOf(path), await obtain(urlOf(path), hash));
+}
+
+// Keeps an ON_REQUEST file fetched through this worker, if it is this release's version.
+async function keepFetched(path, response) {
+  const body = await response.arrayBuffer();
+  const hash = ON_REQUEST[path];
+  if ((await sha256(body)) !== hash) return; // a stale copy from a CDN edge: served once, never kept
+  await (
+    await caches.open(CACHE)
+  ).put(urlOf(path), copyOf(response, body, hash));
+}
+
+// A pinned third-party file: kept the first time, then served from the cache on every visit.
+async function thirdParty(event) {
+  const cache = await caches.open(KEPT);
+  const held = await cache.match(event.request.url);
+  if (held != null) return held;
+  const response = await fetch(event.request);
+  // Only a CORS response can be kept: an opaque one (status 0) has ok === false.
+  if (response.ok)
+    event.waitUntil(cache.put(event.request.url, response.clone()));
+  return response;
+}
+
+// Keeps a pinned third-party file the page fetched before this worker controlled it.
+async function keepPinned(url) {
+  const cache = await caches.open(KEPT);
+  if ((await cache.match(url)) != null) return;
+  const response = await fetch(url); // from the HTTP cache when it can
+  if (response.ok) await cache.put(url, response);
+}
+
+self.addEventListener('message', (event) => {
+  if (event.data === 'take-over') {
+    self.skipWaiting();
+  } else if (Array.isArray(event.data?.fetched)) {
+    const hrefs = event.data.fetched.filter((href) => typeof href === 'string');
+    const ours = hrefs
+      .map(scopedPath)
+      .filter((path) => path != null && Object.hasOwn(ON_REQUEST, path));
+    const pinned = hrefs.filter((href) => PINNED.test(href));
+    event.waitUntil(
+      Promise.allSettled([
+        ...ours.map(keepReported),
+        ...pinned.map(keepPinned),
+      ]),
+    );
+  }
+});
+
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
+  if (request.method !== 'GET') return; // never cache writes
+  if (PINNED.test(request.url)) {
+    event.respondWith(thirdParty(event));
+    return;
+  }
+  let path = scopedPath(request.url);
+  if (
+    path != null &&
+    request.mode === 'navigate' &&
+    (path === '' || path.endsWith('/'))
+  )
+    path += 'index.html';
+  if (
+    path == null ||
+    !(Object.hasOwn(FILES, path) || Object.hasOwn(ON_REQUEST, path))
+  )
+    return; // not ours
+  event.respondWith(
+    (async () => {
+      const held = await (await caches.open(CACHE)).match(urlOf(path));
+      if (held != null) return held;
+      // Missing: an ON_REQUEST file not fetched before, or a cache the browser evicted.
+      const response = await fetch(request);
+      if (response.ok && Object.hasOwn(ON_REQUEST, path)) {
+        event.waitUntil(keepFetched(path, response.clone()).catch(() => {}));
+      }
+      return response;
+    })(),
+  );
+});

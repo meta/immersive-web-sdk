@@ -10,6 +10,8 @@ symptoms, so start there.
 | Opens with a browser URL bar | `horizonOSAppMode: "2D"` on an immersive app | [App mode](#app-mode-failures) |
 | Opens flat, no URL bar, never enters VR | auto-enter code missing or not firing | [App mode](#app-mode-failures) |
 | Blank / white / error page | the origin is unreachable from the device | [Origin](#origin-failures) |
+| Error page only when the headset is offline | no offline copy, or the app never launched online | [Offline](#offline-failures) |
+| Old version after a web redeploy | an offline copy waiting for an idle moment or the next launch | [Offline](#offline-failures) |
 
 Before diagnosing, establish which layer is wrong. A **web** bug is fixed by
 republishing `<DOMAIN>`; a **native** bug needs a new APK and a new upload.
@@ -115,6 +117,34 @@ Usually a subpath deployment with `start_url`/`scope` still set to `/`. Set them
 to `/<path>/` and republish. The scaffolded `base: './'` handles the bundle
 paths already, so if bundles load and only `public/` assets 404, look for a
 publish that missed those files.
+
+## Offline failures
+
+These apply only when the site keeps an offline copy (`iwsdk-offline`).
+
+### Error page only when the headset is offline
+
+The device has no copy to serve. Usually one of:
+
+- **No offline copy** — the site registers no service worker. Add one with
+  `iwsdk-offline`.
+- **The app never launched online** since the copy was added. The copy is made
+  on the first online launch.
+- **`start_url` or `scope` sits outside the worker's scope**, so the launch
+  misses the copy. Serve `sw.js` from the root of that scope.
+
+Confirm the worker is live and uncached:
+
+```bash
+curl -sI https://<DOMAIN>/sw.js | grep -iE '^(HTTP|cache-control)'   # want 200, no-cache
+```
+
+### Old version after a web redeploy
+
+Expected for one launch: the new release installs in the background during a
+launch and takes over when the app is idle, or on the launch after that. If it
+never arrives, `sw.js` is being cached — serve it with `Cache-Control: no-cache`
+and purge the CDN.
 
 ## Packaging failures
 
