@@ -122,6 +122,7 @@ export type ProjectPhysicsOptions =
       useWorker?: boolean;
       updateFrequency?: number;
       interpolation?: boolean;
+      applyScale?: boolean;
     };
 
 export type ProjectSceneUnderstandingOptions =

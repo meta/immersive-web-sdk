@@ -478,7 +478,7 @@ function validatePhysics(
   const physics = objectValue(
     value,
     path,
-    ['useWorker', 'updateFrequency', 'interpolation'],
+    ['useWorker', 'updateFrequency', 'interpolation', 'applyScale'],
     [],
     issues,
   );
@@ -503,6 +503,9 @@ function validatePhysics(
   }
   if ('interpolation' in physics) {
     booleanValue(physics.interpolation, `${path}.interpolation`, issues);
+  }
+  if ('applyScale' in physics) {
+    booleanValue(physics.applyScale, `${path}.applyScale`, issues);
   }
 }
 

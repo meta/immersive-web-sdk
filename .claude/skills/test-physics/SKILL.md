@@ -219,7 +219,7 @@ npx @iwsdk/cli ecs systems 2>/dev/null
 Assert:
 
 - PhysicsSystem at priority -2
-- Config keys: `gravity`, `useWorker`, `updateFrequency`, `interpolation`
+- Config keys: `gravity`, `useWorker`, `updateFrequency`, `interpolation`, `applyScale`
 
 **Test 4.2: Physics Components Registered**
 

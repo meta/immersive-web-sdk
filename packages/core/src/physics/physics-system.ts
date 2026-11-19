@@ -198,6 +198,47 @@ function createPendingCommand(handle: number): PendingBodyCommand {
   };
 }
 
+const UNIT_SCALE = new Vector3(1, 1, 1);
+const shapeScale = new Vector3();
+const SCALE_EPSILON = 1e-4;
+
+function isUnitScale(scale: Vector3): boolean {
+  return (
+    Math.abs(scale.x - 1) <= SCALE_EPSILON &&
+    Math.abs(scale.y - 1) <= SCALE_EPSILON &&
+    Math.abs(scale.z - 1) <= SCALE_EPSILON
+  );
+}
+
+/**
+ * Applies a world scale to primitive dimensions. Round shapes can't stretch,
+ * so a sphere takes the largest axis and a cylinder or capsule radius the
+ * larger horizontal axis.
+ */
+function scaledDimensions(
+  shapeType: string,
+  dimensions: ArrayLike<number>,
+  scale: Vector3,
+): [number, number, number] {
+  switch (shapeType) {
+    case PhysicsShapeType.Sphere:
+      return [dimensions[0] * Math.max(scale.x, scale.y, scale.z), 0, 0];
+    case PhysicsShapeType.Cylinder:
+    case PhysicsShapeType.Capsules:
+      return [
+        dimensions[0] * Math.max(scale.x, scale.z),
+        dimensions[1] * scale.y,
+        dimensions[2],
+      ];
+    default:
+      return [
+        dimensions[0] * scale.x,
+        dimensions[1] * scale.y,
+        dimensions[2] * scale.z,
+      ];
+  }
+}
+
 function isZeroVector(value: ArrayLike<number>): boolean {
   return value[0] === 0 && value[1] === 0 && value[2] === 0;
 }
@@ -248,6 +289,7 @@ export class PhysicsSystem extends createSystem(
     useWorker: { type: Types.Boolean, default: true },
     updateFrequency: { type: Types.Float32, default: DEFAULT_UPDATE_FREQUENCY },
     interpolation: { type: Types.Boolean, default: true },
+    applyScale: { type: Types.Boolean, default: false },
   },
 ) {
   private transport?: PhysicsTransport;
@@ -265,6 +307,9 @@ export class PhysicsSystem extends createSystem(
    */
   private kinematicPoses = new Map<number, BodyPose>();
   private kinematicVelocityWarned = new WeakSet<Entity>();
+  /** Entities whose shape type and dimensions came from `Auto` detection. */
+  private autoShapedEntities = new WeakSet<Entity>();
+  private unscaledShapeWarned = new WeakSet<Entity>();
   private failedBodyEntities = new WeakSet<Entity>();
   private pendingCommands = new Map<number, PendingBodyCommand>();
   private commandPool: PendingBodyCommand[] = [];
@@ -1085,11 +1130,52 @@ export class PhysicsSystem extends createSystem(
       if (detection.dimensions) {
         dimensionsView.set(detection.dimensions);
       }
+      this.autoShapedEntities.add(entity);
     }
+
+    readWorldPose(object3D, posePosition, poseQuaternion);
+    const worldScale = shapeScale.set(
+      Math.abs(poseScale.x),
+      Math.abs(poseScale.y),
+      Math.abs(poseScale.z),
+    );
+    const isPrimitive =
+      shapeType !== PhysicsShapeType.ConvexHull &&
+      shapeType !== PhysicsShapeType.TriMesh;
+    // Auto-detected sizes come from the unscaled geometry, so they always take
+    // world scale. Authored dimensions were often sized by hand to match a
+    // scaled visual, so applying scale to them is opt-in for now.
+    const scaleDimensions =
+      isPrimitive &&
+      (this.autoShapedEntities.has(entity) ||
+        (this.config.applyScale.value as boolean));
+    if (
+      isPrimitive &&
+      !scaleDimensions &&
+      !isUnitScale(worldScale) &&
+      !this.unscaledShapeWarned.has(entity)
+    ) {
+      this.unscaledShapeWarned.add(entity);
+      console.warn(
+        `PhysicsSystem: The ${shapeType} dimensions of ${object3D.name || `entity ${entity.index}`} ignore its world scale (${worldScale
+          .toArray()
+          .map((value) => +value.toFixed(3))
+          .join(
+            ', ',
+          )}). Set features.physics.applyScale to true to apply it; that will become the default in a future release.`,
+      );
+    }
+    const dimensions = scaleDimensions
+      ? scaledDimensions(shapeType as string, dimensionsView, worldScale)
+      : ([dimensionsView[0], dimensionsView[1], dimensionsView[2]] as [
+          number,
+          number,
+          number,
+        ]);
 
     if (
       shapeType === PhysicsShapeType.Capsules &&
-      !getCapsuleAxisEndpoints(dimensionsView[0], dimensionsView[1])
+      !getCapsuleAxisEndpoints(dimensions[0], dimensions[1])
     ) {
       console.warn(
         'PhysicsSystem: Capsule dimensions require a positive radius and a total height greater than or equal to twice the radius',
@@ -1099,7 +1185,7 @@ export class PhysicsSystem extends createSystem(
 
     const descriptor: PhysicsWorkerShapeDescriptor = {
       type: shapeType as PhysicsWorkerShapeDescriptor['type'],
-      dimensions: [dimensionsView[0], dimensionsView[1], dimensionsView[2]],
+      dimensions,
       density: entity.getValue(PhysicsShape, 'density') ?? 1,
       restitution: entity.getValue(PhysicsShape, 'restitution') ?? 0,
       friction: entity.getValue(PhysicsShape, 'friction') ?? 0.5,
@@ -1124,9 +1210,18 @@ export class PhysicsSystem extends createSystem(
           return;
         }
 
-        const vertices = Float32Array.from(
-          positionAttribute.array as ArrayLike<number>,
-        );
+        // A Mesh's own geometry is in its local, unscaled space; a merged
+        // geometry already carries world scale. Reading through getX/Y/Z also
+        // handles interleaved and normalized position attributes.
+        const vertexScale = ownsGeometry ? UNIT_SCALE : worldScale;
+        const vertices = new Float32Array(positionAttribute.count * 3);
+        for (let index = 0; index < positionAttribute.count; index++) {
+          vertices[index * 3] = positionAttribute.getX(index) * vertexScale.x;
+          vertices[index * 3 + 1] =
+            positionAttribute.getY(index) * vertexScale.y;
+          vertices[index * 3 + 2] =
+            positionAttribute.getZ(index) * vertexScale.z;
+        }
         descriptor.vertices = vertices.buffer as ArrayBuffer;
         transfer.push(descriptor.vertices);
 

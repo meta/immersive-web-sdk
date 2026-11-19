@@ -45,6 +45,7 @@ The project manifest accepts execution, frequency, and interpolation options:
 - `useWorker` defaults to `true`. Set it to `false` to run the same runtime and message protocol on the main thread.
 - `updateFrequency` defaults to 60 Hz and is capped at 240 Hz.
 - `interpolation` defaults to `true` and smooths rendered transforms between fixed physics snapshots.
+- `applyScale` defaults to `false`. `Auto` shapes and mesh-derived `ConvexHull`/`TriMesh` shapes always use the object's world scale. Shapes with explicit `dimensions` ignore it unless `applyScale` is `true`; a scaled object with explicit dimensions logs a one-time warning. Prefer `applyScale: true` in new projects and author dimensions in the object's unscaled units.
 
 The system also accepts a reactive `gravity` config (defaults to Earth gravity):
 

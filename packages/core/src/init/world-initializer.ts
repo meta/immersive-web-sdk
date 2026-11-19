@@ -237,6 +237,11 @@ export type WorldOptions = {
           updateFrequency?: number;
           /** Smooth render transforms between physics snapshots. @defaultValue true */
           interpolation?: boolean;
+          /**
+           * Apply each object's world scale to shapes with explicit `dimensions`.
+           * Auto and mesh-derived shapes always use world scale. @defaultValue false
+           */
+          applyScale?: boolean;
         };
     /** Scene Understanding (planes/meshes/anchors). Boolean or config. @defaultValue false */
     sceneUnderstanding?: boolean | { showWireFrame?: boolean };
@@ -735,6 +740,7 @@ async function registerFeatureSystems(
         useWorker?: boolean;
         updateFrequency?: number;
         interpolation?: boolean;
+        applyScale?: boolean;
       };
   const physicsEnabled = !!physics;
   const sceneUnderstanding = config.features.sceneUnderstanding as
@@ -825,6 +831,7 @@ async function registerFeatureSystems(
               useWorker: physics.useWorker,
               updateFrequency: physics.updateFrequency,
               interpolation: physics.interpolation,
+              applyScale: physics.applyScale,
             }).filter(([, value]) => value !== undefined),
           )
         : undefined;

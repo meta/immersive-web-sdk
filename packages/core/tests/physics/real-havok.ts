@@ -56,7 +56,7 @@ export interface RealHavokWorld {
 
 /** Creates a PhysicsSystem backed by the real Havok engine on the main thread. */
 export async function createRealHavokWorld(
-  config: { updateFrequency?: number } = {},
+  config: { updateFrequency?: number; applyScale?: boolean } = {},
 ): Promise<RealHavokWorld> {
   const world = new World();
   world.registerComponent(Grabbed);
@@ -78,6 +78,7 @@ export async function createRealHavokWorld(
     useWorker: { value: false },
     updateFrequency: { value: config.updateFrequency ?? 60 },
     interpolation: { value: false },
+    applyScale: { value: config.applyScale ?? false },
   };
   system.init();
   for (let i = 0; i < 500 && !system.transportReady; i++) {

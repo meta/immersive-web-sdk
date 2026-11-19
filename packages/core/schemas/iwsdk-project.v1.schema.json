@@ -221,7 +221,8 @@
               "exclusiveMinimum": 0,
               "maximum": 240
             },
-            "interpolation": { "type": "boolean" }
+            "interpolation": { "type": "boolean" },
+            "applyScale": { "type": "boolean" }
           }
         }
       ]

@@ -99,6 +99,7 @@ The physics system automatically creates a Havok physics world with:
 - **Execution**: A dedicated Web Worker by default; set `useWorker` to `false` to run the same runtime on the main thread
 - **Step Rate**: Fixed at 60 Hz by default and configurable up to 240 Hz
 - **Render Smoothing**: Interpolates object transforms between physics snapshots by default
+- **Scale**: `Auto` shapes and mesh-derived `ConvexHull`/`TriMesh` shapes use the object's world scale. Explicit `dimensions` ignore it unless you set `"applyScale": true`, which is recommended for new projects and will become the default
 - **Automatic Cleanup**: Physics resources are cleaned up when entities are removed
 
 ## Understanding the Components
@@ -454,7 +455,7 @@ function animatePlatform(time) {
 
 - Ensure your floor has a `PhysicsShape` component
 - Make sure floor has a `PhysicsBody` component with `PhysicsState.Static`
-- Check that floor dimensions match visual geometry
+- Check that floor dimensions match visual geometry, including the object's scale (see `applyScale`)
 
 **Objects don't collide:**
 
