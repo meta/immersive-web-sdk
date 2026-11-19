@@ -69,47 +69,70 @@ describe('sequentialIndices', () => {
 });
 
 describe('generateMergedGeometry', () => {
-  it('merges child meshes and disposes the per-child clones (not the sources)', () => {
+  it('merges child mesh positions without disposing or changing the sources', () => {
     const root = new Object3D();
     const sourceA = new BoxGeometry(1, 1, 1);
     const sourceB = new BoxGeometry(2, 2, 2);
     root.add(new Mesh(sourceA));
     root.add(new Mesh(sourceB));
+    const disposeA = vi.spyOn(sourceA, 'dispose');
+    const disposeB = vi.spyOn(sourceB, 'dispose');
 
-    const sourceDisposeA = vi.spyOn(sourceA, 'dispose');
-    const sourceDisposeB = vi.spyOn(sourceB, 'dispose');
+    const merged = generateMergedGeometry(root);
 
-    // Capture every clone created during the merge and watch its dispose().
-    const cloneDisposeSpies: Array<ReturnType<typeof vi.spyOn>> = [];
-    const realClone = BufferGeometry.prototype.clone;
-    const cloneSpy = vi
-      .spyOn(BufferGeometry.prototype, 'clone')
-      .mockImplementation(function (this: BufferGeometry) {
-        const cloned = realClone.call(this);
-        cloneDisposeSpies.push(vi.spyOn(cloned, 'dispose'));
-        return cloned;
-      });
+    expect(merged.attributes.position.count).toBe(
+      sourceA.attributes.position.count + sourceB.attributes.position.count,
+    );
+    expect(merged.index!.count).toBe(
+      sourceA.index!.count + sourceB.index!.count,
+    );
+    expect(disposeA).not.toHaveBeenCalled();
+    expect(disposeB).not.toHaveBeenCalled();
+  });
 
-    let merged: BufferGeometry;
-    try {
-      merged = generateMergedGeometry(root);
-    } finally {
-      cloneSpy.mockRestore();
-    }
+  it('merges meshes whose attribute sets differ (typical glTF)', () => {
+    // three's mergeGeometries returns null here, which used to make
+    // PhysicsSystem.update throw every frame.
+    const root = new Group();
+    root.add(new Mesh(new BoxGeometry(1, 1, 1)));
+    const bare = new BufferGeometry();
+    bare.setAttribute(
+      'position',
+      new Float32BufferAttribute([0, 2, 0, 1, 2, 0, 0, 3, 0], 3),
+    );
+    root.add(new Mesh(bare));
 
-    expect(merged).toBeInstanceOf(BufferGeometry);
-    expect(merged.attributes.position).toBeDefined();
-    expect(merged.attributes.position.count).toBeGreaterThan(0);
+    const merged = generateMergedGeometry(root);
 
-    // One clone per child mesh, and each clone is disposed after the merge.
-    expect(cloneDisposeSpies).toHaveLength(2);
-    for (const disposeSpy of cloneDisposeSpies) {
-      expect(disposeSpy).toHaveBeenCalledTimes(1);
-    }
+    expect(Object.keys(merged.attributes)).toEqual(['position']);
+    expect(merged.attributes.position.count).toBe(24 + 3);
+    // The non-indexed child gets sequential indices after the box's 24 vertices.
+    expect(Array.from(merged.index!.array).slice(-3)).toEqual([24, 25, 26]);
+    merged.computeBoundingBox();
+    expect(merged.boundingBox!.max.y).toBeCloseTo(3);
+  });
 
-    // The source geometries are still owned by their meshes -> never disposed.
-    expect(sourceDisposeA).not.toHaveBeenCalled();
-    expect(sourceDisposeB).not.toHaveBeenCalled();
+  it('keeps world scale, drops the root pose, and leaves matrixWorld alone', () => {
+    const root = new Group();
+    root.position.set(5, 0, 0);
+    root.scale.setScalar(2);
+    root.add(new Mesh(new BoxGeometry(1, 1, 1)));
+    root.updateMatrixWorld(true);
+    const before = root.matrixWorld.clone();
+
+    const merged = generateMergedGeometry(root);
+
+    merged.computeBoundingBox();
+    const size = merged.boundingBox!.getSize(new Vector3());
+    expect(size.toArray()).toEqual([
+      expect.closeTo(2, 6),
+      expect.closeTo(2, 6),
+      expect.closeTo(2, 6),
+    ]);
+    expect(merged.boundingBox!.getCenter(new Vector3()).length()).toBeCloseTo(
+      0,
+    );
+    expect(root.matrixWorld.equals(before)).toBe(true);
   });
 });
 
@@ -186,7 +209,6 @@ describe('runtime-only meshes', () => {
   it('leaves ground-shadow meshes out of merged collider geometry', () => {
     const merged = generateMergedGeometry(shadowedPlinth());
 
-    expect(merged.attributes.color).toBeDefined();
     merged.computeBoundingBox();
     const size = merged.boundingBox!.getSize(new Vector3());
     expect(size.toArray()).toEqual([

@@ -899,7 +899,19 @@ export class PhysicsSystem extends createSystem(
       return;
     }
 
-    const serialized = this.serializeShape(entity, entity.object3D);
+    let serialized: SerializedShape | undefined;
+    try {
+      serialized = this.serializeShape(entity, entity.object3D);
+    } catch (error) {
+      // One entity whose collider can't be built must not stop the whole
+      // system every frame; it stays without a body until it is re-added.
+      this.failedBodyEntities.add(entity);
+      console.error(
+        `PhysicsSystem: Failed to build the collider for ${entity.object3D.name || `entity ${entity.index}`}:`,
+        error,
+      );
+      return;
+    }
     if (!serialized) {
       return;
     }

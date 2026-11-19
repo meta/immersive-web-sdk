@@ -5,7 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {
   Vector3,
   Mesh,
@@ -13,6 +12,7 @@ import {
   SphereGeometry,
   CylinderGeometry,
   PlaneGeometry,
+  BufferAttribute,
   BufferGeometry,
   Box3,
   Object3D,
@@ -216,37 +216,63 @@ export function calculateObject3DBounds(
   return [1, 1, 1];
 }
 
+/**
+ * Merges the positions of every mesh under `object3D` into one indexed
+ * geometry in `object3D`'s space, keeping its world scale.
+ *
+ * Only positions are merged. glTF meshes in one model often carry different
+ * attribute sets (vertex colours, a second UV set, tangents), and colliders
+ * need nothing but positions, so a full attribute merge would fail on them.
+ */
 export function generateMergedGeometry(object3D: Object3D): BufferGeometry {
   object3D.updateMatrixWorld(true);
 
-  tempMatrix.copy(object3D.matrixWorld);
+  // World space -> object3D's space without its scale, so the collider keeps
+  // the object's world scale.
+  object3D.matrixWorld.decompose(tempVec1, tempQuat, tempVec2);
+  tempMatrix.compose(tempVec1, tempQuat, UNIT_SCALE).invert();
 
-  tempMatrix.decompose(tempVec1, tempQuat, tempVec2);
-  tempMatrix.compose(tempVec1, tempQuat, UNIT_SCALE);
-
-  const geometries: BufferGeometry[] = [];
+  const meshes: Mesh[] = [];
+  let vertexCount = 0;
+  let indexCount = 0;
   object3D.traverse((child) => {
-    if (
-      (child as Mesh).isMesh &&
-      (child as Mesh).geometry &&
-      !isRuntimeOnly(child)
-    ) {
-      const geometry = (child as Mesh).geometry.clone();
-      geometry.applyMatrix4(child.matrixWorld);
-      geometries.push(geometry);
+    const mesh = child as Mesh;
+    const position = mesh.isMesh ? mesh.geometry?.attributes.position : null;
+    if (!position || isRuntimeOnly(child)) {
+      return;
     }
+    meshes.push(mesh);
+    vertexCount += position.count;
+    indexCount += mesh.geometry.index?.count ?? position.count;
   });
-  const mergedGeometry = mergeGeometries(geometries);
-  // The per-child clones were only working copies for the merge; their data is
-  // now copied into mergedGeometry, so free them to avoid leaking a clone of
-  // every child geometry each time a merged collider is built.
-  for (const geometry of geometries) {
-    geometry.dispose();
+
+  const positions = new Float32Array(vertexCount * 3);
+  const indices = new Uint32Array(indexCount);
+  let vertexOffset = 0;
+  let indexOffset = 0;
+  for (const mesh of meshes) {
+    const { index, attributes } = mesh.geometry;
+    const position = attributes.position;
+    tempMatrix2.multiplyMatrices(tempMatrix, mesh.matrixWorld);
+    for (let i = 0; i < position.count; i++) {
+      tempVec1.fromBufferAttribute(position, i).applyMatrix4(tempMatrix2);
+      tempVec1.toArray(positions, (vertexOffset + i) * 3);
+    }
+    if (index) {
+      for (let i = 0; i < index.count; i++) {
+        indices[indexOffset + i] = vertexOffset + index.getX(i);
+      }
+    } else {
+      for (let i = 0; i < position.count; i++) {
+        indices[indexOffset + i] = vertexOffset + i;
+      }
+    }
+    vertexOffset += position.count;
+    indexOffset += index?.count ?? position.count;
   }
-  tempMatrix2.copy(tempMatrix).invert();
-  mergedGeometry.applyMatrix4(tempMatrix2);
 
-  object3D.matrixWorld.copy(tempMatrix);
-
-  return mergedGeometry;
+  const merged = new BufferGeometry();
+  merged.setAttribute('position', new BufferAttribute(positions, 3));
+  merged.setIndex(new BufferAttribute(indices, 1));
+  return merged;
 }
