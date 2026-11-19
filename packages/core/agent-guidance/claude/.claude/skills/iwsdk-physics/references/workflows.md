@@ -70,7 +70,10 @@ envEntity.addComponent(PhysicsBody, { state: PhysicsState.Static });
 
 ### Creating a Kinematic Moving Platform
 
-Kinematic bodies are moved by code and push dynamic objects:
+Kinematic bodies follow their Object3D: move it from a system and the body sweeps
+there over the next physics steps, pushing dynamic objects and carrying anything
+resting on it. When the Object3D stops, the body stops with it. Don't apply
+`PhysicsManipulation` to a kinematic body; it is ignored with a warning.
 
 ```typescript
 // Setup

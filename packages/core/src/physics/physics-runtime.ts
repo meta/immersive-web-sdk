@@ -40,9 +40,16 @@ interface WorkerBody {
   transformOffset: number;
   state: PhysicsWorkerBodyState;
   targetVelocity: Vector3;
+  /**
+   * The last target this body was driven to. Havok reaches a target by
+   * setting a velocity that persists afterwards, so a body whose driver stops
+   * sending targets is settled onto this pose instead of drifting past it.
+   */
+  drivenTarget?: QTransform;
 }
 
 interface TargetTransform {
+  entry: WorkerBody;
   body: HP_BodyId;
   from: QTransform;
   to: QTransform;
@@ -54,6 +61,8 @@ interface PhysicsRuntimeState {
   heapFloatView?: Float32Array;
   initializePromise?: Promise<void>;
   bodies: Map<number, WorkerBody>;
+  /** Bodies with a {@link WorkerBody.drivenTarget}. */
+  drivenBodies: Set<WorkerBody>;
   destroyed: boolean;
 }
 
@@ -256,6 +265,7 @@ function removeBody(state: PhysicsRuntimeState, handle: number): void {
   engine.HP_Body_Release(entry.body);
   engine.HP_Shape_Release(entry.shape);
   state.bodies.delete(handle);
+  state.drivenBodies.delete(entry);
 }
 
 function addBody(
@@ -406,6 +416,7 @@ function applyCommands(
       );
       // Each grab starts tracking from rest.
       entry.targetVelocity = [0, 0, 0];
+      entry.drivenTarget = undefined;
     }
     if (
       flags &
@@ -424,6 +435,7 @@ function applyCommands(
       ];
       if (flags & PhysicsCommandFlag.SetTransform) {
         engine.HP_Body_SetQTransform(entry.body, [position, quaternion]);
+        entry.drivenTarget = undefined;
       }
       if (flags & PhysicsCommandFlag.SetTargetTransform && duration > 0) {
         const to: QTransform = [position, quaternion];
@@ -446,7 +458,7 @@ function applyCommands(
           from = to;
         }
         entry.targetVelocity = velocity;
-        targets.push({ body: entry.body, from, to });
+        targets.push({ entry, body: entry.body, from, to });
       }
     }
     if (flags & PhysicsCommandFlag.ResetLinearVelocity) {
@@ -504,6 +516,35 @@ function applyCommands(
     }
   }
   return targets;
+}
+
+/**
+ * Settles every body that was driven by a target in an earlier exchange but
+ * got none in this one: it is placed on its last target and stopped, so a
+ * kinematic platform that stops moving stays under its mesh.
+ */
+function settleUndrivenBodies(
+  state: PhysicsRuntimeState,
+  targets: TargetTransform[],
+): void {
+  const [engine] = requireHavok(state);
+  const driven = new Set(targets.map((target) => target.entry));
+  for (const entry of state.drivenBodies) {
+    if (driven.has(entry)) {
+      continue;
+    }
+    if (entry.drivenTarget) {
+      engine.HP_Body_SetQTransform(entry.body, entry.drivenTarget);
+      engine.HP_Body_SetLinearVelocity(entry.body, [0, 0, 0]);
+      engine.HP_Body_SetAngularVelocity(entry.body, [0, 0, 0]);
+    }
+    entry.drivenTarget = undefined;
+    state.drivenBodies.delete(entry);
+  }
+  for (const target of targets) {
+    target.entry.drivenTarget = target.to;
+    state.drivenBodies.add(target.entry);
+  }
 }
 
 function writeQuaternionFromMatrix(
@@ -613,6 +654,7 @@ export interface PhysicsRuntimeStepResult {
 export class PhysicsRuntime {
   private readonly state: PhysicsRuntimeState = {
     bodies: new Map<number, WorkerBody>(),
+    drivenBodies: new Set<WorkerBody>(),
     destroyed: false,
   };
 
@@ -644,6 +686,9 @@ export class PhysicsRuntime {
       const delta = floats[PhysicsHeaderIndex.Delta];
       const stepCount = Math.max(0, ints[PhysicsHeaderIndex.StepCount]);
       const targets = applyCommands(this.state, buffer, delta * stepCount);
+      if (stepCount > 0) {
+        settleUndrivenBodies(this.state, targets);
+      }
       for (let index = 0; index < stepCount; index++) {
         // Havok reaches a target within one step and keeps that velocity, so
         // every substep gets its share of the motion.

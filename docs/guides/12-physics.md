@@ -286,8 +286,9 @@ entity.addComponent(PhysicsBody, {
   - Most common for interactive objects
 
 - **`PhysicsState.Kinematic`** - Programmatically controlled
-  - Can be moved by code but not affected by other bodies
-  - Useful for moving platforms or player-controlled objects
+  - Follows its Object3D: move or rotate the Object3D and the body sweeps there over the next physics steps, pushing dynamic bodies out of the way
+  - Not affected by other bodies, gravity, forces or `PhysicsManipulation` (which is ignored with a warning)
+  - Useful for moving platforms, doors or player-controlled objects
 
 ```javascript
 // Static floor

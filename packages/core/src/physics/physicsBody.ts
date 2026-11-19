@@ -14,8 +14,8 @@ export const PhysicsState = {
   Static: 'STATIC',
   /** Bodies which can move and respond to forces, collisions, and gravity.  */
   Dynamic: 'DYNAMIC',
-  /** Kinematic bodies that can move just like dynamic bodies. The difference is that kinematic bodies won't be affected by any other bodies.
-   *  Kinematic bodies will still push dynamic bodies out of the way but the kinematic body won't be affected by those collisions.  */
+  /** Kinematic bodies follow their Object3D: move or rotate it and the body sweeps there over the next physics steps.
+   *  They push dynamic bodies out of the way but aren't affected by collisions, gravity, forces or `PhysicsManipulation`.  */
   Kinematic: 'KINEMATIC',
 } as const;
 
@@ -30,7 +30,7 @@ export const DEFAULT_GRAVITY_FACTOR = 1.0;
  * @remarks
  * - Static bodies are used for immovable objects like walls and floors.
  * - Dynamic bodies respond to forces, collisions, and gravity.
- * - Kinematic bodies can be moved programmatically but don't respond to physics forces.
+ * - Kinematic bodies follow their Object3D and don't respond to physics forces.
  * - Internal properties like `_engineBody` are managed automatically by {@link PhysicsSystem}.
  *
  * @example Add a dynamic physics body to an entity

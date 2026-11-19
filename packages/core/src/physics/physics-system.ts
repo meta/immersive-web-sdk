@@ -110,6 +110,15 @@ interface CompletedExchange {
   sequence: number;
 }
 
+interface BodyPose {
+  position: Vector3;
+  quaternion: Quaternion;
+}
+
+/** Below these a kinematic body's Object3D counts as unmoved. */
+const KINEMATIC_POSITION_EPSILON_SQ = 1e-10;
+const KINEMATIC_ROTATION_EPSILON = 1e-5;
+
 interface GrabbedBodyState {
   position: Vector3;
   quaternion: Quaternion;
@@ -249,6 +258,13 @@ export class PhysicsSystem extends createSystem(
   private bodySnapshots = new Map<number, BodyPoseSnapshot>();
   private bodyResultSequenceFloors = new Map<number, number>();
   private grabbedBodies = new Map<number, GrabbedBodyState>();
+  /**
+   * World pose last sent for each kinematic body. Kinematic bodies follow
+   * their Object3D: a changed pose is sent as a target the runtime sweeps
+   * across the substeps, and engine poses are never written back.
+   */
+  private kinematicPoses = new Map<number, BodyPose>();
+  private kinematicVelocityWarned = new WeakSet<Entity>();
   private failedBodyEntities = new WeakSet<Entity>();
   private pendingCommands = new Map<number, PendingBodyCommand>();
   private commandPool: PendingBodyCommand[] = [];
@@ -325,6 +341,7 @@ export class PhysicsSystem extends createSystem(
       this.bodySnapshots.clear();
       this.bodyResultSequenceFloors.clear();
       this.grabbedBodies.clear();
+      this.kinematicPoses.clear();
       this.failedBodyEntities = new WeakSet<Entity>();
       this.pendingCommands.clear();
       this.freeExchangeBuffers.length = 0;
@@ -382,6 +399,12 @@ export class PhysicsSystem extends createSystem(
     if (object3D) {
       this.syncSnapshotToObject(handle, object3D);
     }
+    // A teleported kinematic body is already where its Object3D is.
+    const kinematicPose = this.kinematicPoses.get(handle);
+    if (kinematicPose) {
+      kinematicPose.position.copy(posePosition);
+      kinematicPose.quaternion.copy(poseQuaternion);
+    }
 
     if (options.resetVelocity === false) {
       return;
@@ -418,6 +441,8 @@ export class PhysicsSystem extends createSystem(
         this.trackGrabbedBody(entity, handle, entity.object3D, grab, delta);
       } else if (grab) {
         this.releaseGrabbedBody(entity, handle, entity.object3D, grab);
+      } else {
+        this.syncKinematicTarget(handle, entity.object3D);
       }
     });
 
@@ -540,6 +565,7 @@ export class PhysicsSystem extends createSystem(
           this.bodySnapshots.delete(message.handle);
           this.bodyResultSequenceFloors.delete(message.handle);
           this.grabbedBodies.delete(message.handle);
+          this.kinematicPoses.delete(message.handle);
           this.discardPendingCommand(message.handle);
         } else {
           this.handleTransportFailure(`Physics runtime: ${message.message}`);
@@ -642,7 +668,10 @@ export class PhysicsSystem extends createSystem(
       angularVelocity[1] = floats[base + PhysicsOutputOffset.AngularVelocityY];
       angularVelocity[2] = floats[base + PhysicsOutputOffset.AngularVelocityZ];
 
-      if (Grabbed.bitmask && entity.hasComponent(Grabbed)) {
+      if (
+        (Grabbed.bitmask && entity.hasComponent(Grabbed)) ||
+        this.kinematicPoses.has(handle)
+      ) {
         continue;
       }
 
@@ -677,7 +706,8 @@ export class PhysicsSystem extends createSystem(
       const entity = this.bodyEntities.get(handle);
       if (
         !entity?.object3D ||
-        (Grabbed.bitmask && entity.hasComponent(Grabbed))
+        (Grabbed.bitmask && entity.hasComponent(Grabbed)) ||
+        this.kinematicPoses.has(handle)
       ) {
         continue;
       }
@@ -693,6 +723,28 @@ export class PhysicsSystem extends createSystem(
       );
       writeWorldPose(entity.object3D, posePosition, poseQuaternion);
     }
+  }
+
+  private syncKinematicTarget(handle: number, object3D: Object3D): void {
+    const sent = this.kinematicPoses.get(handle);
+    if (!sent) {
+      return;
+    }
+    readWorldPose(object3D, posePosition, poseQuaternion);
+    if (
+      posePosition.distanceToSquared(sent.position) <=
+        KINEMATIC_POSITION_EPSILON_SQ &&
+      poseQuaternion.angleTo(sent.quaternion) <= KINEMATIC_ROTATION_EPSILON
+    ) {
+      // Unmoved: no target, so the runtime settles the body on the last one.
+      return;
+    }
+    sent.position.copy(posePosition);
+    sent.quaternion.copy(poseQuaternion);
+    const command = this.getPendingCommand(handle);
+    command.flags |= PhysicsCommandFlag.SetTargetTransform;
+    posePosition.toArray(command.position);
+    poseQuaternion.toArray(command.quaternion);
   }
 
   private trackGrabbedBody(
@@ -992,6 +1044,12 @@ export class PhysicsSystem extends createSystem(
     PhysicsBody.data._engineLinearDamping[entity.index] = linearDamping;
     PhysicsBody.data._engineAngularDamping[entity.index] = angularDamping;
     this.bodyEntities.set(handle, entity);
+    if (message.state === PhysicsState.Kinematic) {
+      this.kinematicPoses.set(handle, {
+        position: posePosition.clone(),
+        quaternion: poseQuaternion.clone(),
+      });
+    }
     if (message.state !== PhysicsState.Static) {
       this.bodySnapshots.set(handle, {
         previousPosition: posePosition.clone(),
@@ -1101,6 +1159,7 @@ export class PhysicsSystem extends createSystem(
     this.bodySnapshots.delete(handle);
     this.bodyResultSequenceFloors.delete(handle);
     this.grabbedBodies.delete(handle);
+    this.kinematicPoses.delete(handle);
     this.discardPendingCommand(handle);
     this.setEngineHandles(entity, 0);
   }
@@ -1229,6 +1288,18 @@ export class PhysicsSystem extends createSystem(
       const hasLinearVelocity = !isZeroVector(linearVelocity);
       const hasAngularVelocity = !isZeroVector(angularVelocity);
       if (!hasForce && !hasLinearVelocity && !hasAngularVelocity) {
+        entity.removeComponent(PhysicsManipulation);
+        return;
+      }
+      if (this.kinematicPoses.has(handle)) {
+        // A kinematic body moves with its Object3D; forces and velocities
+        // would fight that and leave the collider off its mesh.
+        if (!this.kinematicVelocityWarned.has(entity)) {
+          this.kinematicVelocityWarned.add(entity);
+          console.warn(
+            `PhysicsSystem: Ignoring PhysicsManipulation on kinematic body ${entity.object3D.name || `entity ${entity.index}`}; move its Object3D instead.`,
+          );
+        }
         entity.removeComponent(PhysicsManipulation);
         return;
       }
