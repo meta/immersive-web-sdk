@@ -77,6 +77,7 @@ interface PendingBodyCommand {
   gravityFactor: number;
   linearDamping: number;
   angularDamping: number;
+  kinematicOverride: boolean;
 }
 
 interface SerializedShape {
@@ -98,12 +99,25 @@ interface CompletedExchange {
   sequence: number;
 }
 
+interface GrabbedBodyState {
+  position: Vector3;
+  quaternion: Quaternion;
+  linearVelocity: Vector3;
+  angularVelocity: Vector3;
+}
+
 const ZERO_VECTOR = [0, 0, 0] as const;
 const EXCHANGE_BUFFER_COUNT = 2;
 const INITIAL_RESULT_CAPACITY = 64;
 const DEFAULT_UPDATE_FREQUENCY = 60;
 const MAX_UPDATE_FREQUENCY = 240;
 const MAX_ACCUMULATED_STEPS = 4;
+const RELEASE_VELOCITY_SMOOTHING_SECONDS = 0.05;
+const MAX_RELEASE_LINEAR_SPEED = 10;
+const MAX_RELEASE_ANGULAR_SPEED = 4 * Math.PI;
+
+const tempVelocity = new Vector3();
+const tempRotation = new Quaternion();
 
 function vector3ToArray(value: Vector3Input): [number, number, number] {
   return 'x' in value
@@ -132,6 +146,7 @@ function createPendingCommand(handle: number): PendingBodyCommand {
     gravityFactor: DEFAULT_GRAVITY_FACTOR,
     linearDamping: DEFAULT_LINEAR_DAMPING,
     angularDamping: DEFAULT_ANGULAR_DAMPING,
+    kinematicOverride: false,
   };
 }
 
@@ -153,6 +168,7 @@ function isZeroVector(value: ArrayLike<number>): boolean {
  * - Supports Sphere, Box, Cylinder, Capsule, ConvexHull, TriMesh, and Auto shapes.
  * - Synchronizes dynamic body poses and velocities back to ECS entities.
  * - Sends grab targets, impulses, velocity edits, damping, and gravity changes through one transport contract.
+ * - Holds grabbed dynamic bodies kinematically and releases them with the hand's smoothed, capped velocity.
  * - Automatically releases bodies and shapes when entities are removed.
  *
  * @category Physics
@@ -193,6 +209,7 @@ export class PhysicsSystem extends createSystem(
   private bodyEntities = new Map<number, Entity>();
   private bodySnapshots = new Map<number, BodyPoseSnapshot>();
   private bodyResultSequenceFloors = new Map<number, number>();
+  private grabbedBodies = new Map<number, GrabbedBodyState>();
   private failedBodyEntities = new WeakSet<Entity>();
   private pendingCommands = new Map<number, PendingBodyCommand>();
   private commandPool: PendingBodyCommand[] = [];
@@ -268,6 +285,7 @@ export class PhysicsSystem extends createSystem(
       this.bodyEntities.clear();
       this.bodySnapshots.clear();
       this.bodyResultSequenceFloors.clear();
+      this.grabbedBodies.clear();
       this.failedBodyEntities = new WeakSet<Entity>();
       this.pendingCommands.clear();
       this.freeExchangeBuffers.length = 0;
@@ -339,12 +357,11 @@ export class PhysicsSystem extends createSystem(
     this.queries.physicsEntities.entities.forEach((entity) => {
       this.ensureBody(entity);
       const handle = entity.getValue(PhysicsBody, '_engineBody');
-      if (
-        handle &&
-        entity.object3D &&
-        Grabbed.bitmask &&
-        entity.hasComponent(Grabbed)
-      ) {
+      if (!handle || !entity.object3D) {
+        return;
+      }
+      const grab = this.grabbedBodies.get(handle);
+      if (Grabbed.bitmask && entity.hasComponent(Grabbed)) {
         const command = this.getPendingCommand(handle);
         command.flags |= PhysicsCommandFlag.SetTargetTransform;
         command.position[0] = entity.object3D.position.x;
@@ -355,6 +372,9 @@ export class PhysicsSystem extends createSystem(
         command.quaternion[2] = entity.object3D.quaternion.z;
         command.quaternion[3] = entity.object3D.quaternion.w;
         this.syncSnapshotToObject(handle, entity.object3D);
+        this.trackGrabbedBody(entity, handle, entity.object3D, grab, delta);
+      } else if (grab) {
+        this.releaseGrabbedBody(entity, handle, entity.object3D, grab);
       }
     });
 
@@ -476,6 +496,7 @@ export class PhysicsSystem extends createSystem(
           this.bodyEntities.delete(message.handle);
           this.bodySnapshots.delete(message.handle);
           this.bodyResultSequenceFloors.delete(message.handle);
+          this.grabbedBodies.delete(message.handle);
           this.discardPendingCommand(message.handle);
         } else {
           this.handleTransportFailure(`Physics runtime: ${message.message}`);
@@ -630,6 +651,86 @@ export class PhysicsSystem extends createSystem(
     }
   }
 
+  private trackGrabbedBody(
+    entity: Entity,
+    handle: number,
+    object3D: Object3D,
+    grab: GrabbedBodyState | undefined,
+    delta: number,
+  ): void {
+    if (!grab) {
+      if (entity.getValue(PhysicsBody, 'state') !== PhysicsState.Dynamic) {
+        return;
+      }
+      this.grabbedBodies.set(handle, {
+        position: object3D.position.clone(),
+        quaternion: object3D.quaternion.clone(),
+        linearVelocity: new Vector3(),
+        angularVelocity: new Vector3(),
+      });
+      const command = this.getPendingCommand(handle);
+      command.flags |= PhysicsCommandFlag.SetKinematicOverride;
+      command.kinematicOverride = true;
+      return;
+    }
+
+    if (delta > 0) {
+      const blend = 1 - Math.exp(-delta / RELEASE_VELOCITY_SMOOTHING_SECONDS);
+      grab.linearVelocity.lerp(
+        tempVelocity
+          .subVectors(object3D.position, grab.position)
+          .divideScalar(delta),
+        blend,
+      );
+      // Small-angle angular velocity: twice the vector part of the frame's
+      // shortest-arc rotation delta, divided by the frame time.
+      tempRotation
+        .copy(grab.quaternion)
+        .invert()
+        .premultiply(object3D.quaternion);
+      grab.angularVelocity.lerp(
+        tempVelocity
+          .set(tempRotation.x, tempRotation.y, tempRotation.z)
+          .multiplyScalar((tempRotation.w < 0 ? -2 : 2) / delta),
+        blend,
+      );
+    }
+    grab.position.copy(object3D.position);
+    grab.quaternion.copy(object3D.quaternion);
+  }
+
+  private releaseGrabbedBody(
+    entity: Entity,
+    handle: number,
+    object3D: Object3D,
+    grab: GrabbedBodyState,
+  ): void {
+    this.grabbedBodies.delete(handle);
+    this.setBodyTransform(entity, object3D, { resetVelocity: false });
+
+    const command = this.getPendingCommand(handle);
+    // A target queued by an earlier frame of this exchange would hold the
+    // body in place and discard the release velocity.
+    command.flags &= ~PhysicsCommandFlag.SetTargetTransform;
+    command.flags |=
+      PhysicsCommandFlag.SetKinematicOverride |
+      PhysicsCommandFlag.SetLinearVelocity |
+      PhysicsCommandFlag.SetAngularVelocity;
+    command.kinematicOverride = false;
+    grab.linearVelocity
+      .clampLength(0, MAX_RELEASE_LINEAR_SPEED)
+      .toArray(command.linearVelocity);
+    grab.angularVelocity
+      .clampLength(0, MAX_RELEASE_ANGULAR_SPEED)
+      .toArray(command.angularVelocity);
+    entity
+      .getVectorView(PhysicsBody, '_linearVelocity')
+      .set(command.linearVelocity);
+    entity
+      .getVectorView(PhysicsBody, '_angularVelocity')
+      .set(command.angularVelocity);
+  }
+
   private syncSnapshotToObject(handle: number, object3D: Object3D): void {
     const snapshot = this.bodySnapshots.get(handle);
     if (!snapshot) {
@@ -752,6 +853,8 @@ export class PhysicsSystem extends createSystem(
     output[base + PhysicsInputOffset.GravityFactor] = command.gravityFactor;
     output[base + PhysicsInputOffset.LinearDamping] = command.linearDamping;
     output[base + PhysicsInputOffset.AngularDamping] = command.angularDamping;
+    output[base + PhysicsInputOffset.KinematicOverride] =
+      command.kinematicOverride ? 1 : 0;
   }
 
   private getPendingCommand(handle: number): PendingBodyCommand {
@@ -944,6 +1047,7 @@ export class PhysicsSystem extends createSystem(
     this.bodyEntities.delete(handle);
     this.bodySnapshots.delete(handle);
     this.bodyResultSequenceFloors.delete(handle);
+    this.grabbedBodies.delete(handle);
     this.discardPendingCommand(handle);
     this.setEngineHandles(entity, 0);
   }

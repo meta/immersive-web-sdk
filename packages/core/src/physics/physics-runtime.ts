@@ -12,6 +12,9 @@ import HavokPhysics, {
   type HP_WorldId,
   type MassProperties,
   type MotionType,
+  type QTransform,
+  type Quaternion,
+  type Vector3,
 } from '@babylonjs/havok';
 import {
   getCapsuleAxisEndpoints,
@@ -36,6 +39,13 @@ interface WorkerBody {
   shape: HP_ShapeId;
   transformOffset: number;
   state: PhysicsWorkerBodyState;
+  targetVelocity: Vector3;
+}
+
+interface TargetTransform {
+  body: HP_BodyId;
+  from: QTransform;
+  to: QTransform;
 }
 
 interface PhysicsRuntimeState {
@@ -46,6 +56,11 @@ interface PhysicsRuntimeState {
   bodies: Map<number, WorkerBody>;
   destroyed: boolean;
 }
+
+// Target motion beyond what a hand can do (~10 g, two turns per second) is a
+// tracking jump rather than motion to sweep through neighbours.
+const MAX_TARGET_ACCELERATION = 100;
+const MAX_TARGET_ANGULAR_SPEED = 4 * Math.PI;
 
 async function initialize(
   state: PhysicsRuntimeState,
@@ -286,6 +301,7 @@ function addBody(
       shape,
       state: message.state,
       transformOffset: engine.HP_Body_GetWorldTransformOffset(body)[1],
+      targetVelocity: [0, 0, 0],
     });
   } catch (error) {
     if (body) {
@@ -301,11 +317,76 @@ function addBody(
   return message.centerOfMass;
 }
 
-function applyCommands(state: PhysicsRuntimeState, buffer: ArrayBuffer): void {
+function quaternionDot(left: Quaternion, right: Quaternion): number {
+  return (
+    left[0] * right[0] +
+    left[1] * right[1] +
+    left[2] * right[2] +
+    left[3] * right[3]
+  );
+}
+
+function isTrackingJump(
+  previousVelocity: Vector3,
+  velocity: Vector3,
+  fromRotation: Quaternion,
+  toRotation: Quaternion,
+  duration: number,
+): boolean {
+  const velocityChange = Math.hypot(
+    velocity[0] - previousVelocity[0],
+    velocity[1] - previousVelocity[1],
+    velocity[2] - previousVelocity[2],
+  );
+  const angle =
+    2 *
+    Math.acos(Math.min(1, Math.abs(quaternionDot(fromRotation, toRotation))));
+  return (
+    velocityChange > MAX_TARGET_ACCELERATION * duration ||
+    angle > MAX_TARGET_ANGULAR_SPEED * duration
+  );
+}
+
+function interpolateTransform(
+  from: QTransform,
+  to: QTransform,
+  progress: number,
+): QTransform {
+  if (progress >= 1) {
+    return to;
+  }
+  const [fromPosition, fromRotation] = from;
+  const [toPosition, toRotation] = to;
+  const sign = quaternionDot(fromRotation, toRotation) < 0 ? -1 : 1;
+  const rotation = fromRotation.map(
+    (value, index) => value + (sign * toRotation[index] - value) * progress,
+  );
+  const length = Math.hypot(...rotation);
+  return [
+    [
+      fromPosition[0] + (toPosition[0] - fromPosition[0]) * progress,
+      fromPosition[1] + (toPosition[1] - fromPosition[1]) * progress,
+      fromPosition[2] + (toPosition[2] - fromPosition[2]) * progress,
+    ],
+    [
+      rotation[0] / length,
+      rotation[1] / length,
+      rotation[2] / length,
+      rotation[3] / length,
+    ],
+  ];
+}
+
+function applyCommands(
+  state: PhysicsRuntimeState,
+  buffer: ArrayBuffer,
+  duration: number,
+): TargetTransform[] {
   const [engine] = requireHavok(state);
   const ints = new Int32Array(buffer);
   const floats = new Float32Array(buffer);
   const commandCount = ints[PhysicsHeaderIndex.CommandCount];
+  const targets: TargetTransform[] = [];
 
   for (let index = 0; index < commandCount; index++) {
     const base = PHYSICS_HEADER_WORDS + index * PHYSICS_INPUT_RECORD_FLOATS;
@@ -316,6 +397,16 @@ function applyCommands(state: PhysicsRuntimeState, buffer: ArrayBuffer): void {
       continue;
     }
 
+    if (flags & PhysicsCommandFlag.SetKinematicOverride) {
+      engine.HP_Body_SetMotionType(
+        entry.body,
+        floats[base + PhysicsInputOffset.KinematicOverride]
+          ? engine.MotionType.KINEMATIC
+          : motionTypeForState(engine, entry.state),
+      );
+      // Each grab starts tracking from rest.
+      entry.targetVelocity = [0, 0, 0];
+    }
     if (
       flags &
       (PhysicsCommandFlag.SetTransform | PhysicsCommandFlag.SetTargetTransform)
@@ -334,8 +425,28 @@ function applyCommands(state: PhysicsRuntimeState, buffer: ArrayBuffer): void {
       if (flags & PhysicsCommandFlag.SetTransform) {
         engine.HP_Body_SetQTransform(entry.body, [position, quaternion]);
       }
-      if (flags & PhysicsCommandFlag.SetTargetTransform) {
-        engine.HP_Body_SetTargetQTransform(entry.body, [position, quaternion]);
+      if (flags & PhysicsCommandFlag.SetTargetTransform && duration > 0) {
+        const to: QTransform = [position, quaternion];
+        let from = engine.HP_Body_GetQTransform(entry.body)[1];
+        const velocity: Vector3 = [
+          (position[0] - from[0][0]) / duration,
+          (position[1] - from[0][1]) / duration,
+          (position[2] - from[0][2]) / duration,
+        ];
+        if (
+          isTrackingJump(
+            entry.targetVelocity,
+            velocity,
+            from[1],
+            quaternion,
+            duration,
+          )
+        ) {
+          engine.HP_Body_SetQTransform(entry.body, to);
+          from = to;
+        }
+        entry.targetVelocity = velocity;
+        targets.push({ body: entry.body, from, to });
       }
     }
     if (flags & PhysicsCommandFlag.ResetLinearVelocity) {
@@ -392,6 +503,7 @@ function applyCommands(state: PhysicsRuntimeState, buffer: ArrayBuffer): void {
       );
     }
   }
+  return targets;
 }
 
 function writeQuaternionFromMatrix(
@@ -528,11 +640,20 @@ export class PhysicsRuntime {
         throw new Error('Physics exchange buffer protocol version mismatch');
       }
       const [engine, world] = requireHavok(this.state);
-      applyCommands(this.state, buffer);
       const floats = new Float32Array(buffer);
       const delta = floats[PhysicsHeaderIndex.Delta];
       const stepCount = Math.max(0, ints[PhysicsHeaderIndex.StepCount]);
+      const targets = applyCommands(this.state, buffer, delta * stepCount);
       for (let index = 0; index < stepCount; index++) {
+        // Havok reaches a target within one step and keeps that velocity, so
+        // every substep gets its share of the motion.
+        const progress = (index + 1) / stepCount;
+        for (const target of targets) {
+          engine.HP_Body_SetTargetQTransform(
+            target.body,
+            interpolateTransform(target.from, target.to, progress),
+          );
+        }
         engine.HP_World_SetIdealStepTime(world, delta);
         engine.HP_World_Step(world, delta);
       }

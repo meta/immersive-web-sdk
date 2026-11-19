@@ -79,6 +79,16 @@ const havokMock = vi.hoisted(() => {
     }),
     HP_Body_SetShape: vi.fn(),
     HP_Body_SetQTransform: vi.fn(writeTransform),
+    HP_Body_GetQTransform: vi.fn((body: [bigint]) => {
+      const base = (bodyOffsets.get(body[0]) ?? 0) >> 2;
+      return [
+        0,
+        [
+          [heap[base + 12], heap[base + 13], heap[base + 14]],
+          [0, 0, 0, 1],
+        ],
+      ];
+    }),
     HP_Body_SetTargetQTransform: vi.fn(),
     HP_Body_SetLinearDamping: vi.fn(),
     HP_Body_SetAngularDamping: vi.fn(),
@@ -137,6 +147,41 @@ function bodyMessage(handle: number): PhysicsWorkerAddBodyMessage {
     gravityFactor: 1,
     centerOfMass: [Infinity, Infinity, Infinity],
   };
+}
+
+function commandExchange(
+  stepCount: number,
+  writeCommand: (floats: Float32Array, base: number) => void,
+): ArrayBuffer {
+  const buffer = new ArrayBuffer(physicsExchangeByteLength(1, 1));
+  const ints = new Int32Array(buffer);
+  const floats = new Float32Array(buffer);
+  ints[PhysicsHeaderIndex.Version] = PHYSICS_PROTOCOL_VERSION;
+  ints[PhysicsHeaderIndex.CommandCount] = 1;
+  ints[PhysicsHeaderIndex.StepCount] = stepCount;
+  floats[PhysicsHeaderIndex.Delta] = 1 / 60;
+  writeCommand(floats, PHYSICS_HEADER_WORDS);
+  return buffer;
+}
+
+function targetExchange(stepCount: number, x: number): ArrayBuffer {
+  return commandExchange(stepCount, (floats, base) => {
+    floats[base + PhysicsInputOffset.Handle] = 7;
+    floats[base + PhysicsInputOffset.Flags] =
+      PhysicsCommandFlag.SetTargetTransform;
+    floats[base + PhysicsInputOffset.PositionX] = x;
+    floats[base + PhysicsInputOffset.PositionY] = 1;
+    floats[base + PhysicsInputOffset.QuaternionW] = 1;
+  });
+}
+
+function overrideExchange(kinematic: number): ArrayBuffer {
+  return commandExchange(0, (floats, base) => {
+    floats[base + PhysicsInputOffset.Handle] = 7;
+    floats[base + PhysicsInputOffset.Flags] =
+      PhysicsCommandFlag.SetKinematicOverride;
+    floats[base + PhysicsInputOffset.KinematicOverride] = kinematic;
+  });
 }
 
 beforeEach(() => {
@@ -254,6 +299,72 @@ describe('PhysicsRuntime', () => {
     );
     expect(havokMock.engine.HP_World_Step).not.toHaveBeenCalled();
     expect(ints[PhysicsHeaderIndex.ResultCount]).toBe(1);
+  });
+
+  it('switches a body to kinematic and back to its created motion type', async () => {
+    const runtime = new PhysicsRuntime();
+    await runtime.initialize([0, -9.81, 0]);
+    runtime.addBody(bodyMessage(7));
+
+    runtime.step(overrideExchange(1));
+    expect(havokMock.engine.HP_Body_SetMotionType).toHaveBeenLastCalledWith(
+      [20n],
+      havokMock.engine.MotionType.KINEMATIC,
+    );
+
+    runtime.step(overrideExchange(0));
+    expect(havokMock.engine.HP_Body_SetMotionType).toHaveBeenLastCalledWith(
+      [20n],
+      havokMock.engine.MotionType.DYNAMIC,
+    );
+  });
+
+  it('spreads a target transform across every substep', async () => {
+    const runtime = new PhysicsRuntime();
+    await runtime.initialize([0, -9.81, 0]);
+    runtime.addBody(bodyMessage(7));
+
+    runtime.step(targetExchange(4, 0.04));
+
+    const targets = havokMock.engine.HP_Body_SetTargetQTransform.mock.calls;
+    expect(targets).toHaveLength(4);
+    targets.forEach(([body, [position, rotation]], index) => {
+      expect(body).toEqual([20n]);
+      expect(position[0]).toBeCloseTo(0.01 * (index + 1));
+      expect(position[1]).toBeCloseTo(1);
+      expect(rotation).toEqual([0, 0, 0, 1]);
+    });
+    expect(havokMock.engine.HP_Body_SetQTransform).toHaveBeenCalledTimes(1);
+  });
+
+  it('teleports to a target that jumps faster than a hand can move', async () => {
+    const runtime = new PhysicsRuntime();
+    await runtime.initialize([0, -9.81, 0]);
+    runtime.addBody(bodyMessage(7));
+
+    runtime.step(targetExchange(1, 0.2));
+
+    expect(havokMock.engine.HP_Body_SetQTransform).toHaveBeenCalledTimes(2);
+    const [body, [position]] =
+      havokMock.engine.HP_Body_SetQTransform.mock.lastCall!;
+    expect(body).toEqual([20n]);
+    expect(position[0]).toBeCloseTo(0.2);
+    const [, [target]] =
+      havokMock.engine.HP_Body_SetTargetQTransform.mock.lastCall!;
+    expect(target[0]).toBeCloseTo(0.2);
+  });
+
+  it('judges the first target of a new grab against rest', async () => {
+    const runtime = new PhysicsRuntime();
+    await runtime.initialize([0, -9.81, 0]);
+    runtime.addBody(bodyMessage(7));
+    runtime.step(targetExchange(1, 0.2));
+    runtime.step(overrideExchange(0));
+    runtime.step(overrideExchange(1));
+
+    runtime.step(targetExchange(1, 0.21));
+
+    expect(havokMock.engine.HP_Body_SetQTransform).toHaveBeenCalledTimes(2);
   });
 
   it('releases partial allocations when body creation fails', async () => {

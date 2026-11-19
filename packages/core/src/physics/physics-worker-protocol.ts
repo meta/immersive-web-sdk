@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-export const PHYSICS_PROTOCOL_VERSION = 1;
+export const PHYSICS_PROTOCOL_VERSION = 2;
 
 /**
  * The header is deliberately one cache line. Integer fields use an Int32Array
@@ -14,7 +14,7 @@ export const PHYSICS_PROTOCOL_VERSION = 1;
 export const PHYSICS_HEADER_WORDS = 16;
 export const PHYSICS_HEADER_BYTES = PHYSICS_HEADER_WORDS * 4;
 
-export const PHYSICS_INPUT_RECORD_FLOATS = 24;
+export const PHYSICS_INPUT_RECORD_FLOATS = 25;
 export const PHYSICS_OUTPUT_RECORD_FLOATS = 14;
 
 export const enum PhysicsHeaderIndex {
@@ -44,6 +44,7 @@ export const enum PhysicsCommandFlag {
   SetGravityFactor = 1 << 7,
   SetLinearDamping = 1 << 8,
   SetAngularDamping = 1 << 9,
+  SetKinematicOverride = 1 << 10,
 }
 
 export const enum PhysicsInputOffset {
@@ -71,6 +72,8 @@ export const enum PhysicsInputOffset {
   GravityFactor = 21,
   LinearDamping = 22,
   AngularDamping = 23,
+  /** Non-zero drives the body as kinematic; zero restores its created motion type. */
+  KinematicOverride = 24,
 }
 
 export const enum PhysicsOutputOffset {

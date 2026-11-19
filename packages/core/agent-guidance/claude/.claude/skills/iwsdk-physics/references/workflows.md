@@ -140,7 +140,7 @@ entity.addComponent(DistanceGrabbable, {
 });
 ```
 
-When grabbed, the `GrabSystem` drives the held body kinematically (via `HP_Body_SetTargetQTransform`), making the object follow the hand. On release, the object resumes dynamic simulation with natural velocity for realistic throwing. Note: near-field grabs do not add `Hovered`/`Pressed` tags — assert grab behavior with ECS snapshot/diff, not tag queries.
+When grabbed, the `PhysicsSystem` makes a dynamic body kinematic and drives it toward the hand pose, so it pushes other bodies without being knocked out of the hand. A pose jump faster than a hand can move, such as an emulator controller teleport, moves the held body without sweeping it through its neighbours. On release, the body is dynamic again and leaves with the hand's recent velocity, smoothed over about 50 ms and capped at 10 m/s. Note: near-field grabs do not add `Hovered`/`Pressed` tags — assert grab behavior with ECS snapshot/diff, not tag queries.
 
 ### Reading Velocity for Game Logic
 
