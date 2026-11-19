@@ -110,7 +110,10 @@ physics.setBodyTransform(entity, {
 ```
 
 Velocity is cleared by default. Pass `{ resetVelocity: false }` only when a teleport
-must preserve motion. `gravityFactor`, `linearDamping`, and `angularDamping` can be
+must preserve motion. The pose is relative to the entity's parent, like
+`object3D.position`; pass `{ space: 'world' }` for a world-space pose. Physics
+simulates in world space, so bodies may live under a moved level root or another
+entity. `gravityFactor`, `linearDamping`, and `angularDamping` can be
 changed reactively with `entity.setValue`; changing motion state or shape requires
 deliberate body lifecycle handling.
 

@@ -461,7 +461,8 @@ PhysicsShapeType.Auto; // Auto-detect from Three.js geometry
 
 **Teleporting / re-posing an existing body:** use the live physics system rather than
 removing and re-adding components. It updates Havok and the Object3D immediately and
-clears velocity by default:
+clears velocity by default. The pose is parent-relative unless you pass
+`{ space: 'world' }`:
 
 ```typescript
 const physics = world.getSystem(PhysicsSystem);

@@ -9,6 +9,10 @@ import { effect } from '@preact/signals-core';
 import { createSystem, Entity, Grabbed, ne, Types } from '.././index.js';
 import { Mesh, Object3D, Quaternion, Vector3 } from '../runtime/three.js';
 import {
+  setWorldPosition,
+  setWorldQuaternion,
+} from '../transform/transform-utils.js';
+import {
   createPhysicsTransport,
   type PhysicsTransport,
 } from './physics-transport.js';
@@ -63,6 +67,13 @@ export interface PhysicsBodyTransformOptions {
    * @default true
    */
   resetVelocity?: boolean;
+  /**
+   * Whether `pose` is relative to the entity's parent (`'local'`, like
+   * `object3D.position`) or in world space.
+   *
+   * @default 'local'
+   */
+  space?: 'local' | 'world';
 }
 
 interface PendingBodyCommand {
@@ -118,6 +129,34 @@ const MAX_RELEASE_ANGULAR_SPEED = 4 * Math.PI;
 
 const tempVelocity = new Vector3();
 const tempRotation = new Quaternion();
+const posePosition = new Vector3();
+const poseQuaternion = new Quaternion();
+const poseScale = new Vector3();
+const handPosition = new Vector3();
+const handQuaternion = new Quaternion();
+
+/**
+ * Havok simulates in world space while an entity's Object3D pose is relative
+ * to its parent (the level root, or another entity), so every pose crossing
+ * the transport goes through these two helpers.
+ */
+function readWorldPose(
+  object3D: Object3D,
+  position: Vector3,
+  quaternion: Quaternion,
+): void {
+  object3D.updateWorldMatrix(true, false);
+  object3D.matrixWorld.decompose(position, quaternion, poseScale);
+}
+
+function writeWorldPose(
+  object3D: Object3D,
+  position: Vector3,
+  quaternion: Quaternion,
+): void {
+  setWorldPosition(object3D, position);
+  setWorldQuaternion(object3D, quaternion);
+}
 
 function vector3ToArray(value: Vector3Input): [number, number, number] {
   return 'x' in value
@@ -314,26 +353,34 @@ export class PhysicsSystem extends createSystem(
       return;
     }
 
-    const position = vector3ToArray(pose.position);
-    const quaternion = quaternionToArray(pose.quaternion);
+    posePosition.fromArray(vector3ToArray(pose.position));
+    poseQuaternion.fromArray(quaternionToArray(pose.quaternion));
+    const object3D = entity.object3D;
+    if (object3D) {
+      if (options.space === 'world') {
+        writeWorldPose(object3D, posePosition, poseQuaternion);
+      } else {
+        object3D.position.copy(posePosition);
+        object3D.quaternion.copy(poseQuaternion);
+      }
+      object3D.updateMatrixWorld(true);
+      readWorldPose(object3D, posePosition, poseQuaternion);
+    }
+
     const command = this.getPendingCommand(handle);
     command.flags |= PhysicsCommandFlag.SetTransform;
-    command.position = position;
-    command.quaternion = quaternion;
+    command.position = posePosition.toArray();
+    command.quaternion = poseQuaternion.toArray() as [
+      number,
+      number,
+      number,
+      number,
+    ];
     if (this.bodySnapshots.has(handle)) {
       this.bodyResultSequenceFloors.set(handle, this.nextSequence);
     }
-
-    if (entity.object3D) {
-      entity.object3D.position.set(position[0], position[1], position[2]);
-      entity.object3D.quaternion.set(
-        quaternion[0],
-        quaternion[1],
-        quaternion[2],
-        quaternion[3],
-      );
-      entity.object3D.updateMatrixWorld(true);
-      this.syncSnapshotToObject(handle, entity.object3D);
+    if (object3D) {
+      this.syncSnapshotToObject(handle, object3D);
     }
 
     if (options.resetVelocity === false) {
@@ -364,13 +411,9 @@ export class PhysicsSystem extends createSystem(
       if (Grabbed.bitmask && entity.hasComponent(Grabbed)) {
         const command = this.getPendingCommand(handle);
         command.flags |= PhysicsCommandFlag.SetTargetTransform;
-        command.position[0] = entity.object3D.position.x;
-        command.position[1] = entity.object3D.position.y;
-        command.position[2] = entity.object3D.position.z;
-        command.quaternion[0] = entity.object3D.quaternion.x;
-        command.quaternion[1] = entity.object3D.quaternion.y;
-        command.quaternion[2] = entity.object3D.quaternion.z;
-        command.quaternion[3] = entity.object3D.quaternion.w;
+        readWorldPose(entity.object3D, posePosition, poseQuaternion);
+        posePosition.toArray(command.position);
+        poseQuaternion.toArray(command.quaternion);
         this.syncSnapshotToObject(handle, entity.object3D);
         this.trackGrabbedBody(entity, handle, entity.object3D, grab, delta);
       } else if (grab) {
@@ -638,16 +681,17 @@ export class PhysicsSystem extends createSystem(
       ) {
         continue;
       }
-      entity.object3D.position.lerpVectors(
+      posePosition.lerpVectors(
         snapshot.previousPosition,
         snapshot.currentPosition,
         alpha,
       );
-      entity.object3D.quaternion.slerpQuaternions(
+      poseQuaternion.slerpQuaternions(
         snapshot.previousQuaternion,
         snapshot.currentQuaternion,
         alpha,
       );
+      writeWorldPose(entity.object3D, posePosition, poseQuaternion);
     }
   }
 
@@ -658,13 +702,15 @@ export class PhysicsSystem extends createSystem(
     grab: GrabbedBodyState | undefined,
     delta: number,
   ): void {
+    // Velocities are world space, like the body they are handed to.
+    readWorldPose(object3D, handPosition, handQuaternion);
     if (!grab) {
       if (entity.getValue(PhysicsBody, 'state') !== PhysicsState.Dynamic) {
         return;
       }
       this.grabbedBodies.set(handle, {
-        position: object3D.position.clone(),
-        quaternion: object3D.quaternion.clone(),
+        position: handPosition.clone(),
+        quaternion: handQuaternion.clone(),
         linearVelocity: new Vector3(),
         angularVelocity: new Vector3(),
       });
@@ -678,16 +724,13 @@ export class PhysicsSystem extends createSystem(
       const blend = 1 - Math.exp(-delta / RELEASE_VELOCITY_SMOOTHING_SECONDS);
       grab.linearVelocity.lerp(
         tempVelocity
-          .subVectors(object3D.position, grab.position)
+          .subVectors(handPosition, grab.position)
           .divideScalar(delta),
         blend,
       );
       // Small-angle angular velocity: twice the vector part of the frame's
       // shortest-arc rotation delta, divided by the frame time.
-      tempRotation
-        .copy(grab.quaternion)
-        .invert()
-        .premultiply(object3D.quaternion);
+      tempRotation.copy(grab.quaternion).invert().premultiply(handQuaternion);
       grab.angularVelocity.lerp(
         tempVelocity
           .set(tempRotation.x, tempRotation.y, tempRotation.z)
@@ -695,8 +738,8 @@ export class PhysicsSystem extends createSystem(
         blend,
       );
     }
-    grab.position.copy(object3D.position);
-    grab.quaternion.copy(object3D.quaternion);
+    grab.position.copy(handPosition);
+    grab.quaternion.copy(handQuaternion);
   }
 
   private releaseGrabbedBody(
@@ -706,7 +749,10 @@ export class PhysicsSystem extends createSystem(
     grab: GrabbedBodyState,
   ): void {
     this.grabbedBodies.delete(handle);
-    this.setBodyTransform(entity, object3D, { resetVelocity: false });
+    this.setBodyTransform(entity, object3D, {
+      resetVelocity: false,
+      space: 'local',
+    });
 
     const command = this.getPendingCommand(handle);
     // A target queued by an earlier frame of this exchange would hold the
@@ -736,10 +782,13 @@ export class PhysicsSystem extends createSystem(
     if (!snapshot) {
       return;
     }
-    snapshot.previousPosition.copy(object3D.position);
-    snapshot.currentPosition.copy(object3D.position);
-    snapshot.previousQuaternion.copy(object3D.quaternion);
-    snapshot.currentQuaternion.copy(object3D.quaternion);
+    readWorldPose(
+      object3D,
+      snapshot.currentPosition,
+      snapshot.currentQuaternion,
+    );
+    snapshot.previousPosition.copy(snapshot.currentPosition);
+    snapshot.previousQuaternion.copy(snapshot.currentQuaternion);
   }
 
   private getStepInterval(): number {
@@ -917,6 +966,7 @@ export class PhysicsSystem extends createSystem(
     }
 
     const handle = this.nextBodyHandle++;
+    readWorldPose(entity.object3D, posePosition, poseQuaternion);
     const linearDamping =
       entity.getValue(PhysicsBody, 'linearDamping') ?? DEFAULT_LINEAR_DAMPING;
     const angularDamping =
@@ -929,17 +979,8 @@ export class PhysicsSystem extends createSystem(
       handle,
       shape: serialized.descriptor,
       state: entity.getValue(PhysicsBody, 'state') as PhysicsWorkerBodyState,
-      position: [
-        entity.object3D.position.x,
-        entity.object3D.position.y,
-        entity.object3D.position.z,
-      ],
-      quaternion: [
-        entity.object3D.quaternion.x,
-        entity.object3D.quaternion.y,
-        entity.object3D.quaternion.z,
-        entity.object3D.quaternion.w,
-      ],
+      position: posePosition.toArray(),
+      quaternion: poseQuaternion.toArray() as [number, number, number, number],
       linearDamping,
       angularDamping,
       gravityFactor,
@@ -953,10 +994,10 @@ export class PhysicsSystem extends createSystem(
     this.bodyEntities.set(handle, entity);
     if (message.state !== PhysicsState.Static) {
       this.bodySnapshots.set(handle, {
-        previousPosition: entity.object3D.position.clone(),
-        currentPosition: entity.object3D.position.clone(),
-        previousQuaternion: entity.object3D.quaternion.clone(),
-        currentQuaternion: entity.object3D.quaternion.clone(),
+        previousPosition: posePosition.clone(),
+        currentPosition: posePosition.clone(),
+        previousQuaternion: poseQuaternion.clone(),
+        currentQuaternion: poseQuaternion.clone(),
       });
     }
 
@@ -1195,9 +1236,11 @@ export class PhysicsSystem extends createSystem(
 
       if (hasForce) {
         command.flags |= PhysicsCommandFlag.ApplyImpulse;
-        const impulsePosition =
-          this.bodySnapshots.get(handle)?.currentPosition ??
-          entity.object3D.position;
+        let impulsePosition = this.bodySnapshots.get(handle)?.currentPosition;
+        if (!impulsePosition) {
+          readWorldPose(entity.object3D, posePosition, poseQuaternion);
+          impulsePosition = posePosition;
+        }
         command.impulsePoint[0] = impulsePosition.x;
         command.impulsePoint[1] = impulsePosition.y;
         command.impulsePoint[2] = impulsePosition.z;
