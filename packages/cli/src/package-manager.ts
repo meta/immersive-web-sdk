@@ -27,24 +27,25 @@ const LOCKFILES: Array<[string, PackageManagerName]> = [
   ['npm-shrinkwrap.json', 'npm'],
 ];
 
-function declaredPackageManager(directory: string): PackageManagerName | null {
+/** The `packageManager` field of the package.json in `directory`, or ''. */
+function packageManagerField(directory: string): string {
   try {
     const manifest = JSON.parse(
       readFileSync(path.join(directory, 'package.json'), 'utf8'),
     ) as { packageManager?: unknown };
-    const name =
-      typeof manifest.packageManager === 'string'
-        ? manifest.packageManager.split('@')[0]
-        : '';
-    return name === 'npm' ||
-      name === 'pnpm' ||
-      name === 'yarn' ||
-      name === 'bun'
-      ? name
-      : null;
+    return typeof manifest.packageManager === 'string'
+      ? manifest.packageManager
+      : '';
   } catch {
-    return null;
+    return '';
   }
+}
+
+function declaredPackageManager(directory: string): PackageManagerName | null {
+  const name = packageManagerField(directory).split('@')[0];
+  return name === 'npm' || name === 'pnpm' || name === 'yarn' || name === 'bun'
+    ? name
+    : null;
 }
 
 /**
@@ -138,6 +139,43 @@ export function findPackageManager(projectRoot: string): PackageManagerInfo {
       return { name: declared ?? 'npm', root: start, lockfile: null };
     }
     current = parent;
+  }
+}
+
+/**
+ * True when the project installs with Yarn 2 or later, which takes its
+ * registry from .yarnrc.yml rather than .npmrc: its `packageManager` field
+ * says so, or, without one, it has a .yarnrc.yml or a Yarn 2+ lockfile.
+ */
+export function usesYarnBerry(
+  projectRoot: string,
+  info: PackageManagerInfo = findPackageManager(projectRoot),
+): boolean {
+  if (info.name !== 'yarn') {
+    return false;
+  }
+  const directories = [path.resolve(projectRoot), info.root];
+  for (const directory of directories) {
+    const major = packageManagerField(directory).match(/^yarn@(\d+)/u)?.[1];
+    if (major) {
+      return Number(major) >= 2;
+    }
+  }
+  if (
+    directories.some((directory) =>
+      existsSync(path.join(directory, '.yarnrc.yml')),
+    )
+  ) {
+    return true;
+  }
+  try {
+    // Yarn 1 lockfiles have no __metadata block.
+    return (
+      info.lockfile != null &&
+      /^__metadata:/mu.test(readFileSync(info.lockfile, 'utf8'))
+    );
+  } catch {
+    return false;
   }
 }
 

@@ -1,0 +1,5 @@
+---
+'@iwsdk/cli': patch
+---
+
+`iwsdk upgrade` aligns `three` before installing and checks the registry before changing anything. With `--no-install`, or when the install failed, it left the `three` alias, its override and `@types/three` at the old release, so the suggested `npm install` left two Three.js type trees and `tsc` failed. When the registry did not have the release yet, as with a lagging mirror, it changed `package.json` and then failed with ETARGET. Before it writes anything, it now asks the registry the install will use, with the npm or Yarn settings the install reads, for every `@iwsdk/*` package it upgrades, and aligns `three` with the Three.js version that the new `@iwsdk/core` there depends on. When a package is missing it stops with nothing changed (error code `release_not_on_registry`); when the registry cannot be asked, as offline (unless npm's cache has the release) or without npm, it says why, upgrades anyway and aligns `three` after the install, as before. `--dry-run` lists the Three.js changes.

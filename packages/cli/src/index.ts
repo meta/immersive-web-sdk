@@ -39,7 +39,7 @@ import {
 } from './commands/reference.js';
 import { handleRuntimeOperation } from './commands/runtime.js';
 import { handleStatus } from './commands/status.js';
-import { handleUpgrade } from './commands/upgrade.js';
+import { UpgradeError, handleUpgrade } from './commands/upgrade.js';
 import {
   buildAgentsCommandHelp,
   buildUpgradeCommandHelp,
@@ -257,9 +257,11 @@ export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
             })
           : error instanceof GuidanceSourceError
             ? createFailure(error.message, error.code)
-            : createFailure(
-                error instanceof Error ? error.message : String(error),
-              );
+            : error instanceof UpgradeError
+              ? createFailure(error.message, error.code, error.details)
+              : createFailure(
+                  error instanceof Error ? error.message : String(error),
+                );
     // Set by `dev up` when the guidance refresh ran before startup threw.
     const agentGuidance = (error as { agentGuidance?: unknown } | null)
       ?.agentGuidance;

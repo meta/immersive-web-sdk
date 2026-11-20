@@ -22,13 +22,25 @@ release, add `--to <version>`.
 1. Sets every `@iwsdk/*` dependency in the release group to the new release,
    keeping `^` and `~` ranges. `workspace:`, `file:` and `catalog:` specs, and
    `@iwsdk/*` packages outside the release group, are left as declared and
-   listed.
-2. Installs with the app's package manager, found from the nearest lockfile, a
+   listed. It first asks the registry the install will use for the release,
+   and changes nothing if the release is missing there: a registry mirror can
+   lag behind a release. It reads the settings the install reads: npm's (the
+   `.npmrc` at the app's workspace root, then your user settings; in a pnpm
+   workspace, also the app's own `.npmrc`, whose settings win), or Yarn's
+   (`.yarnrc` and `.npmrc` with Yarn 1, `.yarnrc.yml` with Yarn 2+). With npm,
+   pnpm and Yarn 1, the `npm_config_registry` environment variable overrides
+   the registry unless an `@iwsdk` scope registry is set. Offline, npm answers
+   from its cache when that has the release. If the registry cannot be asked,
+   for example offline or without npm, it says why and goes on; `three` is
+   then aligned after the install.
+2. Sets the `three` alias and its override (in `package.json`, or the app's own
+   `pnpm-workspace.yaml`) to the version the new `@iwsdk/core` uses, and an
+   existing `@types/three` to core's range. A workspace-wide override is
+   reported instead of changed. With `--no-install`, it warns when a `^` or `~`
+   range for `@iwsdk/core` also matches a newer release, which an install
+   could pick instead.
+3. Installs with the app's package manager, found from the nearest lockfile, a
    monorepo's included.
-3. Sets the `three` alias and its override (in `package.json`, or the app's own
-   `pnpm-workspace.yaml`) to the version `@iwsdk/core` uses, and an existing
-   `@types/three` to core's range, and installs again if anything changed. A
-   workspace-wide override is reported instead of changed.
 4. Refreshes the coding-agent guidance the app already has (see below); it does
    not add guidance to an app that has none.
 5. Checks `iwsdk.config.json` against the new release and lists every setting

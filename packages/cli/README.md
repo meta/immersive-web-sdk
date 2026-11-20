@@ -119,15 +119,26 @@ npx @iwsdk/cli@latest upgrade [--to <version>] [--dry-run] [--no-install]
 
 `upgrade` sets every `@iwsdk/*` dependency in the release group to the CLI's
 release (or `--to`), keeping `^` and `~` ranges and leaving `workspace:`,
-`file:` and `catalog:` specs alone. It installs with the package manager found
-from the nearest lockfile, aligns the `three` alias (in `package.json` or
-`pnpm-workspace.yaml`) with the one `@iwsdk/core` uses, refreshes the agent
-guidance the project already has, and checks `iwsdk.config.json` against the
-new release. It writes to `.iwsdk/migrations/` (gitignored) the migration guide
-for each release boundary crossed and `release-notes.md` with every change in
-between, and names them in its output. Use `@latest`: migration guides and
-release notes ship with the CLI, so the newest CLI covers every release,
-whatever version the project starts from.
+`file:` and `catalog:` specs alone, and aligns the `three` alias (in
+`package.json` or `pnpm-workspace.yaml`) with the one the new `@iwsdk/core`
+uses. Before it writes anything, it asks the registry the install will use for
+the release, and changes nothing if the release is missing there (error code
+`release_not_on_registry`), as when a mirror lags behind. It reads the
+settings the install reads: npm's (an npm workspace's root `.npmrc`; in a pnpm
+workspace, the root's `.npmrc` with the app's own over it, setting by setting),
+or Yarn's (`.yarnrc` and `.npmrc` for Yarn 1, `.yarnrc.yml` for Yarn 2+). For
+npm, pnpm and Yarn 1, the `npm_config_registry` environment variable overrides
+the registry unless an `@iwsdk` scope registry is set. Offline, npm answers
+from its cache when that has the release; only the registry itself can report
+a release missing. If the registry cannot be asked, for example offline or
+without npm, it says why, goes on, and aligns `three` after the install. It
+installs with the package manager found from the nearest lockfile, refreshes
+the agent guidance the project already has, and checks `iwsdk.config.json`
+against the new release. It writes to `.iwsdk/migrations/` (gitignored) the
+migration guide for each release boundary crossed and `release-notes.md` with
+every change in between, and names them in its output. Use `@latest`:
+migration guides and release notes ship with the CLI, so the newest CLI covers
+every release, whatever version the project starts from.
 
 - `iwsdk adapter status` reports MCP, instruction, and permission state.
 - `iwsdk adapter prune` removes managed MCP/permission entries and preserves
