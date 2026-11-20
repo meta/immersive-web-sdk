@@ -16,6 +16,24 @@ import { RuntimeCommandExecutionError } from './runtime-transport.js';
 import { CLI_VERSION } from './version.js';
 
 /**
+ * Codes the dev server, its relay, and the managed browser's command lock put
+ * in `error.data.code`. They are constants defined there, so unlike messages
+ * they never carry project content.
+ */
+type RuntimeHostErrorCode =
+  | 'command_timeout'
+  | 'browser_command_timeout'
+  | 'browser_command_busy'
+  | 'browser_command_queue_timeout'
+  | 'target_not_ready'
+  | 'target_unavailable'
+  | 'ambiguous_target'
+  | 'stale_browser_tab'
+  | 'runtime_busy'
+  | 'runtime_stopping'
+  | 'unsupported_on_target';
+
+/**
  * Why an operation failed, from a fixed list. Error messages are never
  * reported because they can name the project's files, components, or scenes.
  */
@@ -25,7 +43,8 @@ export type RuntimeFailureReason =
   | 'no_runtime'
   | 'runtime_error'
   | 'unknown'
-  | RuntimeIssueCause;
+  | RuntimeIssueCause
+  | RuntimeHostErrorCode;
 
 const ISSUE_CAUSES: Record<RuntimeIssueCause, true> = {
   browser_not_ready: true,
@@ -41,6 +60,23 @@ const KNOWN_ISSUE_CAUSES: ReadonlySet<string> = new Set(
   Object.keys(ISSUE_CAUSES),
 );
 
+const HOST_ERROR_CODES: Record<RuntimeHostErrorCode, true> = {
+  command_timeout: true,
+  browser_command_timeout: true,
+  browser_command_busy: true,
+  browser_command_queue_timeout: true,
+  target_not_ready: true,
+  target_unavailable: true,
+  ambiguous_target: true,
+  stale_browser_tab: true,
+  runtime_busy: true,
+  runtime_stopping: true,
+  unsupported_on_target: true,
+};
+const KNOWN_HOST_ERROR_CODES: ReadonlySet<string> = new Set(
+  Object.keys(HOST_ERROR_CODES),
+);
+
 /** Maps an error from resolving or running an operation to its reason. */
 export function getRuntimeFailureReason(error: unknown): RuntimeFailureReason {
   if (error instanceof WorkspaceResolutionError) {
@@ -50,7 +86,14 @@ export function getRuntimeFailureReason(error: unknown): RuntimeFailureReason {
     // The runtime forwards a string cause from whatever the app threw, so
     // only the known causes are reported.
     const cause = error.issueCause;
-    return cause && KNOWN_ISSUE_CAUSES.has(cause) ? cause : 'runtime_error';
+    if (cause && KNOWN_ISSUE_CAUSES.has(cause)) {
+      return cause;
+    }
+    const code = error.details?.code;
+    return typeof code === 'string' &&
+      (KNOWN_HOST_ERROR_CODES.has(code) || KNOWN_ISSUE_CAUSES.has(code))
+      ? (code as RuntimeHostErrorCode | RuntimeIssueCause)
+      : 'runtime_error';
   }
   return 'unknown';
 }

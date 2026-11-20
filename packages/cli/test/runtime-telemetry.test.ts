@@ -158,6 +158,46 @@ describe('runtime failure reasons', () => {
     ).toBe('runtime_error');
   });
 
+  test.each([
+    'command_timeout',
+    'browser_command_timeout',
+    'target_not_ready',
+    'target_unavailable',
+    'browser_relaunched',
+    'connection_lost',
+  ])('reports the host error code %s when there is no known cause', (code) => {
+    expect(
+      getRuntimeFailureReason(
+        new RuntimeCommandExecutionError('Target did not reply.', {
+          details: { code, outcome: 'outcome_unknown' },
+        }),
+      ),
+    ).toBe(code);
+  });
+
+  test('prefers a known cause over the host error code', () => {
+    expect(
+      getRuntimeFailureReason(
+        new RuntimeCommandExecutionError('Request timeout for screenshot', {
+          issueCause: 'browser_not_ready',
+          details: { code: 'command_timeout' },
+        }),
+      ),
+    ).toBe('browser_not_ready');
+  });
+
+  test('reports unlisted or non-string host error codes as runtime_error', () => {
+    for (const code of ['PlayerHealth', 'scene_file_not_found', 42]) {
+      expect(
+        getRuntimeFailureReason(
+          new RuntimeCommandExecutionError('Spawn failed', {
+            details: { code },
+          }),
+        ),
+      ).toBe('runtime_error');
+    }
+  });
+
   test('reports any other error as unknown', () => {
     expect(
       getRuntimeFailureReason(new Error('Failed to save /app/shot.png')),
