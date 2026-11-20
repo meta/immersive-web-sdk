@@ -25,7 +25,7 @@ Before we begin, make sure you have:
 - **Node.js** (version 20.19.0 or higher) - [Download here](https://nodejs.org/)
 - **A modern web browser** (Chrome, Edge, Firefox, or Safari)
 - **Basic familiarity** with command line/terminal
-- **Basic knowledge of JavaScript/TypeScript** (we'll teach you the WebXR and 3D parts!)
+- **No JavaScript or TypeScript experience required**: basic familiarity helps, and we'll teach you the WebXR and 3D parts! New to JavaScript? The MDN [JavaScript Guide](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide) covers the basics, or you can build alongside an AI assistant with [Getting Started with AI](../ai/getting-started.md).
 
 ### Optional but Highly Recommended
 

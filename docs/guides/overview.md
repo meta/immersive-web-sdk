@@ -13,8 +13,16 @@ grabbing, locomotion, physics, and spatial UI.
 
 ## What You Need to Know
 
-- Working knowledge of JavaScript or TypeScript and npm
-- Basic familiarity with modules, classes, and browser development
+- No prior JavaScript or TypeScript experience required; basic familiarity
+  helps. The guides use JavaScript modules, classes, and npm commands. If these
+  are new to you, the MDN
+  [JavaScript Guide](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide)
+  covers the basics
+- Prefer to build with an AI assistant? [Getting Started with AI](../ai/getting-started.md)
+  connects tools such as Claude Code, Cursor, or GitHub Copilot to your project,
+  and the
+  [Immersive Web SDK Starter App template on V0](https://v0.app/templates/immersive-web-sdk-starter-app-1o9ZJQxDtU4)
+  offers a no-code starting point
 - No prior ECS or 3D-math experience; the guides introduce both as you need them
 - No headset for initial development; the included IWER emulator runs in a
   desktop browser
