@@ -263,6 +263,12 @@ renderer imports; systems import the declarations, never the reverse.
   Fingertip touches only reach entities with `PokeInteractable`, so a
   ray-only panel ignores hand presses.
 - VR targets 72–90 fps: 11–14 ms per frame. Treat per-frame allocation as a bug.
+- Keep an Enter XR control on the flat page of every XR app: the starter's
+  welcome-panel button, or your own UIKit or DOM button that calls
+  `world.launchXR()`. If you remove the welcome panel, replace its button.
+  `xr.offer` alone only adds a small "Enter VR" pill to the Quest Browser
+  toolbar (labelled VR even for AR), which people miss, so the page looks like
+  it has no way into XR.
 - Keep app and game state that a person or agent will want to read or change
   (score, lives, gold, wave, phase, timers, debug switches) in ECS components,
   not module-level objects. `ecs query` and `ecs set-component` then read it and

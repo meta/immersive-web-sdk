@@ -675,6 +675,8 @@ describe('common starter project files', () => {
       '**Browser automation is a last resort.**',
       'not module-level objects.',
       'ray-only panel ignores hand presses.',
+      'Keep an Enter XR control on the flat page of every XR app',
+      'If you remove the welcome panel, replace its button.',
     ]) {
       expect(textFile(files, 'AGENTS.md')).toContain(sharedGuidance);
     }
