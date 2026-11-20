@@ -1,5 +1,16 @@
 # @iwsdk/create
 
+## 1.2.0-rc.0
+
+### Minor Changes
+
+- ee00260: Ship coding-agent guidance with `@iwsdk/core` and add `iwsdk agents sync`. The AGENTS.md block, skills, rules, and code-review subagent that new apps receive now come from `@iwsdk/core`, stamped with the release and a content hash. `npx @iwsdk/cli@latest agents sync` installs or refreshes them from the installed `@iwsdk/core`, so upgrading IWSDK can also upgrade the guidance: unedited files are replaced, retired IWSDK skills are removed, and edited files are reported and left alone (`--force` replaces them). An existing `AGENTS.md` keeps its text and gains a managed block. Guidance from earlier releases is recognized and upgraded. `iwsdk agents check` reports drift for CI, and `iwsdk adapter sync` now runs the guidance sync too.
+- 13f1046: `@iwsdk/create` now adds IWSDK to an existing project instead of scaffolding over it. When the target already has a `package.json`, Create checks everything before writing and never overwrites a file, even with `--force`. A project on a Vite major the plugin does not support yet, or with an invalid `package.json`, is refused with nothing changed, and `--canary` is refused. Otherwise Create adds a minimal skeleton in its own `src/iwsdk/` folder (world entry, empty asset and component manifests) plus `iwsdk.config.json` and an empty scene. It merges `package.json` in its own formatting: versions are only raised, `workspace:`/`file:`/`catalog:` specs are kept, and scripts are kept, with `iwsdk:dev` added when `dev` is taken. Overrides go where the package manager reads them (npm and bun `overrides`, yarn `resolutions`, `pnpm-workspace.yaml`). `iwsdkDev()` is added to the Vite config when its top-level `plugins` array is unambiguous. Dependencies install with the package manager found from the nearest lockfile, and coding-agent guidance is installed while an existing `AGENTS.md` keeps its text. Create prints what it kept and the steps left to finish, even when the install fails. Previously `create . --force` replaced the project's `package.json`, `index.html`, Vite config, and entry file. `@iwsdk/cli` exports the guidance sync as `@iwsdk/cli/agent-guidance`.
+
+### Patch Changes
+
+- eb090e5: The generated `iwsdk-dev` skill gains a headless-rendering reference: headless managed sessions render on demand, screenshots draw a fresh frame themselves, `ecs pause` / `ecs step` / `browser screenshot` and `browser filmstrip` capture exact simulation frames, the runtime-only `RuntimeSettings` component switches the render mode live, and `browser profile` (not headless frame rates) is the way to judge performance.
+
 ## 1.1.0
 
 ### Minor Changes

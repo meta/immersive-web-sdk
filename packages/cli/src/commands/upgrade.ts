@@ -42,14 +42,13 @@ import { CLI_VERSION } from '../version.js';
 
 type JsonObject = Record<string, unknown>;
 const DEPENDENCY_FIELDS = ['dependencies', 'devDependencies'] as const;
-/** Packages released together; the fixed group in .changeset/config.json. */
+/** Packages published together (the fixed group in .changeset/config.json, minus private @iwsdk/reference-assets). */
 export const RELEASED_PACKAGES = [
   '@iwsdk/cli',
   '@iwsdk/core',
   '@iwsdk/create',
   '@iwsdk/locomotor',
   '@iwsdk/reference',
-  '@iwsdk/reference-assets',
   '@iwsdk/scene-composition',
   '@iwsdk/vite-plugin-dev',
   '@iwsdk/xr-input',

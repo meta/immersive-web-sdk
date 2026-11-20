@@ -902,14 +902,31 @@ fs.cpSync(process.env.FAKE_GUIDANCE, path.join(core, 'dist', 'agent-guidance'), 
     );
   });
 
-  test('releases the same packages as the changeset fixed group', async () => {
+  test('releases the published packages of the changeset fixed group', async () => {
+    const root = path.resolve(TEST_DIR, '..', '..', '..');
     const config = JSON.parse(
-      await readFile(
-        path.resolve(TEST_DIR, '..', '..', '..', '.changeset', 'config.json'),
-        'utf8',
-      ),
+      await readFile(path.join(root, '.changeset', 'config.json'), 'utf8'),
     );
-    expect([...RELEASED_PACKAGES].sort()).toEqual([...config.fixed[0]].sort());
+    const published: string[] = [];
+    for (const name of config.fixed[0] as string[]) {
+      const manifest = JSON.parse(
+        await readFile(
+          path.join(
+            root,
+            'packages',
+            name.replace('@iwsdk/', ''),
+            'package.json',
+          ),
+          'utf8',
+        ),
+      );
+      // Private packages (reference-assets) are never on npm, so upgrade
+      // must not point a project at them.
+      if (!manifest.private) {
+        published.push(name);
+      }
+    }
+    expect([...RELEASED_PACKAGES].sort()).toEqual(published.sort());
   });
 
   test('refuses projects without IWSDK and targets older than the project', async () => {

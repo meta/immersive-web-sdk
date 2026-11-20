@@ -1,5 +1,12 @@
 # @iwsdk/reference
 
+## 1.2.0-rc.0
+
+### Patch Changes
+
+- fa0ff9d: Coding-agent guidance now tells agents which dev session to start. They pass `--ai-mode collaborate` when the user wants to watch or steer the work, and `--ai-mode agent` (headless, renders on demand) otherwise. They ask once when the request doesn't say, and use agent mode when nobody can answer. The guidance also explains how to look up IWSDK APIs with `iwsdk reference` (keyword search over the bundled corpus, no warmup), how to profile instead of reading headless frame rates, and the `world.renderMode` render-loop API. The `search_code` query description now asks for keywords led by identifiers.
+- eaa864a: `reference components` (MCP `list_ecs_components`) lists components defined through a helper such as `setComponentEditorMetadata(createComponent(...))`, including `Transform`, `Visibility` and `RuntimeSettings`; before, the corpus didn't index them as components. The `search_code` tool description now says it is a keyword search that works best with identifiers.
+
 ## 1.1.0
 
 ## 1.1.0-rc.2

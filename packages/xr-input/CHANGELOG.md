@@ -1,5 +1,16 @@
 # @iwsdk/xr-input
 
+## 1.2.0-rc.0
+
+### Minor Changes
+
+- 10252ff: `PokeInteractable` has a `hand` field (`PokeHand.Both`, the default, `Left` or `Right`) that limits which hand or controller can poke the entity (#62). Use it for a wrist menu that only the other hand should press, so the hand wearing the menu no longer triggers it. Existing scenes keep poking with both hands.
+
+### Patch Changes
+
+- 89a9295: Controllers no longer get stuck after a held object disappears. If the app disposed the object a ray or grab pointer was selecting, and the trigger or squeeze was then released away from any target, the pointer stayed in its selected state and ignored every later grab and select until reload. Releasing now ends the selection, as it already did for poke.
+- 7c4970b: Rays and gaze can hit sprites in XR (#57). The XR ray intersector's raycaster had no camera, so raycasting a `Sprite` threw "Raycaster.camera needs to be set". It now uses the viewing camera, as the desktop intersector already did.
+
 ## 1.1.0
 
 ### Minor Changes

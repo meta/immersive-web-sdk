@@ -1,5 +1,39 @@
 # @iwsdk/vite-plugin-dev
 
+## 1.2.0-rc.0
+
+### Minor Changes
+
+- 5de9d12: Add `browser filmstrip` (MCP `browser_filmstrip`): pause the app, capture exact simulation frames at fixed step offsets, and return them as one labeled contact sheet. Steps and captures run against the command budget, the previous ECS pause state is restored, and `MCPRuntime.ecsPaused` reports the pause state the tool relies on.
+- 4f9f9b2: Headless managed sessions (`--ai-mode agent`, `--headless`) now start the app in on-demand render mode: systems, input, physics and UI run every frame, but the app draws only when a tool needs pixels, so a machine without a GPU no longer software-rasterizes every frame. `browser screenshot` draws a fresh frame itself; browser profiles, runtime preflight and publish evidence, and `browser run` scripts draw every frame while they run. `dev status` reports the mode the session starts the app in as `session.browser.renderMode`. `IWSDK_DEV_RENDER_MODE=continuous` opts out; headed and collaborate sessions always draw every frame. Every managed session turns off the emulator's per-frame clear (`XRDevice.frameClearEnabled`), so one drawn frame persists for XR captures, and draws the emulated AR room only on frames the app draws (`XRDevice.shouldDrawEnvironment`), so an idle on-demand AR session draws nothing. The emulator dependencies (`iwer`, `@iwer/sem`, `@iwer/devui`) move to ^2.8.0, which adds both settings.
+
+### Patch Changes
+
+- a4616dd: `xr_accept_session` now succeeds when an XR session is already active, and `xr_end_session` succeeds when none is, reporting `alreadyActive` or `alreadyEnded`. They used to fail ("No session has been offered", "No active session"), although the session was already in the requested state.
+- 2e55d6f: A page served by a `--native-xr-control` dev session now says so. Quest Browser pages whose headset and controllers the IWSDK CLI drives show a fixed "Agent-controlled page" banner, which ignores clicks, and log a console warning. Both say how to get control back: restart the dev server without `--native-xr-control` and open the URL it prints. Before this, the page looked like a normal app whose headset and controllers had stopped responding, and removing the pairing token from the URL did not help. The gaze-only target-device preview, desktop emulation and normal sessions are unchanged.
+- 8e86a3f: Pin Playwright to exactly 1.65.1, so the managed browser (Chrome for Testing and its headless shell, build 1255) only changes when an IWSDK release bumps it. With the old `^1.58.2` range, each Playwright release brought a new browser build on the next install. Machines that approve programs one by one asked again for every helper process, and screenshots and frame stats came from whatever build was newest.
+- 92fc364: `browser_reload_page` on the managed browser now replies once the reloaded app's runtime bridge is command-ready again, waiting up to the bridge-ready timeout (5 seconds by default). It used to reply as soon as the page navigated, so the next runtime command often failed with `connection_lost` or `browser_not_ready` while the new page was still starting. The result reports `commandReady: false` if the bridge did not return in time; apps without a runtime bridge are not delayed.
+- Updated dependencies [a7e5b27]
+- Updated dependencies [d0db4ab]
+- Updated dependencies [282d6f8]
+- Updated dependencies [fa0ff9d]
+- Updated dependencies [ee00260]
+- Updated dependencies [de1eaa9]
+- Updated dependencies [cddc720]
+- Updated dependencies [5de9d12]
+- Updated dependencies [d14fe70]
+- Updated dependencies [836135b]
+- Updated dependencies [13f1046]
+- Updated dependencies [b6b96ad]
+- Updated dependencies [455f82b]
+- Updated dependencies [cc2c31c]
+- Updated dependencies [ebf314e]
+- Updated dependencies [10252ff]
+- Updated dependencies [5ecfd0d]
+- Updated dependencies [51368a4]
+  - @iwsdk/core@1.2.0-rc.0
+  - @iwsdk/scene-composition@1.2.0-rc.0
+
 ## 1.1.0
 
 ### Minor Changes
