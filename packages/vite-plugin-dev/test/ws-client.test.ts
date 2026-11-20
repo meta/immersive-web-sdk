@@ -627,6 +627,67 @@ describe('MCPWebSocketClient', () => {
       });
     });
 
+    test.each([
+      ['accept_session', true, { success: true, alreadyActive: true }],
+      ['end_session', false, { success: true, alreadyEnded: true }],
+    ])(
+      'answers %s without IWER when the session is already in that state',
+      async (method, sessionActive, result) => {
+        mockDevice.remote.dispatch.mockImplementation(async (name: string) =>
+          name === 'get_session_status' ? { sessionActive } : undefined,
+        );
+        client = new MCPWebSocketClient(mockDevice as any);
+        client.connect();
+        await vi.waitFor(() => {
+          expect(mockWebSocketInstance!.readyState).toBe(MockWebSocket.OPEN);
+        });
+
+        mockWebSocketInstance!.simulateMessage({ id: '1', method, params: {} });
+
+        await vi.waitFor(() =>
+          expect(getRuntimeResponses(mockWebSocketInstance!)).toHaveLength(1),
+        );
+        expect(getRuntimeResponses(mockWebSocketInstance!)[0]).toMatchObject({
+          id: '1',
+          result,
+        });
+        expect(mockDevice.remote.dispatch).not.toHaveBeenCalledWith(
+          method,
+          expect.anything(),
+        );
+      },
+    );
+
+    test.each([
+      ['accept_session', false],
+      ['end_session', true],
+      ['accept_session', undefined],
+    ])(
+      'forwards %s to IWER when the session state is %s',
+      async (method, sessionActive) => {
+        mockDevice.remote.dispatch.mockImplementation(async (name: string) =>
+          name === 'get_session_status' ? { sessionActive } : { success: true },
+        );
+        client = new MCPWebSocketClient(mockDevice as any);
+        client.connect();
+        await vi.waitFor(() => {
+          expect(mockWebSocketInstance!.readyState).toBe(MockWebSocket.OPEN);
+        });
+
+        mockWebSocketInstance!.simulateMessage({ id: '1', method, params: {} });
+
+        await vi.waitFor(() =>
+          expect(mockDevice.remote.dispatch).toHaveBeenCalledWith(method, {}),
+        );
+        await vi.waitFor(() =>
+          expect(getRuntimeResponses(mockWebSocketInstance!)[0]).toMatchObject({
+            id: '1',
+            result: { success: true },
+          }),
+        );
+      },
+    );
+
     test('should route get_console_logs to device.remote.dispatch (server-side handles it)', async () => {
       client = new MCPWebSocketClient(mockDevice as any);
       client.connect();

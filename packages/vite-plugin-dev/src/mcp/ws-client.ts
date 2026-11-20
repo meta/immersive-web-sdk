@@ -600,6 +600,24 @@ export class MCPWebSocketClient {
         `Method "${method}" requires IWER device emulation and is unavailable in this workspace-only page`,
       );
     }
+    if (method === 'accept_session' || method === 'end_session') {
+      // IWER throws when the session is already in the requested state ("No
+      // session has been offered" once one is active, "No active session"),
+      // and agents routinely ask again. Treat a request for the current state
+      // as done.
+      const status = await this.device.remote.dispatch(
+        'get_session_status',
+        {},
+      );
+      const active = (status as { sessionActive?: unknown } | null)
+        ?.sessionActive;
+      if (method === 'accept_session' && active === true) {
+        return { success: true, alreadyActive: true };
+      }
+      if (method === 'end_session' && active === false) {
+        return { success: true, alreadyEnded: true };
+      }
+    }
     return this.device.remote.dispatch(method, params);
   }
 
