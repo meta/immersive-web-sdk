@@ -265,10 +265,17 @@ npx @iwsdk/cli xr set-input-mode --input-json '{"mode":"hand"}'
 npx @iwsdk/cli xr run-sequence --input-json '{"device":"hand-right","steps":[{"target":"Btn_Action","press":{}}]}' --timeout 45000
 ```
 
-The press clicked when `presses[0].contactMs` is below 800; at 800 or more a
-slow headless frame held the touch too long, so run the press once more. Confirm
-the state change with `ui inspect`. `xr list-targets` lists the element IDs that
-can be pressed.
+A press result reports contact, not a click: a `presses[0].contactMs` of 800 or
+less does not prove the control clicked, because the fingertip can touch the
+panel or a neighbouring control instead. Verify the click by the state it
+changes, with `ui inspect` on the control or a query of the app state it
+drives, and press once more if nothing changed. A contact of more than 800 ms
+never clicks. A slow headless frame can hold the touch that long. So can a
+press on a control out of reach: the body walks to it during the press (a
+contact of seconds). Walk to such a control in a step of its own before the
+press:
+`"steps":[{"body":{"stepTo":"Btn_Action"}},{"target":"Btn_Action","press":{}}]`.
+`xr list-targets` lists the element IDs that can be pressed.
 
 The commands in this section are the supported path. Do not call broad
 `iwsdk`, `ui`, `browser`, `ecs`, or `xr` help. If a shown command fails, use its

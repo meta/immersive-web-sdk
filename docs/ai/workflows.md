@@ -291,11 +291,18 @@ come from `xr_list_targets`; these are from the poke and grab examples:
 }
 ```
 
-The result's `presses` gives each press's contact time; a UIKit click needs the
-fingertip to leave again within 800 ms. A stalled frame can stretch a press
-past that, so press again when `contactMs` is 800 or more. Near grabs need
-`OneHandGrabbable` or `TwoHandsGrabbable` and `grabbing.useHandPinchForGrab` (on by
-default), so a hand's pinch grabs instead of a controller's squeeze.
+The result's `presses` gives each press's contact time. That reports contact,
+not a click: the fingertip can touch the panel or a neighbouring control
+instead, so confirm the click by the state it changes (`ui_inspect` on the
+control, or the app state it drives). A contact of more than 800 ms never
+clicks, because a UIKit click needs the fingertip to leave again within 800 ms.
+A stalled frame can stretch a press that long, and so can a target out of
+reach, because the body walks to it during the press: walk first, with
+`{"body":{"stepTo":"<target>"}}` as a step of its own, then press.
+
+Near grabs need `OneHandGrabbable` or `TwoHandsGrabbable` and
+`grabbing.useHandPinchForGrab` (on by default), so a hand's pinch grabs instead
+of a controller's squeeze.
 
 ## Final Review
 

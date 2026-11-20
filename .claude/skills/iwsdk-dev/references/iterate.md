@@ -154,9 +154,13 @@ npx @iwsdk/cli xr run-sequence --input-json '{"device":"hand-right","steps":[{"t
 npx @iwsdk/cli xr run-sequence --input-json '{"device":"hand-right","steps":[{"pinch":0,"duration":0.15}]}'
 ```
 
-Query `Grabbed` between the grab and the release. A press result whose
-`presses[0].contactMs` is 800 or more did not click. A stalled frame can
-stretch a press that far, so run that press once more before changing code.
+Query `Grabbed` between the grab and the release. A press result reports
+contact, not a click: confirm the click by the state it changes (`ui inspect`
+on the control, or the app state it drives). A `presses[0].contactMs` of more
+than 800 never clicks. A stalled frame can stretch a press that far, so run
+that press once more before changing code. A control out of reach stretches it
+too, because the body walks to it during the press: walk first, with
+`{"body":{"stepTo":"Btn_Action"}}` as a step of its own, then press.
 
 If a scene/source/UI edit happens after the managed runtime started and live
 state becomes stale, do not call `scene open`, repeatedly poll `dev status`, or

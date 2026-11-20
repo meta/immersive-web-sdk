@@ -465,9 +465,14 @@ reach; the head turns toward the target, and the body leans or steps closer when
 is out of reach. The result lists the select events the application saw, step times,
 press contact times, warnings, and the final hand state. Pass `dryRun: true` to check
 a plan without moving anything. A sequence gives up 28 seconds after it is sent, with
-a partial result; `xr_cancel_sequence` stops it sooner. A UIKit click needs the
-fingertip to leave within 800 ms; a stalled frame can stretch a press past that,
-so press again when `presses[0].contactMs` is 800 or more.
+a partial result; `xr_cancel_sequence` stops it sooner. A press reports contact,
+not a click: `presses[0].contactMs` is how long the fingertip touched something,
+which can be the panel or a neighbouring control. Confirm the click by the state
+it changes (`ui_inspect` on the control, or the app state it drives). A contact
+of more than 800 ms never clicks, because a UIKit click needs the fingertip to
+leave within 800 ms. A stalled frame can stretch a press that long, and so can a
+target out of reach, because the body walks to it during the press: walk first,
+with `{"body":{"stepTo":"counter-button"}}` as a step of its own, then press.
 
 ```bash
 npx @iwsdk/cli xr run-sequence --input-json \
@@ -482,12 +487,14 @@ box centre and size. IWSDK resolves them in the live scene:
 - entities with `PokeInteractable`, `RayInteractable`, `OneHandGrabbable`,
   `TwoHandsGrabbable`, or `DistanceGrabbable`, by Object3D name (`Map Pin 1`)
 - UIKitML elements with an `id` inside those entities (`counter-button`); hidden
-  elements are left out
+  elements, elements scrolled out of view and elements with less than 1 cm in
+  view are left out
 
-A step's `target` also accepts a scene node id, any Object3D name, or a UUID. Targets
-that share a name are listed under their scene node id. A press goes to the face
-toward the body (or `{ "name": ..., "face": "top" }`), a grab to the middle of the
-object, and setting a held object down to the top of the target.
+A step's `target` also accepts a scene node id, any Object3D name, or a UUID, except
+the UUID of a UIKitML element left out of the list. Targets that share a name are
+listed under their scene node id. A press goes to the face toward the body (or
+`{ "name": ..., "face": "top" }`), a grab to the middle of the object, and setting
+a held object down to the top of the target.
 
 ### `xr_set_hand_pose`, `xr_get_hand_state`, `xr_microgesture`
 
