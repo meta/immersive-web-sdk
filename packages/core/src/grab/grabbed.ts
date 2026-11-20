@@ -12,7 +12,9 @@ import { createComponent } from '../ecs/component.js';
  * @remarks
  * - Managed by {@link GrabSystem}; do not add/remove this component manually.
  * - Added when a grab handle captures one or more pointers.
- * - Removed when all pointers are released and the grab ends.
+ * - Removed by the next {@link GrabSystem} update after the grab ends: when
+ *   every pointer lets go, after {@link GrabSystem.forceRelease}, or when the
+ *   grabbable component that created the entity's grab handle is removed.
  * - Often used to gate grab-state-specific logic (e.g. physics kinematic override).
  * - Works with {@link OneHandGrabbable}, {@link TwoHandsGrabbable}, and {@link DistanceGrabbable} entities.
  *

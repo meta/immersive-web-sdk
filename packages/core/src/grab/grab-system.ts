@@ -73,6 +73,11 @@ export class GrabSystem extends createSystem(
     handles: {
       required: [Handle],
     },
+    // Held entities whose Handle was removed with their grabbable component.
+    grabbedWithoutHandle: {
+      required: [Grabbed],
+      excluded: [Handle],
+    },
   },
   {
     /**
@@ -85,6 +90,8 @@ export class GrabSystem extends createSystem(
 ) {
   /** Which grabbable component created each entity's Handle, by entity index. */
   private handleSources = new Map<number, GrabbableComponent>();
+  /** Unbinds each entity's Handle from its object, by entity index. */
+  private handleUnbinds = new Map<number, () => void>();
 
   init() {
     // Ensure Handle component is registered in the world before queries rely on it
@@ -122,14 +129,14 @@ export class GrabSystem extends createSystem(
     // Unified cleanup for any handle
     this.queries.handles.subscribe('disqualify', (entity) => {
       this.handleSources.delete(entity.index);
-      const h = Handle.data.instance[entity.index] as
-        | HandleStore<unknown>
-        | undefined;
-      if (h) {
-        try {
-          h.cancel();
-        } catch {}
-      }
+      // Unbinding cancels the grab and removes the handle's pointer listeners.
+      // A handle left listening keeps capturing presses on the object, and
+      // letting go of one puts the object back where that press started.
+      const unbind = this.handleUnbinds.get(entity.index);
+      this.handleUnbinds.delete(entity.index);
+      try {
+        unbind?.();
+      } catch {}
       if (entity.object3D) {
         entity.object3D.pointerEventsType = 'all';
       }
@@ -152,6 +159,14 @@ export class GrabSystem extends createSystem(
   }
 
   update(delta: number, time: number): void {
+    // Removing the grabbable that created a held entity's Handle removes the
+    // Handle and cancels the grab, which takes the entity out of the handles
+    // loop below. Remove its Grabbed here, as that loop does on a release, so
+    // release handlers run in update() rather than inside the removal.
+    this.queries.grabbedWithoutHandle.entities.forEach((entity) =>
+      entity.removeComponent(Grabbed),
+    );
+
     // Forward hand pinch events to squeeze for grab interactions
     // Only forward if the system-level useHandPinchForGrab flag is enabled
     if (this.config.useHandPinchForGrab.value) {
@@ -295,7 +310,7 @@ export class GrabSystem extends createSystem(
       projectRays: false,
       multitouch: false,
     }));
-    handle.bind(obj);
+    this.handleUnbinds.set(entity.index, handle.bind(obj));
     obj.pointerEventsType = { deny: 'ray' };
     entity.addComponent(Handle, { instance: handle });
     this.handleSources.set(entity.index, OneHandGrabbable);
@@ -348,7 +363,7 @@ export class GrabSystem extends createSystem(
       projectRays: false,
       multitouch: true,
     }));
-    handle.bind(obj);
+    this.handleUnbinds.set(entity.index, handle.bind(obj));
     obj.pointerEventsType = { deny: 'ray' };
     entity.addComponent(Handle, { instance: handle });
     this.handleSources.set(entity.index, TwoHandsGrabbable);
@@ -440,7 +455,7 @@ export class GrabSystem extends createSystem(
       ),
       detachOnGrab,
     );
-    handle.bind(obj);
+    this.handleUnbinds.set(entity.index, handle.bind(obj));
     obj.pointerEventsType = { deny: 'grab' };
     entity.addComponent(Handle, { instance: handle });
     this.handleSources.set(entity.index, DistanceGrabbable);

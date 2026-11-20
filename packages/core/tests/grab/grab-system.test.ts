@@ -211,7 +211,10 @@ function runPinchForwarding(options: {
         },
       },
     },
-    queries: { handles: { entities: [] } },
+    queries: {
+      grabbedWithoutHandle: { entities: [] },
+      handles: { entities: [] },
+    },
   };
   GrabSystem.prototype.update.call(system as any, 1 / 60, 2);
   return routed;

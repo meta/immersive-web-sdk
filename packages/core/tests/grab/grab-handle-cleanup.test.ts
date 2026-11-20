@@ -5,12 +5,14 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import type { HandleStore } from '@pmndrs/handle';
 import { signal } from '@preact/signals-core';
 import { describe, expect, it, vi } from 'vitest';
 import { World } from '../../src/ecs/world.js';
 import { DistanceGrabbable } from '../../src/grab/distance-grabbable.js';
 import { GrabSystem } from '../../src/grab/grab-system.js';
-import { Handle } from '../../src/grab/handles.js';
+import { Grabbed } from '../../src/grab/grabbed.js';
+import { DistanceGrabHandle, Handle } from '../../src/grab/handles.js';
 import { OneHandGrabbable } from '../../src/grab/one-hand-grabbable.js';
 import { TwoHandsGrabbable } from '../../src/grab/two-hands-grabbable.js';
 import { LevelTag } from '../../src/level/level-tag.js';
@@ -18,7 +20,9 @@ import {
   BoxGeometry,
   Mesh,
   MeshBasicMaterial,
+  Quaternion,
   Scene,
+  Vector3,
 } from '../../src/runtime/three.js';
 import { Transform } from '../../src/transform/transform-component.js';
 
@@ -45,10 +49,14 @@ vi.hoisted(() => {
 
 function createGrabWorld(): World {
   const world = new World();
-  // GrabSystem.init enables each hand's grab sub-pointer.
+  // GrabSystem.init enables each hand's grab sub-pointer; update() looks for
+  // hand input before it updates the handles.
   const multiPointer = { toggleSubPointer: () => {} };
   (world as any).input = {
-    xr: { multiPointers: { left: multiPointer, right: multiPointer } },
+    xr: {
+      isPrimary: () => false,
+      multiPointers: { left: multiPointer, right: multiPointer },
+    },
   };
   world
     .registerComponent(Transform)
@@ -68,6 +76,35 @@ function createGrabWorld(): World {
 function createGrabbableMesh(world: World) {
   const mesh = new Mesh(new BoxGeometry(), new MeshBasicMaterial());
   return { mesh, entity: world.createTransformEntity(mesh) };
+}
+
+// Delivers a pointer event to the object's listeners, from a pointer at
+// `position`.
+function dispatchPointer(
+  mesh: Mesh,
+  type: 'pointerdown' | 'pointermove' | 'pointerup',
+  position = new Vector3(),
+  stopPropagation = () => {},
+) {
+  (mesh as any).dispatchEvent({
+    type,
+    details: { type: 'sphere' },
+    intersection: { details: { type: 'sphere' } },
+    object: mesh,
+    point: position.clone(),
+    pointerId: 1,
+    pointerPosition: position.clone(),
+    pointerQuaternion: new Quaternion(),
+    stopPropagation,
+    timeStamp: 0,
+  });
+}
+
+// Presses the object with a pointer, then runs a frame so GrabSystem tags the
+// entity Grabbed.
+function hold(world: World, mesh: Mesh) {
+  dispatchPointer(mesh, 'pointerdown');
+  world.update(1 / 60, 0);
 }
 
 describe('GrabSystem handle cleanup (#59)', () => {
@@ -106,6 +143,140 @@ describe('GrabSystem handle cleanup (#59)', () => {
       expect(mesh.pointerEventsType).toBe('all');
     },
   );
+
+  it.each([
+    ['OneHandGrabbable', OneHandGrabbable],
+    ['TwoHandsGrabbable', TwoHandsGrabbable],
+    ['DistanceGrabbable', DistanceGrabbable],
+  ] as const)('ends the grab when %s is removed while held', (_, component) => {
+    const world = createGrabWorld();
+    const { mesh, entity } = createGrabbableMesh(world);
+    const released = vi.fn();
+    world.queryManager
+      .registerQuery({ required: [Grabbed] })
+      .subscribe('disqualify', released);
+    const notHeld = world.queryManager.registerQuery({
+      required: [Transform],
+      excluded: [Grabbed],
+    });
+
+    entity.addComponent(component);
+    const handle = Handle.data.instance[entity.index] as HandleStore<unknown>;
+    hold(world, mesh);
+    expect(entity.hasComponent(Grabbed)).toBe(true);
+    expect(notHeld.entities.has(entity)).toBe(false);
+
+    entity.removeComponent(component);
+    expect(entity.hasComponent(Handle)).toBe(false);
+    expect(handle.inputState.size).toBe(0);
+
+    // The next update removes Grabbed, as it does after a release.
+    world.update(1 / 60, 1 / 60);
+    expect(entity.hasComponent(Grabbed)).toBe(false);
+    expect(released).toHaveBeenCalledTimes(1);
+    expect(notHeld.entities.has(entity)).toBe(true);
+
+    // Later frames and forceRelease leave the entity released.
+    world.getSystem(GrabSystem)!.forceRelease(entity);
+    world.update(1 / 60, 2 / 60);
+    expect(entity.hasComponent(Grabbed)).toBe(false);
+    expect(released).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['OneHandGrabbable', OneHandGrabbable],
+    ['TwoHandsGrabbable', TwoHandsGrabbable],
+    ['DistanceGrabbable', DistanceGrabbable],
+  ] as const)(
+    'stops handling presses on the object once %s is removed',
+    (_, component) => {
+      const world = createGrabWorld();
+      const { mesh, entity } = createGrabbableMesh(world);
+      entity.addComponent(component);
+      const handle = Handle.data.instance[entity.index] as HandleStore<unknown>;
+      entity.removeComponent(component);
+
+      const stopPropagation = vi.fn();
+      dispatchPointer(mesh, 'pointerdown', new Vector3(), stopPropagation);
+      expect(handle.inputState.size).toBe(0);
+      expect(stopPropagation).not.toHaveBeenCalled();
+    },
+  );
+
+  it('lets a release handler make the entity grabbable again', () => {
+    const world = createGrabWorld();
+    const { mesh, entity } = createGrabbableMesh(world);
+    world.queryManager
+      .registerQuery({ required: [Grabbed] })
+      .subscribe('disqualify', (e) => {
+        if (!e.hasComponent(DistanceGrabbable)) {
+          e.addComponent(DistanceGrabbable);
+        }
+      });
+
+    entity.addComponent(OneHandGrabbable);
+    hold(world, mesh);
+    entity.removeComponent(OneHandGrabbable);
+    world.update(1 / 60, 1 / 60);
+    expect(entity.hasComponent(Handle)).toBe(true);
+    expect(mesh.pointerEventsType).toEqual({ deny: 'grab' });
+
+    // A distance grab pulls the object to the pointer, and letting go leaves
+    // it there.
+    const pointer = new Vector3(1, 2, 3);
+    dispatchPointer(mesh, 'pointerdown');
+    for (let frame = 2; frame < 62; frame++) {
+      dispatchPointer(mesh, 'pointermove', pointer);
+      world.update(1 / 60, frame / 60);
+    }
+    expect(mesh.position).toEqual(pointer);
+    dispatchPointer(mesh, 'pointerup', pointer);
+    expect(mesh.position).toEqual(pointer);
+  });
+
+  it('runs release handlers after every grab handler when one removes the grabbable', () => {
+    const world = createGrabWorld();
+    const { mesh, entity } = createGrabbableMesh(world);
+    const events: string[] = [];
+    const grabbed = world.queryManager.registerQuery({ required: [Grabbed] });
+    grabbed.subscribe('qualify', (e) => {
+      events.push('A grabbed');
+      e.removeComponent(OneHandGrabbable);
+    });
+    grabbed.subscribe('qualify', () => events.push('B grabbed'));
+    grabbed.subscribe('disqualify', () => events.push('A released'));
+    grabbed.subscribe('disqualify', () => events.push('B released'));
+
+    entity.addComponent(OneHandGrabbable);
+    hold(world, mesh);
+    world.update(1 / 60, 1 / 60);
+    expect(events).toEqual([
+      'A grabbed',
+      'B grabbed',
+      'A released',
+      'B released',
+    ]);
+    expect(entity.hasComponent(Grabbed)).toBe(false);
+  });
+
+  it('builds the Handle of the grabbable that remains even if a release handler throws', () => {
+    const world = createGrabWorld();
+    const { mesh, entity } = createGrabbableMesh(world);
+    world.queryManager
+      .registerQuery({ required: [Grabbed] })
+      .subscribe('disqualify', () => {
+        throw new Error('release handler failed');
+      });
+
+    entity.addComponent(OneHandGrabbable);
+    entity.addComponent(DistanceGrabbable);
+    hold(world, mesh);
+    expect(() => entity.removeComponent(OneHandGrabbable)).not.toThrow();
+    expect(Handle.data.instance[entity.index]).toBeInstanceOf(
+      DistanceGrabHandle,
+    );
+    expect(mesh.pointerEventsType).toEqual({ deny: 'grab' });
+  });
 
   it('rebuilds the Handle from the grabbable that remains', () => {
     const world = createGrabWorld();
