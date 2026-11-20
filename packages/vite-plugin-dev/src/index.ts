@@ -1550,7 +1550,8 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       const waitForBridgeConnection = async (
         timeoutMs: number,
         target: ManagedBrowserCommandTarget,
-      ): Promise<void> => {
+        minTabGeneration?: number,
+      ): Promise<boolean> => {
         const deadline = Date.now() + Math.min(timeoutMs, 5000);
         while (!serverShuttingDown && Date.now() < deadline) {
           if (
@@ -1562,16 +1563,19 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
                   client.sessionId === target.sessionId) &&
                 (target.browserEpoch == null ||
                   client.browserEpoch === target.browserEpoch) &&
+                (minTabGeneration == null ||
+                  client.tabGeneration >= minTabGeneration) &&
                 client.commandReady,
             )
           ) {
-            return;
+            return true;
           }
           await controller.wait(
             controller.snapshot().revision,
             Math.min(250, deadline - Date.now()),
           );
         }
+        return false;
       };
 
       // Initialize WebSocket server and client tracking
@@ -1827,8 +1831,13 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           errorContext: string;
           execute: (browser: ManagedBrowser) => Promise<T>;
           resultContext: string;
-          serialize?: (result: T) => unknown;
+          serialize?: (result: T, appCommandReady?: boolean) => unknown;
           unavailableContext: string;
+          /**
+           * Reply only once the app's runtime bridge in the resulting tab is
+           * command-ready again, if it was before the command.
+           */
+          awaitAppBridge?: boolean;
         },
       ): Promise<void> => {
         try {
@@ -1857,12 +1866,36 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
             );
             return;
           }
+          const appBridgeTarget: ManagedBrowserCommandTarget = {
+            role: 'app',
+            sessionId,
+          };
+          const hadAppBridge =
+            options.awaitAppBridge === true &&
+            listBrowserClients().some(
+              (client) =>
+                client.deviceClass === 'managed' &&
+                client.role === appBridgeTarget.role &&
+                client.commandReady,
+            );
           const execution = await runManagedBrowserCommand(
             options.command,
             readiness.browser,
             parsed.target,
             () => options.execute(readiness.browser!),
           );
+          // Waited for outside the command lock, whose budget the command
+          // itself may already have used.
+          const appCommandReady = hadAppBridge
+            ? await waitForBridgeConnection(
+                BRIDGE_READY_TIMEOUT_MS,
+                {
+                  ...appBridgeTarget,
+                  browserEpoch: controller.snapshot().browserEpoch,
+                },
+                execution.tab.generation ?? undefined,
+              )
+            : undefined;
           sendWsJson(
             ws,
             {
@@ -1870,7 +1903,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
               result:
                 options.serialize == null
                   ? execution.result
-                  : options.serialize(execution.result),
+                  : options.serialize(execution.result, appCommandReady),
               ...(execution.tab.id == null
                 ? {}
                 : {
@@ -2816,11 +2849,16 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
                     result: Awaited<
                       ReturnType<ManagedBrowser['reloadApplication']>
                     >,
+                    appCommandReady,
                   ) => ({
                     reloaded: true,
                     url: result.url,
+                    ...(appCommandReady == null
+                      ? {}
+                      : { commandReady: appCommandReady }),
                   }),
                   unavailableContext: 'reload_unavailable',
+                  awaitAppBridge: true,
                 },
               );
               return;

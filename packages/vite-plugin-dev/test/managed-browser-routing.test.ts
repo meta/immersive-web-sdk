@@ -389,6 +389,74 @@ describe('managed browser WebSocket routing', () => {
     });
   });
 
+  test('replies to a managed reload once the reloaded app bridge is command-ready', async () => {
+    const managed = createManagedBrowser();
+    const { sessionId, socket } = await createHarness(managed.browser);
+    const appPage = {
+      browserEpoch: 1,
+      deviceClass: 'managed',
+      pageId: 'runtime-app',
+      pageRole: 'app',
+      sessionId,
+    };
+    const before = connectBrowserPage(appPage);
+
+    sendJson(socket, { id: 'reload', method: 'reload_page' });
+    await vi.waitFor(() =>
+      expect(managed.browser.reloadApplication).toHaveBeenCalledOnce(),
+    );
+    before.emit('close', 1001, Buffer.from(''));
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(socket.send).not.toHaveBeenCalled();
+
+    connectBrowserPage({ ...appPage, tabGeneration: 3 });
+    await vi.waitFor(() => expect(socket.send).toHaveBeenCalledOnce());
+    expect(responses(socket)[0]).toMatchObject({
+      id: 'reload',
+      result: { reloaded: true, commandReady: true },
+      _tabGeneration: 3,
+    });
+  });
+
+  test('reports a managed reload whose app bridge does not return in time', async () => {
+    const managed = createManagedBrowser();
+    const { sessionId, socket } = await createHarness(managed.browser);
+    connectBrowserPage({
+      browserEpoch: 1,
+      deviceClass: 'managed',
+      pageId: 'runtime-app',
+      pageRole: 'app',
+      sessionId,
+    });
+    vi.useFakeTimers();
+
+    sendJson(socket, { id: 'reload', method: 'reload_page' });
+    await vi.waitFor(() =>
+      expect(managed.browser.reloadApplication).toHaveBeenCalledOnce(),
+    );
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(socket.send).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1_500);
+    expect(responses(socket)[0]).toMatchObject({
+      id: 'reload',
+      result: { reloaded: true, commandReady: false },
+    });
+  });
+
+  test('replies to a managed reload at once when the app has no runtime bridge', async () => {
+    const managed = createManagedBrowser();
+    const { socket } = await createHarness(managed.browser);
+
+    sendJson(socket, { id: 'reload', method: 'reload_page' });
+
+    await vi.waitFor(() => expect(socket.send).toHaveBeenCalledOnce());
+    const [response] = responses(socket);
+    expect(response.result).toEqual({
+      reloaded: true,
+      url: 'http://localhost:4173/',
+    });
+  });
+
   test('does not combine a new application id with a stale generation', async () => {
     const managed = createManagedBrowser();
     managed.browser.snapshotApplication.mockResolvedValueOnce({
