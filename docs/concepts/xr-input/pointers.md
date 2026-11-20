@@ -23,6 +23,8 @@ and drives ECS `Hovered` / `Pressed` tags for interactable entities.
 - Event mapping from `StatefulGamepad`:
   - `select` → ray pointer (button 0)
   - `squeeze` → grab pointer (button 2)
+- Priority: each hand's `MultiPointer` lets one sub-pointer act at a time, touch (poke) before grab before ray, and a pointer that is pressing keeps the hand until it releases. A squeeze is the exception: when the grab sphere touches a grabbable, the grab pointer takes over even from a poke in progress and keeps the hand until the squeeze ends; a ray selection in progress keeps its lock. While the squeeze holds the hand the touch pointer doesn't move, so a pokeable the tip was hovering gets `pointerleave` as the grab starts. A hand pinch, which `GrabSystem` routes to the grab pointer, also takes over a poke in progress, but doesn't hold the hand: the fingertip can press something else while the pinch holds an object. Either way the poked object gets `pointercancel` and `pointerleave` instead of `pointerup` and `click`, and the tip has to lift off, moving more than 2 cm away from every pokeable, before it hovers or presses again.
+- Pokes and grabbables: a poke presses a grabbable that is also `PokeInteractable` (`Pressed`, `click`) but never grabs or moves it, even one limited to a single axis like a slider knob, lever or drawer. Grab it with a squeeze, a pinch or, for `DistanceGrabbable`, the ray. See [Grabs and Pokes](/concepts/grabbing/#grabs-and-pokes) for controls a fingertip should drag.
 
 ## Using the multipointer
 

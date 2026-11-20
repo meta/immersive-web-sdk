@@ -122,6 +122,13 @@ World.create(document.getElementById('scene-container'), {
 
 Most applications use a combination—direct grabbing for nearby objects and distance grabbing for remote items, with two-hand grabbing reserved for objects requiring scaling or precision.
 
+## Grabs and Pokes
+
+A grab starts with a squeeze on a controller, a pinch with a tracked hand (unless `useHandPinchForGrab` is off) or, for `DistanceGrabbable`, a select along the ray (the trigger, or a pinch). A poke, where the controller tip or index fingertip touches an object, never grabs. On a grabbable that is also `PokeInteractable`, a poke presses it (`Pressed`, `click`) and leaves it where it is.
+
+- **A fingertip can't push a grabbable along**, not even a `OneHandGrabbable` limited to one axis such as a slider knob, a lever or a drawer. It moves only while a squeeze or pinch holds it. In earlier releases a poke grabbed a pokeable grabbable, so such an object followed the fingertip until the fingertip lifted off; it no longer does. For a control the fingertip should drag, make it `PokeInteractable` rather than grabbable and set its value from its pointer events, for example from `event.point` while it is pressed. In its `pointerdown` listener, call `setPointerCapture(event.pointerId)` on its `object3D` so the press survives the fingertip sliding off the knob: the press then lasts until the fingertip pulls back from the knob's surface, wherever along it the fingertip has slid.
+- **A grab interrupts a poke.** When a squeeze or pinch grabs something while the tip presses a pokeable, the pokeable gets `pointercancel` and `pointerleave` instead of `pointerup` and `click`, so the poke neither keeps it `Pressed` nor clicks it. The tip has to lift off before it hovers or presses again, which means moving more than 2 cm away from every pokeable.
+
 ## Integration Points
 
 The grabbing system integrates with multiple IWSDK systems:

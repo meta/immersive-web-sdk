@@ -533,6 +533,7 @@ describe('XRInputManager untracked input sources', () => {
       getSelecting: () => false,
       getButtonDown: () => false,
       getButtonUp: () => false,
+      getButtonPressed: () => false,
     };
     const connected = recordPointerConnection(manager, 'left');
 
@@ -543,6 +544,63 @@ describe('XRInputManager untracked input sources', () => {
 
     expect(connected).toEqual([false, true]);
   });
+});
+
+describe('XRInputManager squeeze grabs', () => {
+  it.each([
+    ['with no Gamepad (WebXR Hand Input)', null],
+    [
+      'with a pinch-only Gamepad (as Quest Browser reports it)',
+      { buttons: [{ pressed: false }], axes: [] },
+    ],
+  ])(
+    'ends a squeeze grab when a hand %s replaces the controller mid-squeeze',
+    (_, handGamepad) => {
+      const { manager, xrManager, session, box, events } = createGrabScene();
+      const squeeze = { pressed: false };
+      const controller = {
+        handedness: 'right',
+        hand: undefined,
+        gamepad: { buttons: [{ pressed: false }, squeeze], axes: [] },
+        targetRaySpace: {} as XRSpace,
+        gripSpace: {} as XRSpace,
+        profiles: ['generic-trigger-squeeze'],
+      } as unknown as XRInputSource;
+      const hand = {
+        handedness: 'right',
+        hand: new Map([['wrist', {} as XRJointSpace]]),
+        gamepad: handGamepad,
+        targetRaySpace: {} as XRSpace,
+        gripSpace: {} as XRSpace,
+        profiles: ['generic-hand'],
+      } as unknown as XRInputSource;
+      const pointer = manager.multiPointers.right;
+      const grabState = () => (pointer as any).pointerStates.get('grab');
+      let time = 0;
+      const frame = () => manager.update(xrManager, 1 / 72, (time += 1 / 72));
+
+      (session as any).inputSources = [controller];
+      frame();
+      squeeze.pressed = true;
+      frame();
+      expect(events).toEqual(['pointerdown grab']);
+      expect(grabState()).toBe(InteractorState.SELECT);
+
+      // The controller is put down mid-squeeze; the hand takes its place.
+      (session as any).inputSources = [hand];
+      frame();
+      expect(manager.getPrimaryInputSource('right')).toBe(hand);
+      expect(events).toEqual(['pointerdown grab', 'pointerup grab']);
+      expect(grabState()).not.toBe(InteractorState.SELECT);
+      expect(pointer.getPointer('grab').getButtonsDown().size).toBe(0);
+
+      // No lock is left on the grab: with the box out of reach, the grab
+      // pointer stops being the active one.
+      box.position.x = 1;
+      frame();
+      expect(pointer.getActiveKind()).not.toBe('grab');
+    },
+  );
 });
 
 describe('XRInputManager touch hand visual offset', () => {
@@ -754,6 +812,59 @@ function createTrackingScene() {
     getFrame: () => frame,
   } as unknown as WebXRManager;
   return { manager, xrManager, frameState, hand, session };
+}
+
+/**
+ * A session whose input sources (set by the test) all pose at one point,
+ * with a 10 cm grabbable box there that records its pointer events. The grab
+ * sub-pointer is on, as GrabSystem sets it up, and the visual adapters'
+ * connect and update are stubbed so no model loads.
+ */
+function createGrabScene() {
+  const scene = new Scene() as Scene & Record<string, Object3D[]>;
+  const box = new Mesh(new BoxGeometry(0.1, 0.1, 0.1), new MeshBasicMaterial());
+  box.position.set(0, 1.2, -0.3);
+  scene.add(box);
+  scene.grabDescendants = [box];
+  scene.touchDescendants = [];
+  scene.rayDescendants = [];
+  const events: string[] = [];
+  for (const type of ['pointerdown', 'pointerup', 'pointercancel'] as const) {
+    box.addEventListener(type, (e) => events.push(`${type} ${e.pointerType}`));
+  }
+  const manager = createManager(scene);
+  for (const adapter of [
+    manager.visualAdapters.hand.left,
+    manager.visualAdapters.hand.right,
+    manager.visualAdapters.controller.left,
+    manager.visualAdapters.controller.right,
+  ]) {
+    vi.spyOn(adapter, 'connect').mockImplementation(() => {});
+    vi.spyOn(adapter, 'update').mockImplementation(() => {});
+  }
+  manager.multiPointers.right.toggleSubPointer('grab', true);
+  const pose = {
+    transform: {
+      matrix: new Float32Array([
+        1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1.2, -0.3, 1,
+      ]),
+    },
+  };
+  const session = Object.assign(new EventTarget(), {
+    inputSources: [],
+  }) as unknown as XRSession;
+  const frame = {
+    session,
+    getPose: () => pose,
+    getJointPose: () => ({ ...pose, radius: 0.02 }),
+    getViewerPose: () => null,
+  } as unknown as XRFrame;
+  const xrManager = {
+    getSession: () => session,
+    getReferenceSpace: () => ({}) as XRReferenceSpace,
+    getFrame: () => frame,
+  } as unknown as WebXRManager;
+  return { manager, xrManager, session, box, events };
 }
 
 function recordPointerConnection(

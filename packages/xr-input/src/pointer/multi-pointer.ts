@@ -11,7 +11,7 @@ import type { XROrigin } from '../rig/xr-origin.js';
 import { CursorVisual } from './cursor-visual.js';
 import { GrabPointer } from './grab-pointer.js';
 import { RayPointer } from './ray-pointer.js';
-import { TouchPointer } from './touch-pointer.js';
+import { TOUCH_DEFAULTS, TouchPointer } from './touch-pointer.js';
 
 export type PointerKind = 'ray' | 'grab' | 'touch';
 
@@ -20,6 +20,13 @@ export interface MultiPointerInput {
   selectEnd?: boolean;
   squeezeStart?: boolean;
   squeezeEnd?: boolean;
+  /**
+   * Whether the squeeze is held this frame. When `false`, a grab selection
+   * ends even without a `squeezeEnd` edge, for example after the input source
+   * switched from a controller to a hand mid-squeeze. Leave it undefined to
+   * rely on the edges alone.
+   */
+  squeezing?: boolean;
   /**
    * Temporarily disable the far ray without changing its registration.
    * Gaze mode uses this to make the hand/controller ray a fallback while
@@ -89,6 +96,17 @@ export class MultiPointer {
   /** Hysteresis tracking: whether touch is currently in hover state */
   private touchHoverActive = false;
 
+  /**
+   * Set while a touch press cancelled by a grab (a squeeze, or a pinch routed
+   * to the grab pointer) waits for the tip to lift off. Until then the touch
+   * pointer isn't moved, so it neither hovers nor presses, as a browser makes
+   * a cancelled touch lift before it can press again. A tip still on the
+   * surface when the grab ends (always the case for a pokeable grabbable the
+   * tip pressed) would otherwise press it again at once, and pulling away
+   * would click it.
+   */
+  private touchLiftPending = false;
+
   /** Cached scene reference with type-specific descendants */
   private sceneWithDescendants: {
     interactableDescendants?: Object3D[];
@@ -107,8 +125,9 @@ export class MultiPointer {
 
   /**
    * Pointers that completed the upstream library's first ready move. Mirrors
-   * its private `wasMoved` latch; neither latch is reset because MultiPointer
-   * never calls `Pointer.exit()` on these long-lived instances.
+   * its private `wasMoved` latch. Only `Pointer.exit()` resets that latch,
+   * and MultiPointer calls it only in `releaseTouchForGrab()`, which removes
+   * the touch pointer from this set too.
    */
   private readonly movedPointers = new Set<PointerKind>();
 
@@ -208,6 +227,19 @@ export class MultiPointer {
       if (activePointer && this.activeKind) {
         this.movePointerWithDescendants(this.activeKind, activePointer);
       }
+      // A touch press must not freeze the grab pointer: a squeeze or pinch
+      // grabs what the grab sphere touches now, and an object held by a pinch
+      // keeps following the hand while its fingertip presses something.
+      if (
+        this.activeKind === 'touch' &&
+        this.pointerStates.get('grab') !== InteractorState.DISABLED
+      ) {
+        this.movePointerWithDescendants('grab', this.grab.pointer);
+      }
+    }
+
+    if (input?.squeezeStart) {
+      this.preferGrabOnSqueeze();
     }
 
     // Phase 5: Process lifecycle (state transitions)
@@ -349,8 +381,13 @@ export class MultiPointer {
     if (this.pointerStates.get('touch') !== InteractorState.DISABLED) {
       this.sceneWithDescendants.interactableDescendants =
         this.touchCandidates();
-      this.touch.pointer.move(this.scene, this.nativeEvent);
-      this.markPointerMoved('touch', this.touch.pointer);
+      if (this.touchLiftPending) {
+        this.touchLiftPending = this.isTouchTipDown();
+      }
+      if (!this.touchLiftPending) {
+        this.touch.pointer.move(this.scene, this.nativeEvent);
+        this.markPointerMoved('touch', this.touch.pointer);
+      }
     }
 
     // Restore original descendants
@@ -457,6 +494,111 @@ export class MultiPointer {
   }
 
   /**
+   * Touch outranks grab so a fingertip or controller tip can press a pokeable,
+   * but only the active pointer's lifecycle runs and only the grab pointer
+   * takes the squeeze. Without this, any pokeable within touch range (or the
+   * grabbable itself, when it is also pokeable) swallows every squeeze. A
+   * squeeze is a grab intent, so the grab pointer takes over whenever its
+   * sphere has a target, even from a touch press, which it cancels. A ray
+   * selection keeps its lock: its trigger release only reaches it while it is
+   * the active pointer.
+   */
+  private preferGrabOnSqueeze() {
+    if (
+      this.pointerStates.get('ray') === InteractorState.SELECT ||
+      this.pointerStates.get('grab') === InteractorState.SELECT ||
+      !this.grabHasTarget()
+    ) {
+      return;
+    }
+    // The grab's selection lock stops moving the touch pointer until the
+    // squeeze ends, so end its hover too, even when grab was already active
+    // (the touch sphere reaches farther than the distance at which touch
+    // becomes active). Otherwise a pokeable the tip passed stays `Hovered`
+    // through the whole grab.
+    this.releaseTouchForGrab(true);
+    if (this.activeKind !== 'grab') {
+      this.switchActivePointer('grab');
+    }
+  }
+
+  /** Whether the grab sphere touches something a squeeze or pinch can grab. */
+  private grabHasTarget(): boolean {
+    return (
+      this.pointerStates.get('grab') !== InteractorState.DISABLED &&
+      this.hasValidCandidate('grab')
+    );
+  }
+
+  /**
+   * Ends what the touch pointer is doing when a grab takes the hand over.
+   *
+   * A press is cancelled. Left alone, it would hold the poked object pressed
+   * (`Pressed`, UIKit active) through the grab, and lifting the tip after a
+   * short grab would still click it. As when a browser cancels a touch, the
+   * object gets pointercancel, then pointerout and pointerleave from `exit()`,
+   * and no pointerup or click. The touch pointer then waits for the tip to
+   * lift off (`touchLiftPending`) before it hovers or presses again.
+   *
+   * With `endHover`, a touch pointer that only hovers something gets the
+   * leave events from `exit()` too, without the lift-off wait. A squeeze grab
+   * passes it because its lock freezes the touch pointer. A routed pinch
+   * doesn't: the touch pointer keeps moving through a pinch grab, so its
+   * hover stays current.
+   *
+   * A touch pointer that touches nothing is left alone. Its button is down
+   * then too: with no pokeable in reach, its hit is the scene's void object at
+   * distance 0, which is within `downRadius`. Cancelling that press would send
+   * pointercancel, pointerout and pointerleave to the void object, which
+   * bubble to the scene, and start a lift-off wait for nothing.
+   *
+   * In pointer-events 6.6.32, `cancel()` clears the pressed button, its click
+   * time and any capture. In 6.6.28 it only emits pointercancel and leaves
+   * the button down, and `exit()` doesn't clear it either: `exit()` drops the
+   * intersection and capture and commits. The touch pointer's move callback
+   * (from `createTouchPointer`), which that commit runs, then sees no contact
+   * and calls `up()`, which clears the button and emits nothing without an
+   * intersection.
+   */
+  private releaseTouchForGrab(endHover: boolean) {
+    if (this.pointerStates.get('touch') === InteractorState.DISABLED) {
+      return;
+    }
+    const touch = this.touch.pointer;
+    const intersection = touch.getIntersection();
+    if (!intersection || intersection.object.isVoidObject) {
+      return;
+    }
+    const pressing = touch.getButtonsDown().size > 0;
+    if (pressing) {
+      touch.cancel(this.nativeEvent);
+    } else if (!endHover) {
+      return;
+    }
+    touch.exit(this.nativeEvent);
+    this.movedPointers.delete('touch');
+    this.touchHoverActive = false;
+    this.touchLiftPending = pressing;
+    this.pointerStates.set('touch', InteractorState.NORMAL);
+  }
+
+  /**
+   * Whether the touch tip is within press distance of a pokeable. Probes
+   * without moving the touch pointer, so it emits no events.
+   */
+  private isTouchTipDown(): boolean {
+    const intersection = this.touch.pointer.computeIntersection(
+      'pointer',
+      this.scene,
+      this.nativeEvent,
+    );
+    return (
+      !intersection.object.isVoidObject &&
+      intersection.distance <= TOUCH_DEFAULTS.downRadius
+    );
+  }
+
+  /**
    * Switch active pointer to a new kind
    */
   private switchActivePointer(newKind: PointerKind | null) {
@@ -497,12 +639,14 @@ export class MultiPointer {
         break;
 
       case 'grab':
-        // Grab uses squeeze button
+        // Grab uses squeeze button. A squeeze no longer held also ends the
+        // grab: a source that stops reporting it (a hand that replaces the
+        // controller mid-squeeze) never sends squeezeEnd.
         this.processButtonLifecycle(
           entry,
           state,
           !!input?.squeezeStart,
-          !!input?.squeezeEnd,
+          !!input?.squeezeEnd || input?.squeezing === false,
           2, // button 2 for squeeze
         );
         break;
@@ -731,6 +875,13 @@ export class MultiPointer {
     const ptr = this.pickTarget(target);
     if (!ptr) {
       return;
+    }
+    // A down routed to the grab pointer (a hand pinch) grabs what the grab
+    // sphere touches, so it cancels a fingertip press the way a squeeze does.
+    // The pinch doesn't take the selection lock, so the touch pointer keeps
+    // moving and a mere hover stays.
+    if (target === 'grab' && this.grabHasTarget()) {
+      this.releaseTouchForGrab(false);
     }
     const button = kind === 'select' ? 0 : 2;
     ptr.down({ button, timeStamp: nativeEvent.timeStamp });

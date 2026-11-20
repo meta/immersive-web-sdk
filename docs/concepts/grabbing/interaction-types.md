@@ -54,6 +54,8 @@ const handle = new HandleStore(object, () => ({
 - Quick grab-and-move interactions
 - Objects that should maintain their scale
 
+A constrained one-hand grabbable, like a lever or slider limited to one axis, moves only while a squeeze or pinch holds it. A poke never moves it, and presses it only if the entity is also `PokeInteractable`; see [Grabs and Pokes](/concepts/grabbing/#grabs-and-pokes).
+
 ## Two-Hand Grabbing
 
 Dual-input manipulation enabling advanced operations including scaling through multi-pointer coordination.

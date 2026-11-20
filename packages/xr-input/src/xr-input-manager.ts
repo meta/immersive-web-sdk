@@ -766,11 +766,18 @@ export class XRInputManager {
       const squeezeEnd = connected
         ? !!gp?.getButtonUp('xr-standard-squeeze')
         : false;
+      // The held state too, not just the edges: a hand that replaces the
+      // controller mid-squeeze reports no squeeze at all (no Gamepad, or a
+      // pinch-only one), so no squeezeEnd ever comes and the grab would keep
+      // that hand locked on it.
+      const squeezing =
+        connected && !!gp?.getButtonPressed('xr-standard-squeeze');
       this.multiPointers[handedness].update(connected, delta, time, {
         selectStart,
         selectEnd,
         squeezeStart,
         squeezeEnd,
+        squeezing,
         suppressRay: suppressFarRay,
       });
 

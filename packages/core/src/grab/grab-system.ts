@@ -6,7 +6,7 @@
  */
 
 import { HandleStore } from '@pmndrs/handle';
-import { PointerEventsMap } from '@pmndrs/pointer-events';
+import { PointerEvent, PointerEventsMap } from '@pmndrs/pointer-events';
 import { Types } from '../ecs/component.js';
 import { Entity } from '../ecs/entity.js';
 import { createSystem } from '../ecs/system.js';
@@ -309,6 +309,7 @@ export class GrabSystem extends createSystem(
         : false,
       projectRays: false,
       multitouch: false,
+      filter: ignorePokes,
     }));
     this.handleUnbinds.set(entity.index, handle.bind(obj));
     obj.pointerEventsType = { deny: 'ray' };
@@ -362,6 +363,7 @@ export class GrabSystem extends createSystem(
         : false,
       projectRays: false,
       multitouch: true,
+      filter: ignorePokes,
     }));
     this.handleUnbinds.set(entity.index, handle.bind(obj));
     obj.pointerEventsType = { deny: 'ray' };
@@ -438,6 +440,7 @@ export class GrabSystem extends createSystem(
               }
             : false,
       projectRays: false,
+      filter: ignorePokes,
     });
     const handle = new DistanceGrabHandle(
       obj,
@@ -484,3 +487,16 @@ type GrabbableComponent =
   | typeof OneHandGrabbable
   | typeof TwoHandsGrabbable
   | typeof DistanceGrabbable;
+
+/**
+ * Handle filter: a poke presses a grabbable but never grabs it. The touch
+ * pointer reaches grabbables that are also PokeInteractable, and a handle that
+ * captured it could not let go: the touch pointer only lifts once it is 2 cm
+ * off the surface, and the held object moves with it. Squeeze, pinch and ray
+ * grabs are unaffected. The handle doesn't stop a filtered event either, so a
+ * poke on a grabbable that is only part of a pokeable (a keycard in a drawer)
+ * presses the pokeable, as a poke anywhere else on it does.
+ */
+function ignorePokes(event: PointerEvent): boolean {
+  return event.pointerType !== 'touch';
+}
