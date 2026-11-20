@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import { REFERENCE_POSITIONAL_FIELDS } from './commands/reference.js';
 import {
   getRuntimeOperationByCliPath,
   RUNTIME_OPERATIONS,
@@ -286,11 +287,17 @@ export function buildReferenceCommandHelp(action?: string): string[] {
   }
 
   if (action) {
+    const field = REFERENCE_POSITIONAL_FIELDS[action];
     return [
-      `Usage: iwsdk reference ${action} [--input-json <json>] [--raw]`,
+      field
+        ? `Usage: iwsdk reference ${action} [<${field}>] [--input-json <json>] [--raw]`
+        : `Usage: iwsdk reference ${action} [--input-json <json>] [--raw]`,
       '',
       'Run a reference query using the workspace-installed @iwsdk/reference package.',
       '',
+      ...(field
+        ? [`The positional text sets "${field}"; --input-json fields win.`, '']
+        : []),
       'Options:',
       '  --input-json <json>   JSON payload matching the reference tool schema',
       '  --raw                 Emit the raw query payload',
@@ -304,14 +311,14 @@ export function buildReferenceCommandHelp(action?: string): string[] {
     '  status',
     '  warmup',
     '  inspect [--tool <name>] [--raw]',
-    '  search [--input-json <json>] [--raw]',
+    '  search [<query>] [--input-json <json>] [--raw]',
     '  relationship [--input-json <json>] [--raw]',
-    '  api [--input-json <json>] [--raw]',
-    '  file [--input-json <json>] [--raw]',
+    '  api [<name>] [--input-json <json>] [--raw]',
+    '  file [<file_path>] [--input-json <json>] [--raw]',
     '  components [--input-json <json>] [--raw]',
     '  systems [--input-json <json>] [--raw]',
-    '  dependents [--input-json <json>] [--raw]',
-    '  examples [--input-json <json>] [--raw]',
+    '  dependents [<api_name>] [--input-json <json>] [--raw]',
+    '  examples [<api_name>] [--input-json <json>] [--raw]',
   ];
 }
 

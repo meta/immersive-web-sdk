@@ -1206,6 +1206,66 @@ describe('reference commands', () => {
     });
   });
 
+  test("fills a query subcommand's main field from its positional text", async () => {
+    await installReferenceFixture(appA);
+    const cwd = path.join(appA, 'src');
+
+    const search = await runCli(
+      ['reference', 'search', 'PokeInteractable', 'hand'],
+      cwd,
+    );
+    expect(search.exitCode).toBe(0);
+    expect(JSON.parse(search.stdout).data.result.input).toEqual({
+      query: 'PokeInteractable hand',
+    });
+
+    const api = await runCli(
+      ['reference', 'api', 'World', '--input-json', '{"limit":2}'],
+      cwd,
+    );
+    expect(JSON.parse(api.stdout).data.result.input).toEqual({
+      name: 'World',
+      limit: 2,
+    });
+
+    // --input-json fields win over the positional text.
+    const examples = await runCli(
+      [
+        'reference',
+        'examples',
+        'ignored',
+        '--input-json',
+        '{"api_name":"createSystem"}',
+      ],
+      cwd,
+    );
+    expect(JSON.parse(examples.stdout).data.result.input).toEqual({
+      api_name: 'createSystem',
+    });
+
+    const file = await runCli(
+      ['reference', 'file', 'packages/core/src/index.ts'],
+      cwd,
+    );
+    expect(JSON.parse(file.stdout).data.result.input).toEqual({
+      file_path: 'packages/core/src/index.ts',
+      source: 'iwsdk',
+    });
+  });
+
+  test('rejects positional text for subcommands without a main field', async () => {
+    await installReferenceFixture(appA);
+
+    const result = await runCli(
+      ['reference', 'relationship', 'World'],
+      path.join(appA, 'src'),
+    );
+    expect(result.exitCode).toBe(1);
+    const parsed = JSON.parse(result.stderr);
+    expect(parsed.error.code).toBe('invalid_reference_input');
+    expect(parsed.error.message).toContain('--input-json');
+  });
+
   test('surfaces reference query failures with CLI failure envelopes', async () => {
     await installReferenceFixture(appA);
 

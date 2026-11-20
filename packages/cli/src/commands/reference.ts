@@ -174,10 +174,61 @@ export async function handleReferenceInspect(
   });
 }
 
+/**
+ * The input field a query subcommand fills from its positional text, so
+ * `iwsdk reference search "grab a box"` works without `--input-json`.
+ */
+export const REFERENCE_POSITIONAL_FIELDS: Readonly<Record<string, string>> = {
+  search: 'query',
+  api: 'name',
+  file: 'file_path',
+  dependents: 'api_name',
+  examples: 'api_name',
+};
+
+/**
+ * Builds the `--input-json` payload for a reference query from the
+ * subcommand's positional text and `--input-json`. Fields given in
+ * `--input-json` win. Returns an error message when the input can't be used.
+ */
+export function buildReferenceQueryInput(
+  subcommand: string,
+  positional: string,
+  inputJson: unknown,
+): { input?: string; error?: string } {
+  const text = positional.trim();
+  if (text.length === 0) {
+    return typeof inputJson === 'string' ? { input: inputJson } : {};
+  }
+  const field = REFERENCE_POSITIONAL_FIELDS[subcommand];
+  if (!field) {
+    return {
+      error: `iwsdk reference ${subcommand} takes no positional argument; pass its input with --input-json.`,
+    };
+  }
+  let input: Record<string, unknown> = {};
+  if (typeof inputJson === 'string') {
+    try {
+      const parsed: unknown = JSON.parse(inputJson);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        input = parsed as Record<string, unknown>;
+      }
+    } catch (error) {
+      return { error: `--input-json must be valid JSON: ${String(error)}` };
+    }
+  }
+  const merged: Record<string, unknown> = { [field]: text, ...input };
+  if (subcommand === 'file' && merged.source === undefined) {
+    merged.source = 'iwsdk';
+  }
+  return { input: JSON.stringify(merged) };
+}
+
 export async function handleReferenceQuery(
   subcommand: string,
   options: Record<string, unknown>,
   context: ResolvedCliIo,
+  positional = '',
 ): Promise<CliCommandResult> {
   const workspaceRoot = await resolveReferenceWorkspaceRoot(options, context);
   if (!hasReferenceInstalled(workspaceRoot)) {
@@ -187,9 +238,17 @@ export async function handleReferenceQuery(
     );
   }
 
+  const query = buildReferenceQueryInput(
+    subcommand,
+    positional,
+    options.inputJson,
+  );
+  if (query.error) {
+    return createFailure(query.error, 'invalid_reference_input');
+  }
   const args = ['--cli-operation', subcommand];
-  if (typeof options.inputJson === 'string') {
-    args.push('--input-json', options.inputJson);
+  if (query.input !== undefined) {
+    args.push('--input-json', query.input);
   }
 
   const result = await runReferenceCommand<Record<string, unknown>>(

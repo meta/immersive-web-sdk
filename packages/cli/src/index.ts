@@ -186,6 +186,7 @@ export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
             subcommand,
             parsed.options,
             context,
+            parsed.positionals.slice(2).join(' '),
           );
         } else {
           throw new Error(
