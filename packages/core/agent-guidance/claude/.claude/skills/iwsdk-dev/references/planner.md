@@ -184,7 +184,9 @@ the same question.
 Build the smallest structure that covers the whole contract:
 
 1. native scene assets and deliberate hero/panel framing;
-2. component schemas and explicit authored values;
+2. component schemas and explicit authored values, including game state such
+   as score, lives, phase and timers, so verification can jump to any state
+   with `ecs set-component` instead of playing there or scripting the page;
 3. interaction/state systems;
 4. UIKitML and runtime control wiring;
 5. visible state feedback.

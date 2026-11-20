@@ -1,6 +1,6 @@
 ---
 name: iwsdk-native-xr-test
-description: Test an IWSDK app in a real Quest immersive session while controlling headset and controller poses through the IWSDK CLI. Use when the user asks to run, automate, or debug an app on a connected Quest rather than in desktop IWER emulation.
+description: Drive an IWSDK app in a real Quest immersive session while you control headset and controller poses through the IWSDK CLI. Use when you will automate, script-test, or debug an app on a connected Quest. Not for the user trying the app by hand; native control takes over their head pose and controllers, so give them a plain dev session instead.
 argument-hint: '[test scenario]'
 ---
 
@@ -13,6 +13,16 @@ commands to observe and control it. The native browser continues to own
 override poses and input for the test.
 
 The requested scenario is in `$ARGUMENTS`.
+
+## Not for hands-on testing
+
+Use this skill only when you drive the headset. If the user wants to put the
+headset on and try the app themselves, do not start native control and do not
+give them a pairing URL. A `--native-xr-control` session overrides the head pose
+and controllers of every Quest Browser page it serves, even after the pairing
+token is removed from the URL. Restart without the flag and hand over a plain URL as described in
+AGENTS.md. If a native-control test is running when the user asks to try the
+app, finish or stop it, clean up as in step 6, then do the same.
 
 ## Safety and scope
 
@@ -244,3 +254,7 @@ Report:
 - before/after evidence for the requested behavior;
 - console errors or capability notes;
 - confirmation that the reverse route and dev session were removed.
+
+If the user wants to try the app in the headset afterwards, start a plain
+session (`npx @iwsdk/cli dev up` with the session's `--ai-mode`, without
+`--native-xr-control`) and give them the plain URL from `dev status`.

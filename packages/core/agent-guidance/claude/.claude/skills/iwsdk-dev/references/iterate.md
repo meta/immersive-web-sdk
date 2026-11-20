@@ -94,7 +94,9 @@ the output bounded. The existing scaffold rules are already in context:
    relying on frame rate, frame timing, or which frame a screenshot shows.
 6. Exercise the changed path with real user input and query only the named state
    needed to prove it. Direct ECS mutation may prepare/reset a scenario but is
-   not interaction proof.
+   not interaction proof. If the state you need to prepare lives in a plain
+   object outside ECS, move it into a component as part of the change rather
+   than editing constants temporarily or enabling browser automation.
 7. Run one focused regression smoke for the preserved behavior most likely to
    have been affected.
 8. Run the production build and stop.

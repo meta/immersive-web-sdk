@@ -142,11 +142,21 @@ active XR session (`npx @iwsdk/cli xr status`). A flat runtime screenshot taken
 outside XR can prove that the app renders, but it cannot prove immersive pose or
 interaction correctness.
 
-For a physical headset smoke test, run `npx @iwsdk/cli dev status`, open a URL from
-`data.runtimeUrls.network` on a headset connected to the same Wi-Fi network,
-and accept the expected local certificate warning. To run or automate the app
-on a Quest connected over USB, invoke `iwsdk-native-xr-test` instead. See
-[Testing Your Experience](https://iwsdk.dev/guides/02-testing-experience.html)
+**When the user wants to try the app in a headset themselves**, give them a
+plain session, never a native-control one. A session started with
+`--native-xr-control` hands the head pose and controllers of every Quest Browser
+page it serves to the CLI, with or without a pairing token in the URL, so the
+user's own movement does nothing. If this session was started with
+`--native-xr-control`, or you cannot tell, first run
+`npx @iwsdk/cli dev restart` with the session's own `--ai-mode` and without that
+flag; say so before restarting. Then run `npx @iwsdk/cli dev status` and give the
+user a plain URL, never a `runtime pair-headset` URL: on the same Wi-Fi network,
+one from `data.runtimeUrls.network` (they accept the expected local certificate
+warning); on a Quest connected over USB, run
+`adb -s <serial> reverse tcp:<port> tcp:<port>` and give
+`data.runtimeUrls.local`. Invoke `iwsdk-native-xr-test` only when you drive the
+headset yourself: automating, scripting, or debugging the app on a USB Quest.
+See [Testing Your Experience](https://iwsdk.dev/guides/02-testing-experience.html)
 for the complete workflow.
 
 **Meta VR Glasses are not a Quest.** Their view is much narrower (37° left and
@@ -211,7 +221,8 @@ project skills. Use them only when the selected `iwsdk-dev` playbook calls for
 the matching specialty.
 Invoke `iwsdk-upgrade` whenever the user asks to upgrade or bump IWSDK.
 Two device-testing skills are invoked directly: `iwsdk-native-xr-test` whenever
-the user wants to run, automate, or debug the app on a connected Quest, and
+you will drive the app on a connected Quest yourself (automate, script-test, or
+debug it), never when the user wants to put the headset on and try it, and
 `iwsdk-glasses-test` whenever the user targets Meta VR Glasses or asks for gaze
 input.
 
@@ -249,6 +260,19 @@ renderer imports; systems import the declarations, never the reverse.
 - Create entities with `world.createTransformEntity(...)`, never `scene.add()`.
 - Use the `RayInteractable` component, never a manual `Raycaster`.
 - VR targets 72–90 fps: 11–14 ms per frame. Treat per-frame allocation as a bug.
+- Keep app and game state that a person or agent will want to read or change
+  (score, lives, gold, wave, phase, timers, debug switches) in ECS components,
+  not module-level objects. `ecs query` and `ecs set-component` then read it and
+  jump it to any state from the CLI or MCP, in the emulator and on a paired
+  headset, without editing code or scripting the page.
+
+**Browser automation is a last resort.** `dev up --allow-browser-automation`
+enables `browser run`, which runs your own Playwright script inside the managed
+browser. Before you reach for it, or for a temporary source edit such as
+lowering a start value, to reach a hard-to-reach state, check whether that state
+belongs in ECS. If it does, move it into a component as part of the work and
+drive it with `ecs set-component`. Use browser automation only for what ECS and
+the built-in tools cannot express, and say why.
 
 ## Deep reference
 

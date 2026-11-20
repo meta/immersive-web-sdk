@@ -672,6 +672,8 @@ describe('common starter project files', () => {
       'Choose the session mode before the first `dev up`',
       'immersive interaction claims require an',
       'data.runtimeUrls.network',
+      '**Browser automation is a last resort.**',
+      'not module-level objects.',
     ]) {
       expect(textFile(files, 'AGENTS.md')).toContain(sharedGuidance);
     }
@@ -750,6 +752,21 @@ describe('common starter project files', () => {
     ]) {
       expect(prose).toContain(guidance);
     }
+    // Hands-on testing by the user must never land on a native-control page.
+    expect(prose).toContain(
+      'If the user wants to put the headset on and try the app themselves, do not start native control and do not give them a pairing URL.',
+    );
+    expect(prose).toContain(
+      'Not for the user trying the app by hand; native control takes over their head pose and controllers',
+    );
+    const agents = textFile(files, 'AGENTS.md').replace(/\s+/gu, ' ');
+    expect(agents).toContain(
+      '**When the user wants to try the app in a headset themselves**, give them a plain session, never a native-control one.',
+    );
+    expect(agents).toContain('never a `runtime pair-headset` URL');
+    expect(agents).toContain(
+      'never when the user wants to put the headset on and try it',
+    );
     expect(skill).toContain(
       `npx @iwsdk/cli runtime pair-headset --input-json '{"headsetId":"<serial>"}' --raw`,
     );
