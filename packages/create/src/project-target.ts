@@ -47,6 +47,14 @@ export function targetHasContent(target: ProjectTarget): boolean {
   return fs.readdirSync(target.outDir).length > 0;
 }
 
+/** A target with a package.json: Create adds IWSDK to it, never over it. */
+export function isExistingProject(target: ProjectTarget): boolean {
+  return (
+    targetHasContent(target) &&
+    fs.existsSync(path.join(target.outDir, 'package.json'))
+  );
+}
+
 function toPackageName(value: string): string {
   const normalized = value
     .trim()

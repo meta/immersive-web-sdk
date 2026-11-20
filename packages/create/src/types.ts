@@ -33,6 +33,8 @@ export type PromptResult = {
   mode?: XRMode;
   language: Language;
   featureFlags: FeatureFlags;
+  /** Features set by a flag or a setup prompt, not by the recommended defaults. */
+  featureOverrides?: Partial<FeatureFlags>;
   gitInit: boolean;
   xrFeatureStates: Record<string, TriState>;
   actionItems?: ActionItem[];

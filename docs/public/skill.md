@@ -73,12 +73,17 @@ project instead of scaffolding over it, and never overwrites an existing file:
 - It adds a minimal IWSDK skeleton in its own `src/iwsdk/` folder (world entry,
   empty asset and component manifests), plus `iwsdk.config.json` and an empty
   scene where none exist.
+- It leaves locomotion off, even for `--target vr` and `--target browser`,
+  because that scene has no floor and the player would fall through the world.
+  To use locomotion, pass `--locomotion` and give the floor a
+  `LocomotionEnvironment` component.
 - It merges `package.json` in its own formatting: IWSDK packages and the `three`
   alias are set, versions are only raised, `workspace:`/`file:`/`catalog:` specs
-  are left alone, and your scripts are kept (`iwsdk:dev` is added when `dev` is
-  taken).
+  and dist-tags are left alone, and your scripts are kept (`iwsdk:dev` is added
+  when `dev` is taken).
 - It adds `iwsdkDev()` to an existing Vite config when the config's shape is
-  recognizable, and otherwise lists it as a step.
+  recognizable and Vite loads it as an ES module, and otherwise lists the step
+  (for a config Vite loads as CommonJS, renaming it to `.mjs`/`.mts` first).
 - It installs with the project's package manager, found from the nearest
   lockfile (a monorepo's included), and installs the coding-agent guidance.
 
@@ -105,7 +110,7 @@ refreshes guidance files nobody edited.
 |--------|------|-------------|
 | **VR** | `--target vr` | Fully immersive virtual environment. |
 | **Mixed reality** | `--target ar` | Passthrough experience with virtual content in the physical environment. |
-| **Desktop 3D** | `--target browser` | Desktop browser 3D app without an immersive session. This dedicated starter has `xr: false`, browser locomotion, canvas pointer input, browser interaction support, and IWER disabled. Camera look is app-owned. |
+| **Desktop 3D** | `--target browser` | Desktop browser 3D app without an immersive session. This dedicated starter has `xr: false`, browser locomotion (in a new project; adding IWSDK to an existing one leaves locomotion off), canvas pointer input, browser interaction support, and IWER disabled. Camera look is app-owned. |
 
 The flag value remains `ar` because it maps to WebXR's `immersive-ar` session
 mode; the user-facing starting point is mixed reality / passthrough.
@@ -115,7 +120,7 @@ mode; the user-facing starting point is mixed reality / passthrough.
 | Feature | Flag | Enable when… | Disable when… |
 |---------|------|-------------|---------------|
 | **Physics** | `--physics` / `--no-physics` | Gravity, collisions, bouncing, throwing. | UI-only, data viz, grid-snapping board games. |
-| **Locomotion** | `--locomotion` / `--no-locomotion` | VR user moves through a large space (teleport/slide). The Desktop 3D starter already supplies browser controls. | Stationary VR experience. |
+| **Locomotion** | `--locomotion` / `--no-locomotion` | VR user moves through a large space (teleport/slide). The Desktop 3D starter already supplies browser controls. On by default for a new `vr` or `browser` project; off when adding IWSDK to an existing project, where it needs `--locomotion` and a floor with `LocomotionEnvironment`. | Stationary VR experience. |
 | **Grabbing** | `--grabbing` / `--no-grabbing` | VR/MR users pick up, move, or manipulate objects. The Desktop 3D starter has browser interaction behavior built in. | Gaze/pointer-only or observational VR/MR experience. |
 | **Scene Understanding** | `--scene-understanding` / `--no-scene-understanding` | MR: interact with real-world surfaces. | MR without surface interaction. |
 | **Environment Raycast** | `--environment-raycast` / `--no-environment-raycast` | MR: cast rays against real-world geometry. | No real-world hit testing needed. |

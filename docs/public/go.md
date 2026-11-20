@@ -45,7 +45,10 @@ In a directory that already has a `package.json`, Create adds IWSDK to the
 existing project and never overwrites a file: it adds its skeleton in
 `src/iwsdk/`, merges `package.json`, adds `iwsdkDev()` to the Vite config when it
 can do so safely, installs with the project's package manager and adds the agent
-guidance, then prints the steps left to finish. Do every step. A non-empty directory without a `package.json` needs
+guidance, then prints the steps left to finish. Do every step. It leaves
+locomotion off there, even for `vr` and `browser`, because its scene starts
+empty: to use locomotion, pass `--locomotion` and give the floor a
+`LocomotionEnvironment` component, or the player falls through the world. A non-empty directory without a `package.json` needs
 `--force`, which overwrites conflicting generated files. `--yes` alone never
 permits overwrites.
 

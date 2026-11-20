@@ -118,6 +118,33 @@ function depthAt(code: string, start: number, offset: number): number {
   return depth;
 }
 
+/**
+ * Whether the config loads @iwsdk/vite-plugin-dev with a static `import`,
+ * `export … from` or `require()`. A config that Vite loads as CommonJS fails
+ * on that, because the package is ESM-only. A dynamic `import()` works in
+ * either, and `import type` is erased before the config runs.
+ */
+export function loadsPluginStatically(source: string): boolean {
+  const code = blankNonCode(source);
+  const loads =
+    /(?:^|[^\w$.])(?:(?:import|export)(\s+type(?!\s+from\b))?\b[^;'"`]*?\bfrom|import|require\s*\()\s*(['"])/gu;
+  for (const match of code.matchAll(loads)) {
+    // Strings are blanked in `code`; read the specifier from the source.
+    const open = match.index! + match[0].length - 1;
+    const specifier = source.slice(
+      open + 1,
+      source.indexOf(match[2], open + 1),
+    );
+    if (
+      match[1] == null &&
+      /^@iwsdk\/vite-plugin-dev(?:\/|$)/u.test(specifier)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function patchViteConfig(source: string): {
   text: string;
   status: VitePatchStatus;

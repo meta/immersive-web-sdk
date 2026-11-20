@@ -42,6 +42,8 @@ describe('promptFlow', () => {
         environmentRaycastEnabled: false,
       },
     });
+    // Nothing was chosen explicitly, so adoption may adjust the defaults.
+    expect(result.featureOverrides).toEqual({});
   });
 
   it('asks only target-relevant advanced questions and derives XR features', async () => {
@@ -101,6 +103,12 @@ describe('promptFlow', () => {
         hitTest: 'optional',
       },
     });
+    expect(result.featureOverrides).toEqual({
+      grabbingEnabled: false,
+      physicsEnabled: true,
+      sceneUnderstandingEnabled: true,
+      environmentRaycastEnabled: true,
+    });
   });
 
   it('uses a target supplied by the CLI without asking for it again', async () => {
@@ -111,6 +119,37 @@ describe('promptFlow', () => {
     expect(questionNames()).toEqual(['setup']);
     expect(result).toMatchObject({ target: 'vr', language: 'ts' });
   });
+
+  it('starts locomotion off when adding IWSDK to an existing project', async () => {
+    for (const adopting of [true, false]) {
+      promptMock.mockReset();
+      promptMock
+        .mockResolvedValueOnce({ setup: 'advanced' })
+        .mockResolvedValueOnce({ language: 'ts' })
+        // Locomotion, grabbing and physics, each left at its initial value.
+        .mockImplementationOnce(async (question) => ({
+          enabled: question.initial,
+        }))
+        .mockImplementationOnce(async (question) => ({
+          enabled: question.initial,
+        }))
+        .mockImplementationOnce(async (question) => ({
+          enabled: question.initial,
+        }))
+        .mockResolvedValueOnce({ gitInit: true, installNow: false });
+      const isExistingProject = vi.fn(() => adopting);
+
+      const result = await promptFlow('.', { target: 'vr', isExistingProject });
+
+      expect(isExistingProject).toHaveBeenCalledWith('.');
+      const locomotion = questions().find((question) =>
+        question.message?.startsWith('Locomotion:'),
+      );
+      expect(locomotion?.initial, String(adopting)).toBe(!adopting);
+      expect(result.featureFlags.locomotionEnabled).toBe(!adopting);
+      expect(result.featureFlags.grabbingEnabled).toBe(true);
+    }
+  });
 });
 
 function questions() {
@@ -118,6 +157,7 @@ function questions() {
     Array.isArray(question) ? question : [question],
   ) as Array<{
     choices?: Array<{ value?: string }>;
+    initial?: unknown;
     message?: string;
     name?: string;
   }>;

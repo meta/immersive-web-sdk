@@ -30,6 +30,8 @@ const ADVANCED_FEATURE_KEYS = [
 
 export type PromptDefaults = {
   target?: ExperienceTarget;
+  /** Whether the named directory is an existing project Create adds IWSDK to. */
+  isExistingProject?: (name: string) => boolean;
 };
 
 function validateProjectName(value: string): true | string {
@@ -114,6 +116,7 @@ export async function promptFlow(
   let gitInit = true;
   let installNow = true;
   let configuration = getRecommendedConfiguration(target);
+  const overrides: Partial<FeatureFlags> = {};
 
   if (setup === 'advanced') {
     const languageAnswer = await prompts(
@@ -132,7 +135,9 @@ export async function promptFlow(
     assertNotCancelled();
     language = (languageAnswer.language as Language) || 'ts';
 
-    const overrides: Partial<FeatureFlags> = {};
+    // An existing project gets an empty scene with nothing to stand on, so
+    // locomotion starts off there.
+    const adopting = defaults.isExistingProject?.(name) ?? false;
     for (const key of ADVANCED_FEATURE_KEYS) {
       const definition = FEATURE_CATALOG[key];
       if (
@@ -140,12 +145,17 @@ export async function promptFlow(
       ) {
         continue;
       }
+      const needsFloor = adopting && key === 'locomotionEnabled';
       const answer = await prompts(
         {
           type: 'toggle',
           name: 'enabled',
-          message: `${definition.label}: ${definition.description}`,
-          initial: !!configuration.featureFlags[key],
+          message: `${definition.label}: ${definition.description}${
+            needsFloor
+              ? ' Needs a floor with LocomotionEnvironment, which the new scene does not have yet.'
+              : ''
+          }`,
+          initial: needsFloor ? false : !!configuration.featureFlags[key],
           active: 'Yes',
           inactive: 'No',
         },
@@ -190,6 +200,7 @@ export async function promptFlow(
     mode: configuration.mode,
     language,
     featureFlags: configuration.featureFlags,
+    featureOverrides: overrides,
     gitInit,
     xrFeatureStates: configuration.xrFeatureStates,
     actionItems: [],

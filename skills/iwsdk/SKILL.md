@@ -27,7 +27,9 @@ Always use `@latest` and the scoped package names.
   `package.json` present it adds IWSDK without overwriting any file (its own
   files go in `src/iwsdk/`), merges `package.json`, and prints a "To finish"
   list. Do every step on that list. A project on Vite 8 is refused, with nothing
-  changed.
+  changed. Locomotion stays off, even for `vr` and `browser`, because the scene
+  it adds is empty: to use it, pass `--locomotion` and give the floor a
+  `LocomotionEnvironment` component, or the player falls through the world.
 - **Upgrade IWSDK**: `npx @iwsdk/cli@latest upgrade`. It bumps every
   `@iwsdk/*` package, installs, refreshes the guidance, and writes a migration
   guide to `.iwsdk/migrations/` for each release that needs code changes.

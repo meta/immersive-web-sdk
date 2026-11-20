@@ -12,13 +12,15 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  rename,
   rm,
   symlink,
   writeFile,
 } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { validateSceneDocument } from '@iwsdk/scene-composition';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -31,7 +33,11 @@ import { getRecommendedConfiguration } from '../src/catalog.js';
 import { installDependencies } from '../src/installer.js';
 import { detectPackageManager } from '../src/package-manager.js';
 import { buildStarterProjectFiles } from '../src/project-files.js';
-import { blankNonCode, patchViteConfig } from '../src/vite-config-patch.js';
+import {
+  blankNonCode,
+  loadsPluginStatically,
+  patchViteConfig,
+} from '../src/vite-config-patch.js';
 
 const execFileAsync = promisify(execFile);
 const PACKAGE_ROOT = path.resolve(
@@ -76,6 +82,48 @@ async function adopt(outDir: string, language: 'ts' | 'js' = 'ts') {
     guidanceRoot: GUIDANCE_ROOT,
     language,
   });
+}
+
+const requireFromVitePluginDev = createRequire(
+  path.join(PACKAGE_ROOT, '..', 'vite-plugin-dev', 'package.json'),
+);
+
+/**
+ * Load a project's Vite config the way `vite build` does. Its imports resolve
+ * from the project: Vite itself, and a stand-in for @iwsdk/vite-plugin-dev
+ * that, like the real package, has only an `import` entry.
+ */
+async function loadViteConfig(root: string) {
+  const plugin = path.join(root, 'node_modules', '@iwsdk', 'vite-plugin-dev');
+  if (!existsSync(plugin)) {
+    await mkdir(plugin, { recursive: true });
+    await writeFile(
+      path.join(plugin, 'package.json'),
+      JSON.stringify({
+        name: '@iwsdk/vite-plugin-dev',
+        type: 'module',
+        exports: { '.': { import: './index.js' } },
+      }),
+    );
+    await writeFile(
+      path.join(plugin, 'index.js'),
+      "export const iwsdkDev = () => ({ name: 'iwsdk-dev' });\n",
+    );
+    await symlink(
+      path.dirname(requireFromVitePluginDev.resolve('vite/package.json')),
+      path.join(root, 'node_modules', 'vite'),
+      'dir',
+    );
+  }
+  const vite = await import(
+    pathToFileURL(requireFromVitePluginDev.resolve('vite')).href
+  );
+  return vite.loadConfigFromFile(
+    { command: 'build', mode: 'production' },
+    undefined,
+    root,
+    'silent',
+  );
 }
 
 async function snapshot(
@@ -125,6 +173,17 @@ const VITE_APP = {
   'AGENTS.md': '# Team rules\n\nUse tabs.\n',
   '.gitignore': 'node_modules\ndist\n',
 };
+
+/** No "type": "module", so Vite loads vite.config.js and .ts as CommonJS. */
+const COMMONJS_PACKAGE =
+  '{ "name": "cjs-vite-app", "devDependencies": { "vite": "^7.1.0" } }\n';
+const ESM_PACKAGE =
+  '{ "name": "esm-vite-app", "type": "module", "devDependencies": { "vite": "^7.1.0" } }\n';
+const PLAIN_VITE_CONFIG =
+  "import { defineConfig } from 'vite'\nexport default defineConfig({\n  plugins: [],\n})\n";
+/** Like the Vite config 1.2.0-rc.0 wrote, whatever package.json said. */
+const IWSDK_VITE_CONFIG =
+  "import { iwsdkDev } from '@iwsdk/vite-plugin-dev'\nimport { defineConfig } from 'vite'\n\nexport default defineConfig({\n  plugins: [iwsdkDev()],\n})\n";
 
 describe('mergePackageJson', () => {
   const starter = {
@@ -206,6 +265,66 @@ describe('mergePackageJson', () => {
     );
     expect(nested.manualSteps.join('\n')).toContain('nested');
     expect(JSON.stringify(nested.report)).not.toContain('[object Object]');
+  });
+
+  it('reports only dependencies that are newer, not the same release', () => {
+    const { packageJson, report } = mergePackageJson(
+      {
+        // What `npm install @iwsdk/core@1.2.0-rc.0` and friends write.
+        dependencies: { '@iwsdk/core': '^1.2.0-rc.0' },
+        devDependencies: {
+          '@iwsdk/cli': '~1.2.0-rc.0',
+          '@iwsdk/vite-plugin-dev': '^1.3.0',
+          '@types/three': '0.185.0',
+        },
+      },
+      {
+        dependencies: { '@iwsdk/core': '1.2.0-rc.0' },
+        devDependencies: {
+          '@iwsdk/cli': '1.2.0-rc.0',
+          '@iwsdk/vite-plugin-dev': '1.2.0-rc.0',
+          '@types/three': '^0.185.0',
+        },
+      },
+      'npm',
+    );
+    expect(report.keptDependencies).toEqual([
+      {
+        name: '@iwsdk/vite-plugin-dev',
+        spec: '^1.3.0',
+        reason: 'newer than this release',
+      },
+    ]);
+    expect(report.changed).toEqual([]);
+    expect(packageJson.dependencies).toEqual({ '@iwsdk/core': '^1.2.0-rc.0' });
+  });
+
+  it('calls a dist-tag a dist-tag', () => {
+    const { report } = mergePackageJson(
+      {
+        dependencies: { '@iwsdk/core': 'latest' },
+        devDependencies: { '@iwsdk/cli': 'workspace:*', vite: 'next' },
+      },
+      starter,
+      'npm',
+    );
+    expect(report.keptDependencies).toEqual([
+      {
+        name: '@iwsdk/core',
+        spec: 'latest',
+        reason: 'a dist-tag, not a version range',
+      },
+      {
+        name: '@iwsdk/cli',
+        spec: 'workspace:*',
+        reason: 'not a registry version',
+      },
+      {
+        name: 'vite',
+        spec: 'next',
+        reason: 'a dist-tag; check it satisfies Vite 7',
+      },
+    ]);
   });
 
   it('uses tsc -b for a solution-style tsconfig', () => {
@@ -315,6 +434,28 @@ describe('patchViteConfig', () => {
         "import { iwsdkDev } from '@iwsdk/vite-plugin-dev';\nexport default { plugins: [iwsdkDev()] };\n",
       ).status,
     ).toBe('already-configured');
+  });
+
+  it('tells a static import or require of the plugin from a dynamic import', () => {
+    for (const source of [
+      IWSDK_VITE_CONFIG,
+      'import {\n  iwsdkDev,\n} from "@iwsdk/vite-plugin-dev";\n',
+      "const { iwsdkDev } = require('@iwsdk/vite-plugin-dev')\n",
+      "import iwsdk = require('@iwsdk/vite-plugin-dev')\n",
+      "import '@iwsdk/vite-plugin-dev'\n",
+      "export { iwsdkDev } from '@iwsdk/vite-plugin-dev/editor/session'\n",
+    ]) {
+      expect(loadsPluginStatically(source), source).toBe(true);
+    }
+    for (const source of [
+      "export default async () => {\n  const { iwsdkDev } = await import('@iwsdk/vite-plugin-dev')\n  return { plugins: [iwsdkDev()] }\n}\n",
+      "import type { IwsdkDevOptions } from '@iwsdk/vite-plugin-dev'\n",
+      "// import { iwsdkDev } from '@iwsdk/vite-plugin-dev'\n",
+      "const note = `import { iwsdkDev } from '@iwsdk/vite-plugin-dev'`\n",
+      "import { iwsdkDev } from './vendor/vite-plugin-dev.js'\n",
+    ]) {
+      expect(loadsPluginStatically(source), source).toBe(false);
+    }
   });
 });
 
@@ -608,6 +749,348 @@ describe('adoptExistingProject', () => {
     expect(await snapshot(root)).toEqual(before);
   });
 
+  it('creates a Vite config that Vite can load without "type": "module"', async () => {
+    for (const [packageJson, language, configFile] of [
+      // `npm init -y` writes "type": "commonjs".
+      [{ name: 'npm-init', type: 'commonjs' }, 'js', 'vite.config.mjs'],
+      [{ name: 'no-type', private: true }, 'ts', 'vite.config.mts'],
+      [{ name: 'esm', type: 'module' }, 'ts', 'vite.config.ts'],
+    ] as const) {
+      const root = await existingProject({
+        'package.json': `${JSON.stringify(packageJson, null, 2)}\n`,
+      });
+      const report = await adopt(root, language);
+      const loaded = await loadViteConfig(root);
+      expect(loaded.config.plugins, configFile).toEqual([
+        { name: 'iwsdk-dev' },
+      ]);
+      expect(report.viteConfig, configFile).toEqual({
+        file: configFile,
+        status: 'created',
+      });
+      // A second run finds the config it wrote.
+      expect((await adopt(root, language)).viteConfig.status).toBe(
+        'already-configured',
+      );
+    }
+  });
+
+  it('leaves a Vite config that loads as CommonJS working and lists the rename', async () => {
+    for (const [packageJson, file, config, renamed] of [
+      [
+        COMMONJS_PACKAGE,
+        'vite.config.js',
+        PLAIN_VITE_CONFIG,
+        'vite.config.mjs',
+      ],
+      [
+        COMMONJS_PACKAGE,
+        'vite.config.ts',
+        PLAIN_VITE_CONFIG,
+        'vite.config.mts',
+      ],
+      // .cts and .cjs load as CommonJS whatever package.json says.
+      [ESM_PACKAGE, 'vite.config.cts', PLAIN_VITE_CONFIG, 'vite.config.mts'],
+      [
+        ESM_PACKAGE,
+        'vite.config.cjs',
+        'module.exports = { plugins: [] }\n',
+        'vite.config.mjs',
+      ],
+    ] as const) {
+      const root = await existingProject({
+        'package.json': packageJson,
+        [file]: config,
+      });
+      const report = await adopt(root);
+      expect((await loadViteConfig(root)).config.plugins, file).toEqual([]);
+      expect(await readFile(path.join(root, file), 'utf8'), file).toBe(config);
+      expect(report.viteConfig, file).toEqual({ file, status: 'manual' });
+      const steps = report.manualSteps.join('\n');
+      expect(steps).toContain(
+        `Vite loads ${file} as CommonJS and the IWSDK plugin is ESM-only: rename it to ${renamed} (ES module syntax) and update what refers to ${file}, such as \`include\` in tsconfig.node.json or \`--config ${file}\` in package.json scripts. Add the IWSDK plugin to ${renamed}: `,
+      );
+      // The dedupe step names the file the plugin goes in.
+      expect(steps).toContain(`packages in ${renamed} (`);
+      expect(steps).not.toContain(`packages in ${file} (`);
+    }
+  });
+
+  it('lists the rename for a CommonJS config that already imports the plugin', async () => {
+    for (const [packageJson, file, config, renamed] of [
+      // What 1.2.0-rc.0 left in every project without "type": "module".
+      [
+        COMMONJS_PACKAGE,
+        'vite.config.ts',
+        IWSDK_VITE_CONFIG,
+        'vite.config.mts',
+      ],
+      [
+        COMMONJS_PACKAGE,
+        'vite.config.js',
+        IWSDK_VITE_CONFIG,
+        'vite.config.mjs',
+      ],
+      [ESM_PACKAGE, 'vite.config.cts', IWSDK_VITE_CONFIG, 'vite.config.mts'],
+      [
+        ESM_PACKAGE,
+        'vite.config.cjs',
+        "const { iwsdkDev } = require('@iwsdk/vite-plugin-dev')\nmodule.exports = { plugins: [iwsdkDev()] }\n",
+        'vite.config.mjs',
+      ],
+    ] as const) {
+      const root = await existingProject({
+        'package.json': packageJson,
+        [file]: config,
+      });
+      await expect(loadViteConfig(root), file).rejects.toThrow(/ESM only/u);
+      const report = await adopt(root);
+      expect(await readFile(path.join(root, file), 'utf8'), file).toBe(config);
+      expect(report.viteConfig, file).toEqual({ file, status: 'manual' });
+      const steps = report.manualSteps.join('\n');
+      expect(steps).toContain(
+        `Vite loads ${file} as CommonJS and the IWSDK plugin is ESM-only: rename it to ${renamed} (ES module syntax)`,
+      );
+      // The plugin is there already, and so is the dedupe if Create wrote it.
+      expect(steps, file).not.toContain('Add the IWSDK plugin');
+      expect(steps, file).not.toContain('dedupe');
+    }
+
+    // Renaming it as the step says is all it takes.
+    const root = await existingProject({
+      'package.json': COMMONJS_PACKAGE,
+      'vite.config.ts': IWSDK_VITE_CONFIG,
+    });
+    await adopt(root);
+    await rename(
+      path.join(root, 'vite.config.ts'),
+      path.join(root, 'vite.config.mts'),
+    );
+    expect((await loadViteConfig(root)).config.plugins).toEqual([
+      { name: 'iwsdk-dev' },
+    ]);
+    expect((await adopt(root)).viteConfig).toEqual({
+      file: 'vite.config.mts',
+      status: 'already-configured',
+    });
+  });
+
+  it('leaves a CommonJS config that imports the plugin dynamically alone', async () => {
+    const config =
+      "module.exports = async () => {\n  const { iwsdkDev } = await import('@iwsdk/vite-plugin-dev')\n  return { plugins: [iwsdkDev()] }\n}\n";
+    const root = await existingProject({
+      'package.json': COMMONJS_PACKAGE,
+      'vite.config.js': config,
+    });
+    const report = await adopt(root);
+    expect(report.viteConfig).toEqual({
+      file: 'vite.config.js',
+      status: 'already-configured',
+    });
+    expect((await loadViteConfig(root)).config.plugins).toEqual([
+      { name: 'iwsdk-dev' },
+    ]);
+    expect(report.manualSteps.join('\n')).not.toContain('CommonJS');
+  });
+
+  it('still adds the plugin to a .mjs or .mts config in a CommonJS package', async () => {
+    for (const file of ['vite.config.mjs', 'vite.config.mts']) {
+      const root = await existingProject({
+        'package.json': COMMONJS_PACKAGE,
+        [file]: PLAIN_VITE_CONFIG,
+      });
+      const report = await adopt(root);
+      expect(report.viteConfig, file).toEqual({ file, status: 'patched' });
+      expect((await loadViteConfig(root)).config.plugins, file).toEqual([
+        { name: 'iwsdk-dev' },
+      ]);
+      expect(report.manualSteps.join('\n'), file).not.toContain('CommonJS');
+    }
+  });
+
+  it('names the config Vite loads when there are several, and edits none', async () => {
+    // As when tsc emits vite.config.js next to vite.config.ts.
+    const root = await existingProject({
+      'package.json': ESM_PACKAGE,
+      'vite.config.ts': PLAIN_VITE_CONFIG,
+      'vite.config.js': PLAIN_VITE_CONFIG,
+    });
+    const report = await adopt(root);
+    const loaded = await loadViteConfig(root);
+    expect(report.viteConfig).toEqual({
+      file: path.basename(loaded.path),
+      status: 'manual',
+    });
+    expect(report.viteConfig.file).toBe('vite.config.js');
+    for (const file of ['vite.config.js', 'vite.config.ts']) {
+      expect(await readFile(path.join(root, file), 'utf8'), file).toBe(
+        PLAIN_VITE_CONFIG,
+      );
+    }
+    expect(report.manualSteps.join('\n')).toContain(
+      'Vite loads vite.config.js and ignores vite.config.ts, so Create edited none of them. Add the IWSDK plugin to vite.config.js: ',
+    );
+    // The next tsc build would replace an edit to its output.
+    expect(report.manualSteps.join('\n')).toContain(
+      '`plugins` array. If vite.config.js is compiled from vite.config.ts, delete it and add the plugin to vite.config.ts instead.',
+    );
+  });
+
+  it('points at the TypeScript config a compiled one comes from', async () => {
+    for (const [packageJson, files, hint] of [
+      [
+        ESM_PACKAGE,
+        ['vite.config.mjs', 'vite.config.mts'],
+        'If vite.config.mjs is compiled from vite.config.mts, delete it and add the plugin to vite.config.mts instead.',
+      ],
+      // The TypeScript source loads as CommonJS too, so it needs the rename.
+      [
+        COMMONJS_PACKAGE,
+        ['vite.config.js', 'vite.config.ts'],
+        'If vite.config.js is compiled from vite.config.ts, delete it and make those changes to vite.config.ts instead, renaming it to vite.config.mts.',
+      ],
+      [
+        ESM_PACKAGE,
+        ['vite.config.cjs', 'vite.config.cts'],
+        'If vite.config.cjs is compiled from vite.config.cts, delete it and make those changes to vite.config.cts instead, renaming it to vite.config.mts.',
+      ],
+      [
+        COMMONJS_PACKAGE,
+        ['vite.config.js', 'vite.config.ts', 'vite.config.mts'],
+        'If vite.config.js is compiled from vite.config.ts, delete it and make those changes to vite.config.ts instead, merging it into vite.config.mts (which already exists).',
+      ],
+      // tsc compiles .mts to .mjs, not .js, and compiles nothing to a .ts.
+      [ESM_PACKAGE, ['vite.config.js', 'vite.config.mts'], null],
+      [ESM_PACKAGE, ['vite.config.ts', 'vite.config.mts'], null],
+    ] as const) {
+      const root = await existingProject({
+        'package.json': packageJson,
+        ...Object.fromEntries(
+          files.map((file) => [
+            file,
+            file.endsWith('.cjs')
+              ? 'module.exports = { plugins: [] }\n'
+              : PLAIN_VITE_CONFIG,
+          ]),
+        ),
+      });
+      const report = await adopt(root);
+      expect(report.viteConfig, files.join()).toEqual({
+        file: files[0],
+        status: 'manual',
+      });
+      const steps = report.manualSteps.join('\n');
+      if (hint) {
+        expect(steps).toContain(hint);
+      } else {
+        expect(steps, files.join()).not.toContain('compiled from');
+      }
+    }
+  });
+
+  it('lists a merge, not a rename, when the ES module config exists', async () => {
+    for (const [file, config, existing] of [
+      ['vite.config.ts', PLAIN_VITE_CONFIG, 'vite.config.mts'],
+      ['vite.config.js', PLAIN_VITE_CONFIG, 'vite.config.mjs'],
+      ['vite.config.ts', IWSDK_VITE_CONFIG, 'vite.config.mts'],
+    ] as const) {
+      const root = await existingProject({
+        'package.json': COMMONJS_PACKAGE,
+        [file]: config,
+        [existing]: PLAIN_VITE_CONFIG,
+      });
+      const report = await adopt(root);
+      expect(report.viteConfig, file).toEqual({ file, status: 'manual' });
+      expect(await readFile(path.join(root, file), 'utf8'), file).toBe(config);
+      expect(await readFile(path.join(root, existing), 'utf8'), existing).toBe(
+        PLAIN_VITE_CONFIG,
+      );
+      const steps = report.manualSteps.join('\n');
+      expect(steps).toContain(
+        `Vite loads ${file} as CommonJS and the IWSDK plugin is ESM-only: merge it into ${existing} (which already exists) and delete ${file}, then update what refers to ${file}, such as \`include\` in tsconfig.node.json or \`--config ${file}\` in package.json scripts.`,
+      );
+      // Renaming onto the developer's config would overwrite it.
+      expect(steps, file).not.toContain(`rename it to ${existing}`);
+      expect(
+        steps.includes(`Add the IWSDK plugin to ${existing}: `),
+        file,
+      ).toBe(config === PLAIN_VITE_CONFIG);
+    }
+
+    // Merged as the step says, the config loads with the plugin.
+    const root = await existingProject({
+      'package.json': COMMONJS_PACKAGE,
+      'vite.config.ts': IWSDK_VITE_CONFIG,
+      'vite.config.mts': PLAIN_VITE_CONFIG,
+    });
+    await adopt(root);
+    await writeFile(path.join(root, 'vite.config.mts'), IWSDK_VITE_CONFIG);
+    await rm(path.join(root, 'vite.config.ts'));
+    expect((await loadViteConfig(root)).config.plugins).toEqual([
+      { name: 'iwsdk-dev' },
+    ]);
+    expect((await adopt(root)).viteConfig).toEqual({
+      file: 'vite.config.mts',
+      status: 'already-configured',
+    });
+  });
+
+  it('lists the floor that locomotion left on by an earlier run needs', async () => {
+    // What 1.2.0-rc.0 wrote: locomotion on over an empty scene.
+    const scene = {
+      version: 'iwsdk.scene.v1',
+      units: 'meters',
+      resources: {},
+      nodes: [],
+    };
+    const root = await existingProject({
+      'package.json': ESM_PACKAGE,
+      'iwsdk.config.json': `${JSON.stringify({
+        version: 'iwsdk.project.v1',
+        scene: './public/scenes/main.iwsdk.scene.json',
+        world: {
+          xr: { mode: 'vr', offer: 'always', features: {} },
+          features: { locomotion: { useWorker: true }, grabbing: true },
+        },
+      })}\n`,
+      'public/scenes/main.iwsdk.scene.json': JSON.stringify(scene),
+    });
+    const report = await adopt(root);
+    expect(report.kept).toEqual(
+      expect.arrayContaining([
+        'iwsdk.config.json',
+        'public/scenes/main.iwsdk.scene.json',
+      ]),
+    );
+    expect(report.manualSteps.join('\n')).toContain(
+      'Locomotion is on in iwsdk.config.json, but public/scenes/main.iwsdk.scene.json has no `LocomotionEnvironment`: add it to the floor the player walks on, or set `world.features.locomotion` to `false`.',
+    );
+    expect(report.locomotionOff).toBeNull();
+
+    // A floor anywhere in the scene settles it, keyed with or without the
+    // prefix that core strips from native scene component ids.
+    for (const key of [
+      'LocomotionEnvironment',
+      'com.iwsdk.components.LocomotionEnvironment',
+    ]) {
+      await writeFile(
+        path.join(root, 'public/scenes/main.iwsdk.scene.json'),
+        JSON.stringify({
+          ...scene,
+          nodes: [
+            {
+              id: 'level',
+              children: [{ id: 'floor', components: { [key]: {} } }],
+            },
+          ],
+        }),
+      );
+      expect((await adopt(root)).manualSteps.join('\n'), key).not.toContain(
+        'LocomotionEnvironment',
+      );
+    }
+  });
+
   it('writes a JavaScript skeleton for --language js', async () => {
     const root = await existingProject({
       'package.json': '{ "name": "js-app" }\n',
@@ -682,6 +1165,167 @@ describe('create CLI in an existing project', () => {
     expect(existsSync(path.join(root, 'src/iwsdk/index.js'))).toBe(true);
     expect(existsSync(path.join(root, 'src/iwsdk/index.ts'))).toBe(false);
     expect(existsSync(path.join(root, 'tsconfig.json'))).toBe(false);
+  }, 60_000);
+
+  it('leaves locomotion off, since the empty scene has nothing to stand on', async () => {
+    for (const target of ['vr', 'browser']) {
+      const root = await existingProject({
+        'package.json': '{ "name": "web-app" }\n',
+      });
+      const { stdout } = await execFileAsync(
+        process.execPath,
+        [
+          path.join(PACKAGE_ROOT, 'dist', 'cli.js'),
+          '.',
+          '--yes',
+          '--target',
+          target,
+          '--no-install',
+        ],
+        { cwd: root, env: { ...process.env, NO_COLOR: '1' } },
+      );
+      const config = JSON.parse(
+        await readFile(path.join(root, 'iwsdk.config.json'), 'utf8'),
+      );
+      expect(config.world.features.locomotion, target).toBe(false);
+      expect(config.world.features.grabbing, target).toBe(true);
+      expect(stdout).toContain('SDK features: Grabbing\n');
+      expect(stdout).toContain(
+        '  Locomotion: left off, because the new scene has no floor to stand on.',
+      );
+      expect(stdout).not.toContain('Locomotion is on');
+      // Desktop 3D movement needs browserControls, which defaults to false.
+      expect(stdout, target).toContain(
+        target === 'browser'
+          ? 'then set `world.features.locomotion` in iwsdk.config.json to `{ "browserControls": true }`: browser keyboard and gamepad controls are off by default.'
+          : 'then enable `world.features.locomotion` in iwsdk.config.json.',
+      );
+    }
+  }, 60_000);
+
+  it('does not give the floor as the reason for --no-locomotion', async () => {
+    for (const target of ['vr', 'browser']) {
+      const root = await existingProject({
+        'package.json': '{ "name": "web-app" }\n',
+      });
+      const { stdout } = await execFileAsync(
+        process.execPath,
+        [
+          path.join(PACKAGE_ROOT, 'dist', 'cli.js'),
+          '.',
+          '--yes',
+          '--target',
+          target,
+          '--no-locomotion',
+          '--no-install',
+        ],
+        { cwd: root, env: { ...process.env, NO_COLOR: '1' } },
+      );
+      const config = JSON.parse(
+        await readFile(path.join(root, 'iwsdk.config.json'), 'utf8'),
+      );
+      expect(config.world.features.locomotion, target).toBe(false);
+      expect(stdout, target).toContain(
+        '  Locomotion: off. To turn it on, give your floor a `LocomotionEnvironment` component, then ',
+      );
+      expect(stdout, target).not.toContain('left off');
+    }
+  }, 60_000);
+
+  it('still turns locomotion on for a new project', async () => {
+    const workspace = await existingProject({});
+    for (const target of ['vr', 'browser']) {
+      const { stdout } = await execFileAsync(
+        process.execPath,
+        [
+          path.join(PACKAGE_ROOT, 'dist', 'cli.js'),
+          `${target}-app`,
+          '--yes',
+          '--target',
+          target,
+          '--no-install',
+          '--no-git',
+        ],
+        { cwd: workspace, env: { ...process.env, NO_COLOR: '1' } },
+      );
+      const config = JSON.parse(
+        await readFile(
+          path.join(workspace, `${target}-app`, 'iwsdk.config.json'),
+          'utf8',
+        ),
+      );
+      expect(config.world.features.locomotion, target).toMatchObject({
+        useWorker: true,
+      });
+      expect(stdout).toContain('SDK features: Locomotion, ');
+      expect(stdout).not.toContain('Added IWSDK to the existing project.');
+    }
+  }, 60_000);
+
+  it('reports what a 1.2.0-rc.0 adoption left broken when run again', async () => {
+    const root = await existingProject({
+      'package.json': COMMONJS_PACKAGE,
+      'vite.config.ts': IWSDK_VITE_CONFIG,
+      'iwsdk.config.json': `${JSON.stringify({
+        version: 'iwsdk.project.v1',
+        scene: './public/scenes/main.iwsdk.scene.json',
+        world: {
+          xr: { mode: 'vr', offer: 'always', features: {} },
+          features: { locomotion: { useWorker: true } },
+        },
+      })}\n`,
+      'public/scenes/main.iwsdk.scene.json':
+        '{ "version": "iwsdk.scene.v1", "resources": {}, "nodes": [] }\n',
+    });
+    const { stdout } = await execFileAsync(
+      process.execPath,
+      [
+        path.join(PACKAGE_ROOT, 'dist', 'cli.js'),
+        '.',
+        '--yes',
+        '--target',
+        'vr',
+        '--no-install',
+      ],
+      { cwd: root, env: { ...process.env, NO_COLOR: '1' } },
+    );
+    expect(stdout).toContain(
+      '  Vite config: left vite.config.ts unchanged; see "To finish"',
+    );
+    expect(stdout).toContain(
+      '  - Vite loads vite.config.ts as CommonJS and the IWSDK plugin is ESM-only: rename it to vite.config.mts',
+    );
+    expect(stdout).toContain(
+      '  - Locomotion is on in iwsdk.config.json, but public/scenes/main.iwsdk.scene.json has no `LocomotionEnvironment`',
+    );
+    expect(stdout).not.toContain('Locomotion: left off');
+  }, 60_000);
+
+  it('keeps --locomotion and lists the walkable floor it needs', async () => {
+    const root = await existingProject({
+      'package.json': '{ "name": "web-app" }\n',
+    });
+    const { stdout } = await execFileAsync(
+      process.execPath,
+      [
+        path.join(PACKAGE_ROOT, 'dist', 'cli.js'),
+        '.',
+        '--yes',
+        '--target',
+        'vr',
+        '--locomotion',
+        '--no-install',
+      ],
+      { cwd: root, env: { ...process.env, NO_COLOR: '1' } },
+    );
+    const config = JSON.parse(
+      await readFile(path.join(root, 'iwsdk.config.json'), 'utf8'),
+    );
+    expect(config.world.features.locomotion).toEqual({ useWorker: true });
+    expect(stdout).toContain(
+      'Locomotion is on in iwsdk.config.json, but public/scenes/main.iwsdk.scene.json has no `LocomotionEnvironment`: add it to the floor the player walks on',
+    );
+    expect(stdout).not.toContain('Locomotion: left off');
   }, 60_000);
 
   it('refuses --canary for an existing project before changing anything', async () => {

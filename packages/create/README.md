@@ -30,17 +30,30 @@ IWSDK to that project and never overwrites an existing file, even with
   empty asset and component manifests, and type references), so it never shadows
   the project's modules. `iwsdk.config.json` and an empty scene are added where
   missing, and `index.html`, a Vite config and `tsconfig.json` only when the
-  project has none. The starter demo is not added;
+  project has none. A new Vite config is `vite.config.mts` (`.mjs` in
+  JavaScript) unless `package.json` sets `"type": "module"`, because the IWSDK
+  plugin is ESM-only. The starter demo is not added;
+- locomotion stays off unless asked for (`--locomotion`, or Yes in the
+  customize prompt, which starts at No here), because the empty scene has no
+  floor to stand on; the report says so. When it is on, give your floor a
+  `LocomotionEnvironment` component, or the player falls through the world. In
+  a project whose `iwsdk.config.json` already turns locomotion on, that step is
+  listed while its scene has no `LocomotionEnvironment`;
 - `package.json` is merged in its own indentation: IWSDK packages, the `three`
   alias and `@types/three` are set, versions are only raised, and specs that are
-  not registry versions (`workspace:`, `file:`, `catalog:`) are left alone and
-  reported. Other dependencies and your scripts are kept; `iwsdk:dev` is added
-  when `dev` is taken;
+  not version ranges (`workspace:`, `file:`, `catalog:`, or a dist-tag such as
+  `latest`) are left alone and reported. Other dependencies and your scripts are
+  kept; `iwsdk:dev` is added when `dev` is taken;
 - overrides go where the package manager reads them: `overrides` (npm, bun),
   `resolutions` (yarn), or `pnpm-workspace.yaml` (pnpm), merged without touching
   its other settings;
 - `iwsdkDev()` is added to an existing Vite config when the config's own
-  top-level `plugins` array is unambiguous, and listed as a step otherwise;
+  top-level `plugins` array is unambiguous, Vite loads it as an ES module, and
+  it is the project's only Vite config; otherwise it is listed as a step that
+  names the config Vite loads (in Vite's order: `.js`, `.mjs`, `.ts`, `.cjs`,
+  `.mts`, `.cts`). A config that Vite loads as CommonJS cannot import the
+  plugin, so renaming it to `.mjs`/`.mts` is listed too, also when it already
+  imports the plugin;
 - `.gitignore` gains IWSDK's runtime and MCP entries, dependencies install with
   the package manager found from the nearest lockfile (a monorepo's included),
   and no Git repository is created;
@@ -88,7 +101,9 @@ dependencies. They also apply a small target-specific baseline:
 Choose **Customize setup...** to select JavaScript, change applicable SDK
 features, or opt out of Git initialization and dependency installation. The CLI
 derives low-level WebXR feature settings from those choices instead of asking
-for raw `No` / `Optional` / `Required` states.
+for raw `No` / `Optional` / `Required` states. In an existing project, the
+recommended settings leave locomotion off and the customize prompt starts it at
+No (see above).
 
 Every project includes guidance and configuration for Claude Code, Codex,
 Cursor, GitHub Copilot/VS Code, and OpenCode. Delete integrations you do not use;

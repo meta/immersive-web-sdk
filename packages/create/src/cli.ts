@@ -42,6 +42,7 @@ import {
 } from './project-files.js';
 import { createProjectManifest } from './project-manifest.js';
 import {
+  isExistingProject,
   isValidProjectTarget,
   resolveProjectTarget,
   targetHasContent,
@@ -397,11 +398,17 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
         mode: configuration.mode,
         language,
         featureFlags: configuration.featureFlags,
+        featureOverrides: overrides,
         gitInit: resolveBooleanFlag(process.argv, '--git', '--no-git') ?? true,
         xrFeatureStates: configuration.xrFeatureStates,
       };
     } else {
-      res = await promptFlow(nameArg, { target: explicitTarget });
+      res = await promptFlow(nameArg, {
+        target: explicitTarget,
+        isExistingProject: (name) =>
+          isValidProjectTarget(name) &&
+          isExistingProject(resolveProjectTarget(name, process.cwd())),
+      });
     }
 
     // Validate the requested directory (both interactive and non-interactive paths).
@@ -416,9 +423,7 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
     const hasTargetContent = targetHasContent(projectTarget);
     // An existing package.json means an existing project: adopt IWSDK into it
     // without overwriting anything, even when --force is passed.
-    const adopting =
-      hasTargetContent &&
-      fs.existsSync(join(projectTarget.outDir, 'package.json'));
+    const adopting = isExistingProject(projectTarget);
     if (adopting && cliOpts.canary) {
       throw new Error(
         '--canary installs an SDK bundle into new projects only. Drop --canary to add IWSDK to this existing project.',
@@ -454,6 +459,22 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
         )
           ? 'ts'
           : 'js';
+    }
+    if (
+      adopting &&
+      res.featureFlags.locomotionEnabled &&
+      res.featureOverrides?.locomotionEnabled == null
+    ) {
+      // The recommended locomotion assumes the starter's floor. An adopted
+      // project gets an empty scene with nothing to stand on, so the player
+      // would fall forever; locomotion stays opt-in there.
+      Object.assign(
+        res,
+        getRecommendedConfiguration(res.target, {
+          ...res.featureFlags,
+          locomotionEnabled: false,
+        }),
+      );
     }
 
     printConfigurationSummary(res, adopting);
@@ -502,6 +523,8 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
       if (adopting) {
         await adoptProject(outDir, projectFiles, res.language, {
           install: res.installNow,
+          locomotionOffRequested:
+            res.featureOverrides?.locomotionEnabled === false,
         });
         return;
       }
@@ -613,13 +636,14 @@ async function adoptProject(
   outDir: string,
   files: Awaited<ReturnType<typeof buildStarterProjectFiles>>,
   language: Language,
-  options: { install: boolean },
+  options: { install: boolean; locomotionOffRequested: boolean },
 ): Promise<void> {
   const report = await adoptExistingProject({
     outDir,
     files,
     guidanceRoot: resolvePackagedGuidanceRoot(),
     language,
+    locomotionOffRequested: options.locomotionOffRequested,
   });
   const outcome: AdoptOutcome = { installed: false, adaptersSynced: false };
   if (options.install) {

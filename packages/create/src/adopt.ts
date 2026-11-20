@@ -21,7 +21,11 @@ import {
   type PackageManager,
 } from './package-manager.js';
 import type { ProjectFileInput } from './scaffold.js';
-import { patchViteConfig, type VitePatchStatus } from './vite-config-patch.js';
+import {
+  loadsPluginStatically,
+  patchViteConfig,
+  type VitePatchStatus,
+} from './vite-config-patch.js';
 
 // Adopting IWSDK into an existing project. Everything is checked before the
 // first write, and nothing the developer wrote is overwritten: IWSDK's files
@@ -56,6 +60,11 @@ export interface AdoptReport {
     file: string | null;
     status: 'created' | VitePatchStatus;
   };
+  /**
+   * Set when Create wrote a VR or Desktop 3D iwsdk.config.json and empty scene
+   * with locomotion off; `requested` when the user turned it off.
+   */
+  locomotionOff: { target: 'vr' | 'browser'; requested: boolean } | null;
   gitignoreAdded: string[];
   guidance: SyncAgentGuidanceResult;
   manualSteps: string[];
@@ -67,6 +76,8 @@ export interface AdoptExistingProjectOptions {
   /** Directory holding the rendered guidance (manifest.json and files/). */
   guidanceRoot: string;
   language: 'ts' | 'js';
+  /** The user turned locomotion off: --no-locomotion, or No when customizing. */
+  locomotionOffRequested?: boolean;
 }
 
 /** A reason to stop before anything is written. */
@@ -77,13 +88,14 @@ export class AdoptError extends Error {
   }
 }
 
+/** In the order Vite 7 looks for them: it loads the first it finds. */
 const VITE_CONFIG_NAMES = [
-  'vite.config.ts',
-  'vite.config.mts',
   'vite.config.js',
   'vite.config.mjs',
-  'vite.config.cts',
+  'vite.config.ts',
   'vite.config.cjs',
+  'vite.config.mts',
+  'vite.config.cts',
 ];
 /** @iwsdk/vite-plugin-dev's peer range. */
 const VITE_PEER_RANGE = '^7.0.0';
@@ -116,6 +128,46 @@ function stringRecord(value: unknown): Record<string, string> {
 /** A spec that names a registry version, as opposed to a path or protocol. */
 function isRegistrySpec(spec: string): boolean {
   return semver.validRange(spec) != null;
+}
+
+/** A dist-tag such as `latest`: the registry picks the version at install. */
+function isDistTag(spec: string): boolean {
+  return /^[a-z][\w.-]*$/iu.test(spec) && !isRegistrySpec(spec);
+}
+
+/** A scene keys LocomotionEnvironment with or without the prefix core strips. */
+const LOCOMOTION_ENVIRONMENT_KEYS = [
+  'LocomotionEnvironment',
+  'com.iwsdk.components.LocomotionEnvironment',
+];
+
+/** Whether any node, prefab or override in a scene has LocomotionEnvironment. */
+function hasLocomotionEnvironment(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.some(hasLocomotionEnvironment);
+  }
+  if (!isRecord(value)) {
+    return false;
+  }
+  const { components } = value;
+  return (
+    (isRecord(components) &&
+      LOCOMOTION_ENVIRONMENT_KEYS.some((key) => key in components)) ||
+    Object.values(value).some(hasLocomotionEnvironment)
+  );
+}
+
+async function readJson(file: string): Promise<unknown> {
+  try {
+    return JSON.parse(await fsp.readFile(file, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+/** The .mjs or .mts name, which Vite loads as ESM whatever package.json says. */
+function esmConfigName(name: string): string {
+  return name.replace(/\.c?([jt]s)$/u, '.m$1');
 }
 
 /** True when `spec` asks for an older release than `wanted`. */
@@ -174,6 +226,7 @@ export const worldReady = World.create(sceneContainer(), projectOptions);
 function skeletonFiles(
   files: readonly ProjectFileInput[],
   language: 'ts' | 'js',
+  esmPackage: boolean,
 ): ProjectFileInput[] {
   const byPath = new Map(files.map((file) => [file.path, file]));
   const extension = language === 'ts' ? 'ts' : 'js';
@@ -240,9 +293,16 @@ function skeletonFiles(
     '.codex/config.toml',
   ]) {
     const file = byPath.get(name);
-    if (file) {
-      skeleton.push(file);
+    if (!file) {
+      continue;
     }
+    // Vite loads vite.config.ts/.js as CommonJS unless package.json says
+    // "type": "module"; .mts/.mjs always load as ESM, which the plugin needs.
+    skeleton.push(
+      name.startsWith('vite.config.') && !esmPackage
+        ? { ...file, path: name.replace(/\.(ts|js)$/u, '.m$1') }
+        : file,
+    );
   }
   return skeleton;
 }
@@ -341,7 +401,9 @@ export function mergePackageJson(
         }
       } else if (name === 'vite') {
         if (!isRegistrySpec(current)) {
-          keep('not a registry version; check it satisfies Vite 7');
+          keep(
+            `${isDistTag(current) ? 'a dist-tag' : 'not a registry version'}; check it satisfies Vite 7`,
+          );
           continue;
         }
         if (semver.subset(semver.validRange(current)!, VITE_PEER_RANGE)) {
@@ -350,10 +412,17 @@ export function mergePackageJson(
       } else if (!name.startsWith('@iwsdk/') && name !== '@types/three') {
         continue;
       } else if (!isRegistrySpec(current)) {
-        keep('not a registry version');
+        keep(
+          isDistTag(current)
+            ? 'a dist-tag, not a version range'
+            : 'not a registry version',
+        );
         continue;
       } else if (!isOlder(current, spec)) {
-        keep('newer than this release');
+        // ^1.2.0 for 1.2.0 already asks for this release: nothing to report.
+        if (isOlder(spec, current)) {
+          keep('newer than this release');
+        }
         continue;
       }
       report.changed.push({ field: declaredIn, name, from: current, to: spec });
@@ -507,6 +576,7 @@ export async function adoptExistingProject({
   files,
   guidanceRoot,
   language,
+  locomotionOffRequested = false,
 }: AdoptExistingProjectOptions): Promise<AdoptReport> {
   // 1. Check everything; write nothing yet.
   const packageJsonPath = path.join(outDir, 'package.json');
@@ -540,10 +610,19 @@ export async function adoptExistingProject({
   const packageManager = packageManagerInfo.name;
   const inWorkspace = packageManagerInfo.root !== path.resolve(outDir);
   const byPath = new Map(files.map((file) => [file.path, file]));
-  const existingViteConfig =
-    VITE_CONFIG_NAMES.find((name) => existsSync(path.join(outDir, name))) ??
-    null;
-  const planned = skeletonFiles(files, language).filter(
+  const viteConfigs = VITE_CONFIG_NAMES.filter((name) =>
+    existsSync(path.join(outDir, name)),
+  );
+  // The one Vite loads; it ignores the rest.
+  const existingViteConfig = viteConfigs[0] ?? null;
+  const esmPackage = existingPackageJson.type === 'module';
+  // Vite loads .cjs/.cts configs, and .js/.ts ones without "type": "module",
+  // as CommonJS, which cannot load the ESM-only @iwsdk/vite-plugin-dev.
+  const commonJsViteConfig =
+    existingViteConfig != null &&
+    (/\.c[jt]s$/u.test(existingViteConfig) ||
+      (!esmPackage && /\.[jt]s$/u.test(existingViteConfig)));
+  const planned = skeletonFiles(files, language, esmPackage).filter(
     (file) =>
       !(file.path.startsWith('vite.config.') && existingViteConfig != null),
   );
@@ -655,6 +734,8 @@ export async function adoptExistingProject({
   }
 
   let viteConfig: AdoptReport['viteConfig'];
+  // The config already had iwsdkDev() before this run.
+  let pluginFound = false;
   if (existingViteConfig == null) {
     const createdConfig = created.find((file) =>
       file.startsWith('vite.config.'),
@@ -664,23 +745,71 @@ export async function adoptExistingProject({
     viteConfig = { file: existingViteConfig, status: 'manual' };
   } else {
     const configPath = path.join(outDir, existingViteConfig);
-    const patched = patchViteConfig(await fsp.readFile(configPath, 'utf8'));
-    if (patched.status === 'patched') {
+    const source = await fsp.readFile(configPath, 'utf8');
+    const patched = patchViteConfig(source);
+    pluginFound = patched.status === 'already-configured';
+    let status = patched.status;
+    if (
+      // Adding the plugin to a CommonJS config would stop it from loading,
+      // and with several configs the edit could land where Vite never looks.
+      (status === 'patched' &&
+        (commonJsViteConfig || viteConfigs.length > 1)) ||
+      // A CommonJS config that imports the ESM-only plugin already fails.
+      (pluginFound && commonJsViteConfig && loadsPluginStatically(source))
+    ) {
+      status = 'manual';
+    }
+    if (status === 'patched') {
       await fsp.writeFile(configPath, patched.text);
     }
-    viteConfig = { file: existingViteConfig, status: patched.status };
+    viteConfig = { file: existingViteConfig, status };
   }
-  if (viteConfig.status === 'manual') {
+  // Where the plugin belongs: the config Vite loads, once it loads as ESM.
+  const pluginConfig =
+    existingViteConfig != null && commonJsViteConfig
+      ? esmConfigName(existingViteConfig)
+      : existingViteConfig;
+  if (existingViteConfig != null && viteConfig.status === 'manual') {
+    const ignored = viteConfigs.slice(1);
+    // A rename onto a config that exists would overwrite it.
+    const esmNameTaken = (name: string) =>
+      viteConfigs.includes(esmConfigName(name));
+    // tsc compiles vite.config.ts to .js (.mts to .mjs, .cts to .cjs), and
+    // its next run replaces an edit to the output.
+    const compiledFrom = ignored.find(
+      (name) => name === existingViteConfig.replace(/js$/u, 'ts'),
+    );
     manualSteps.push(
-      `Add the IWSDK plugin to ${viteConfig.file}: \`import { iwsdkDev } from '@iwsdk/vite-plugin-dev'\` and put \`iwsdkDev()\` in the config's top-level \`plugins\` array.`,
+      [
+        ignored.length > 0 &&
+          `Vite loads ${existingViteConfig} and ignores ${ignored.join(', ')}, so Create edited none of them.`,
+        commonJsViteConfig &&
+          `Vite loads ${existingViteConfig} as CommonJS and the IWSDK plugin is ESM-only: ${
+            esmNameTaken(existingViteConfig)
+              ? `merge it into ${pluginConfig} (which already exists) and delete ${existingViteConfig}, then update`
+              : `rename it to ${pluginConfig} (ES module syntax) and update`
+          } what refers to ${existingViteConfig}, such as \`include\` in tsconfig.node.json or \`--config ${existingViteConfig}\` in package.json scripts.`,
+        !pluginFound &&
+          `Add the IWSDK plugin to ${pluginConfig}: \`import { iwsdkDev } from '@iwsdk/vite-plugin-dev'\` and put \`iwsdkDev()\` in the config's top-level \`plugins\` array.`,
+        compiledFrom != null &&
+          `If ${existingViteConfig} is compiled from ${compiledFrom}, delete it and ${
+            // The source loads as CommonJS too, so it needs the ESM name.
+            commonJsViteConfig
+              ? `make those changes to ${compiledFrom} instead, ${
+                  esmNameTaken(compiledFrom)
+                    ? `merging it into ${esmConfigName(compiledFrom)} (which already exists)`
+                    : `renaming it to ${esmConfigName(compiledFrom)}`
+                }`
+              : `add the plugin to ${compiledFrom} instead`
+          }.`,
+      ]
+        .filter(Boolean)
+        .join(' '),
     );
   }
-  if (
-    existingViteConfig != null &&
-    viteConfig.status !== 'already-configured'
-  ) {
+  if (existingViteConfig != null && !pluginFound) {
     manualSteps.push(
-      `If the app renders UIKitML panels, also dedupe \`three\` and the \`@pmndrs/uikit*\` packages in ${existingViteConfig} (\`resolve.dedupe\`, \`optimizeDeps.include\`), as the IWSDK starter's Vite config does.`,
+      `If the app renders UIKitML panels, also dedupe \`three\` and the \`@pmndrs/uikit*\` packages in ${pluginConfig} (\`resolve.dedupe\`, \`optimizeDeps.include\`), as the IWSDK starter's Vite config does.`,
     );
   }
 
@@ -736,6 +865,33 @@ export async function adoptExistingProject({
       );
     }
   }
+  // The manifest written now or kept from an earlier run, which may have
+  // turned locomotion on (1.2.0-rc.0 did) over the same empty scene.
+  const manifest = await readJson(path.join(outDir, 'iwsdk.config.json'));
+  const world: JsonObject =
+    isRecord(manifest) && isRecord(manifest.world) ? manifest.world : {};
+  const locomotion = isRecord(world.features)
+    ? world.features.locomotion
+    : undefined;
+  if (locomotion && isRecord(manifest) && typeof manifest.scene === 'string') {
+    const sceneFile = path.resolve(outDir, manifest.scene);
+    const scene = await readJson(sceneFile);
+    if (scene != null && !hasLocomotionEnvironment(scene)) {
+      manualSteps.push(
+        `Locomotion is on in iwsdk.config.json, but ${path.relative(outDir, sceneFile).split(path.sep).join('/')} has no \`LocomotionEnvironment\`: add it to the floor the player walks on, or set \`world.features.locomotion\` to \`false\`. Otherwise the player falls through the world.`,
+      );
+    }
+  }
+  const locomotionOff: AdoptReport['locomotionOff'] =
+    created.includes('iwsdk.config.json') &&
+    created.some((file) => file.endsWith('.iwsdk.scene.json')) &&
+    !locomotion &&
+    (world.xr === false || (isRecord(world.xr) && world.xr.mode === 'vr'))
+      ? {
+          target: world.xr === false ? 'browser' : 'vr',
+          requested: locomotionOffRequested,
+        }
+      : null;
   if (merge.report.keptScripts.includes('dev')) {
     manualSteps.push(
       `Your \`dev\` script was kept. Start the IWSDK-managed runtime with \`${runScriptCommand(packageManager, 'iwsdk:dev')}\` or \`npx @iwsdk/cli dev up\`.`,
@@ -763,6 +919,7 @@ export async function adoptExistingProject({
     packageJson: merge.report,
     overrides,
     viteConfig,
+    locomotionOff,
     gitignoreAdded,
     guidance,
     manualSteps,
@@ -817,10 +974,24 @@ export function printAdoptReport(
         created: `created ${report.viteConfig.file}`,
         patched: `added iwsdkDev() to ${report.viteConfig.file}`,
         'already-configured': `${report.viteConfig.file} already uses iwsdkDev()`,
-        manual: `could not edit ${report.viteConfig.file} safely`,
+        manual: `left ${report.viteConfig.file} unchanged; see "To finish"`,
       }[report.viteConfig.status]
     }`,
   );
+  if (report.locomotionOff) {
+    const { target, requested } = report.locomotionOff;
+    lines.push(
+      `  Locomotion: ${
+        requested
+          ? 'off'
+          : 'left off, because the new scene has no floor to stand on'
+      }. To turn it on, give your floor a \`LocomotionEnvironment\` component, then ${
+        target === 'browser'
+          ? 'set `world.features.locomotion` in iwsdk.config.json to `{ "browserControls": true }`: browser keyboard and gamepad controls are off by default.'
+          : 'enable `world.features.locomotion` in iwsdk.config.json.'
+      }`,
+    );
+  }
   if (report.gitignoreAdded.length > 0) {
     lines.push(`  .gitignore: added ${report.gitignoreAdded.join(', ')}`);
   }
