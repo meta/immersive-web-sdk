@@ -1,0 +1,11 @@
+{
+  "description": "What replaces guidance that an IWSDK release retired. `iwsdk dev up` removes a retired skill or file only when it is listed here, and writes what replaces it in the same run, so a refresh never leaves a project with less guidance than it had. List a retired skill by name with the skills that replace it, for both .claude/skills and .agents/skills (an empty list retires it outright). List a retired file by path with the units, or the coding tools whose whole guidance, replaces it. Every unit in legacy-hashes.json (written by releases before 1.2) that this release no longer ships must be listed; the guidance build fails otherwise. It cannot check units that only 1.2 and later releases wrote, so list those too when you retire one: without an entry, dev up keeps them, and only `agents sync` and `upgrade` remove them.",
+  "skills": {
+    "iwsdk-planner": ["iwsdk-dev"],
+    "iwsdk-scene-composer": ["iwsdk-compose-scene", "iwsdk-build-model"]
+  },
+  "files": {
+    ".cursor/rules/iwsdk.mdc": { "tools": ["cursor"] },
+    ".github/copilot-instructions.md": { "tools": ["copilot"] }
+  }
+}

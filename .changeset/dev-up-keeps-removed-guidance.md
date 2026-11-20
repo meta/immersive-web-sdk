@@ -1,0 +1,6 @@
+---
+'@iwsdk/cli': patch
+'@iwsdk/core': patch
+---
+
+`iwsdk dev up` and `dev restart` no longer re-create coding-agent guidance you removed. In 1.2.0-rc.0 every start put back deleted skills and `Skill(iwsdk-*)` permissions, a deleted `AGENTS.md`, and the managed block and `@AGENTS.md` import in a replaced `AGENTS.md` or `CLAUDE.md`. They now update only the guidance a project already has and nobody edited, and replace retired guidance whole: an unedited skill or file that a release renamed or retired is removed only together with writing its successors, and each successor gets the retired skill's permission if it had one. A 0.4 or 0.5 app gets `iwsdk-dev` for `iwsdk-planner`, Cursor and Copilot guidance for the single files 0.4 wrote, and an `AGENTS.md` block for the guidance its `CLAUDE.md` held. Apart from that they never add a skill, file, block, import or permission the project lacks, whether you removed it or it is new in the installed release; when they refresh, the notice lists the skills and files left out. The guidance manifest in `@iwsdk/core` now names what replaces each retired unit. `iwsdk agents sync` and `iwsdk upgrade` still install the full set, and `iwsdk agents check` still reports what is missing.

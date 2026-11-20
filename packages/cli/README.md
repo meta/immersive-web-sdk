@@ -73,10 +73,26 @@ installed it.
 
 `iwsdk dev up` and `dev restart` keep the guidance current after an upgrade:
 when the installed `@iwsdk/core` ships different guidance than the project has,
-they refresh the files nobody edited and print what changed. They only report,
-without writing, when `CI` is set, when `node_modules` holds a different
-`@iwsdk/core` than the lockfile resolves (for example after switching branches
-without installing), or when `iwsdk.config.json` sets
+they refresh the files nobody edited and print what changed. They update only
+the guidance the project already has, and replace retired guidance whole: an
+unedited skill or file that a release renamed or retired is removed only when
+the release names its successors, which are written in the same run (each
+gets the retired skill's `Skill()` permission if it had one), and a
+`CLAUDE.md` from before 1.0 that holds the full guidance becomes an
+`@AGENTS.md` import only once `AGENTS.md` holds the managed block, written in
+the same run if needed. An `AGENTS.md` that cannot take the block (edited
+guidance from before 1.2, or broken block markers) leaves that `CLAUDE.md` as
+it is. A retired skill or file whose release names no successor is kept;
+when they refresh, the output names it, and `agents sync` removes it. Apart
+from that they never add guidance the project does not have: a skill, rule,
+`AGENTS.md` block or `CLAUDE.md` import that you removed, or that is new in
+the release, stays out, and a skill permission you removed is not granted
+again. When they refresh, the output lists the skills and files left out (not
+permissions) for `agents sync`; a start with nothing to refresh prints
+nothing, so a deliberate removal is not reported on every start. They only
+report, without writing, when `CI` is set, when `node_modules` holds a
+different `@iwsdk/core` than the lockfile resolves (for example after
+switching branches without installing), or when `iwsdk.config.json` sets
 `"dev": { "agentGuidance": "warn" }`. `"off"` (or `IWSDK_AGENT_GUIDANCE=off`)
 disables the check. They never install guidance into a project that has none.
 

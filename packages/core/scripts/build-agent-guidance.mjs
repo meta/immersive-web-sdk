@@ -12,7 +12,8 @@
 //   node scripts/build-agent-guidance.mjs [outputDirectory]
 //
 // Output (default dist/agent-guidance/):
-//   manifest.json   units, their tools and hashes, and legacy hashes
+//   manifest.json   units, their tools and hashes, legacy hashes, and what
+//                   replaces each retired unit (agent-guidance/successors.json)
 //   files/          project-relative files, ready to copy into an app
 
 import { existsSync } from 'node:fs';
@@ -179,6 +180,12 @@ const legacyPath = path.join(sourceRoot, 'legacy-hashes.json');
 const legacy = existsSync(legacyPath)
   ? JSON.parse(await readFile(legacyPath, 'utf8')).units
   : {};
+const successorsPath = path.join(sourceRoot, 'successors.json');
+const successors = resolveSuccessors(
+  existsSync(successorsPath)
+    ? JSON.parse(await readFile(successorsPath, 'utf8'))
+    : {},
+);
 
 await writeFile(
   path.join(outputRoot, 'manifest.json'),
@@ -189,11 +196,93 @@ await writeFile(
       version,
       units: units.sort((left, right) => left.path.localeCompare(right.path)),
       legacy,
+      successors,
     },
     null,
     2,
   )}\n`,
 );
+
+/**
+ * successors.json as retired unit path -> the paths of the units in this
+ * release that replace it. Fails on a successor this release does not ship,
+ * and on a unit in legacy-hashes.json (written by a release before 1.2, which
+ * did not stamp guidance) that is retired without an entry. Units only
+ * stamped releases wrote are not checked: retired without an entry, they are
+ * kept by `iwsdk dev up`, and removed by `iwsdk agents sync` and `upgrade`.
+ */
+function resolveSuccessors(table) {
+  const unitPaths = new Set(units.map((unit) => unit.path));
+  const resolved = {};
+  for (const [name, replacements] of Object.entries(table.skills ?? {})) {
+    if (skillNames.includes(name)) {
+      throw new Error(
+        `successors.json retires skill ${name}, but this release ships it`,
+      );
+    }
+    for (const replacement of replacements) {
+      if (!skillNames.includes(replacement)) {
+        throw new Error(
+          `successors.json replaces skill ${name} with ${replacement}, which this release does not ship`,
+        );
+      }
+    }
+    for (const skillRoot of ['.claude/skills', '.agents/skills']) {
+      resolved[`${skillRoot}/${name}`] = replacements
+        .map((replacement) => `${skillRoot}/${replacement}`)
+        .sort();
+    }
+  }
+  for (const [unitPath, replacement] of Object.entries(table.files ?? {})) {
+    const named = replacement.units ?? [];
+    const tools = replacement.tools ?? [];
+    if (unitPaths.has(unitPath)) {
+      throw new Error(
+        `successors.json retires ${unitPath}, but this release ships it`,
+      );
+    }
+    for (const name of named) {
+      if (!unitPaths.has(name)) {
+        throw new Error(
+          `successors.json replaces ${unitPath} with ${name}, which this release does not ship`,
+        );
+      }
+    }
+    for (const tool of tools) {
+      if (!ALL_TOOLS.includes(tool)) {
+        throw new Error(
+          `successors.json replaces ${unitPath} with the guidance of unknown coding tool ${tool}`,
+        );
+      }
+    }
+    // Settings carry permissions, which follow the skills; they replace no
+    // guidance.
+    resolved[unitPath] = [
+      ...new Set([
+        ...named,
+        ...units
+          .filter(
+            (unit) =>
+              unit.kind !== 'claude-settings' &&
+              unit.tools.some((tool) => tools.includes(tool)),
+          )
+          .map((unit) => unit.path),
+      ]),
+    ].sort();
+  }
+  for (const unitPath of Object.keys(legacy)) {
+    if (!unitPaths.has(unitPath) && !(unitPath in resolved)) {
+      throw new Error(
+        `${unitPath} was written by a release before 1.2 (legacy-hashes.json) and this release does not ship it. Say what replaces it in agent-guidance/successors.json.`,
+      );
+    }
+  }
+  return Object.fromEntries(
+    Object.entries(resolved).sort(([left], [right]) =>
+      left.localeCompare(right),
+    ),
+  );
+}
 
 async function emitFile(relativePath, contents, tools) {
   const hash = fileUnitHash(stampedBody(contents));

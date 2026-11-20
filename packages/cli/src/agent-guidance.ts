@@ -39,6 +39,8 @@ export const GUIDANCE_TOOLS: AiTool[] = [
 // test/agent-guidance.test.ts checks both sides against a fresh render.
 const GUIDANCE_FORMAT = 1;
 const BLOCK_NAME = 'iwsdk-agent-guidance';
+/** The root AGENTS.md block unit, which a CLAUDE.md import points at. */
+const ROOT_BLOCK = 'AGENTS.md';
 const STAMP_LINE =
   /^<!-- iwsdk-agent-guidance version=(\S+) sha256=([0-9a-f]{64})(?: name=(\S+))? [^\n]*-->\r?\n?/mu;
 const BLOCK_PATTERN = new RegExp(
@@ -79,6 +81,11 @@ export interface GuidanceManifest {
   version: string;
   units: GuidanceUnit[];
   legacy: Record<string, string[]>;
+  /**
+   * Retired unit path -> the units of this release that replace it (an empty
+   * list retires it outright). Older manifests do not have it.
+   */
+  successors?: Record<string, string[]>;
 }
 
 export interface GuidanceSource {
@@ -108,11 +115,18 @@ export interface GuidanceUnitResult {
     | 'malformed-block'
     | 'invalid-json'
     | 'newer'
+    | 'missing'
+    | 'retired'
     | 'forced'
     | 'appended'
     | 'legacy';
-  /** What to do about a skipped unit, when that needs more than --force. */
+  /**
+   * What to do about a skipped unit, when that needs more than --force. For
+   * `missing`, what an existing file lacks.
+   */
   detail?: string;
+  /** For a removed retired unit, the units that replace it. */
+  replacedBy?: string[];
 }
 
 export interface GuidanceSkillSummary {
@@ -143,6 +157,19 @@ export interface SyncAgentGuidanceOptions {
   force?: boolean;
   /** Report what would change without writing. */
   dryRun?: boolean;
+  /**
+   * Refresh only the guidance the project already has. Unedited units are
+   * updated, but a missing file, skill folder, AGENTS.md block or CLAUDE.md
+   * import is not created, and no skill permission is granted; those units
+   * come back skipped with reason `missing`. A migration is done whole: a
+   * retired unit is removed only when the manifest names what replaces it,
+   * and its successors are written in the same run (a successor skill gets
+   * the permission its predecessor had); a CLAUDE.md from before 1.0 that
+   * holds the full guidance becomes an `@AGENTS.md` import only together with
+   * the AGENTS.md block. Other retired units are kept, skipped with reason
+   * `retired`.
+   */
+  onlyExisting?: boolean;
 }
 
 export class GuidanceSourceError extends Error {
@@ -206,6 +233,11 @@ export function directoryUnitHash(
 
 export function blockUnitHash(body: string): string {
   return sha256(withTrailingNewline(normalizeText(body)));
+}
+
+/** The release stamped on the iwsdk-agent-guidance block in `text`, if any. */
+export function readGuidanceBlockVersion(text: string): string | null {
+  return normalizeText(text).match(BLOCK_PATTERN)?.[1] ?? null;
 }
 
 function isTextFile(name: string): boolean {
@@ -293,6 +325,14 @@ export async function loadGuidanceSource(
     assertRelativeUnitPath(unit.path);
     for (const file of unit.files ?? []) {
       assertRelativeUnitPath(file);
+    }
+  }
+  for (const [retired, successors] of Object.entries(
+    manifest.successors ?? {},
+  )) {
+    assertRelativeUnitPath(retired);
+    for (const successor of successors) {
+      assertRelativeUnitPath(successor);
     }
   }
   return { root, manifest, origin };
@@ -457,12 +497,15 @@ async function isSameFile(first: string, second: string): Promise<boolean> {
   }
 }
 
-/** Temporary siblings a sync left behind when it was killed mid-swap. */
-const TEMPORARY_SIBLING = /^\..+\.iwsdk-(?:new|old)-(\d+)-(\d+)$/u;
+/**
+ * Temporary siblings a sync left behind when it was killed mid-swap: the
+ * name they stand in for, `new` or `old`, the process id and the time.
+ */
+const TEMPORARY_SIBLING = /^\.(.+)\.iwsdk-(new|old)-(\d+)-(\d+)$/u;
 
 /** A temporary sibling that a sync running right now may still need. */
 function isInUse(name: string): boolean {
-  const [, pid, createdAt] = TEMPORARY_SIBLING.exec(name) ?? [];
+  const [, , , pid, createdAt] = TEMPORARY_SIBLING.exec(name) ?? [];
   if (Date.now() - Number(createdAt) < 10 * 60_000) {
     return true;
   }
@@ -649,6 +692,24 @@ function replacementResult(
   return null;
 }
 
+/**
+ * A unit that `onlyExisting` left out because the project does not have it.
+ * `lacks` names what an existing file is missing.
+ */
+function missingResult(
+  unit: Pick<GuidanceUnit, 'path' | 'kind'>,
+  unitPath = unit.path,
+  lacks?: string,
+): GuidanceUnitResult {
+  return {
+    path: unitPath,
+    kind: unit.kind,
+    action: 'skipped',
+    reason: 'missing',
+    ...(lacks ? { detail: lacks } : {}),
+  };
+}
+
 async function pathKind(
   filePath: string,
 ): Promise<'missing' | 'directory' | 'file' | 'other'> {
@@ -663,11 +724,18 @@ async function pathKind(
   }
 }
 
+/**
+ * The unit syncs below take `create`: whether a unit the project lacks (a
+ * missing file or folder, or a block or import missing from a file) may be
+ * written. `onlyExisting` allows it only for units that replace guidance
+ * this run retires, and for folders a killed sync was replacing.
+ */
 async function syncDirectoryUnit(
   unit: GuidanceUnit,
   source: GuidanceSource,
   writer: Writer,
   force: boolean,
+  create: boolean,
 ): Promise<GuidanceUnitResult> {
   const localRoot = path.join(writer.projectRoot, unit.path);
   const replace = async () => {
@@ -680,6 +748,9 @@ async function syncDirectoryUnit(
   const kind = await pathKind(localRoot);
   const localFiles = kind === 'directory' ? await readTree(localRoot) : null;
   if (kind === 'missing' || localFiles?.size === 0) {
+    if (!create) {
+      return missingResult(unit);
+    }
     await replace();
     return { path: unit.path, kind: unit.kind, action: 'created' };
   }
@@ -725,12 +796,16 @@ async function syncFileUnit(
   source: GuidanceSource,
   writer: Writer,
   force: boolean,
+  create: boolean,
 ): Promise<GuidanceUnitResult> {
   const local = await readTextIfExists(
     path.join(writer.projectRoot, unit.path),
   );
   const next = await readSourceFile(source, unit.path);
   if (local == null) {
+    if (!create) {
+      return missingResult(unit);
+    }
     await writer.write(unit.path, next);
     return { path: unit.path, kind: unit.kind, action: 'created' };
   }
@@ -756,12 +831,16 @@ async function syncBlockUnit(
   source: GuidanceSource,
   writer: Writer,
   force: boolean,
+  create: boolean,
 ): Promise<GuidanceUnitResult> {
   const local = await readTextIfExists(
     path.join(writer.projectRoot, unit.path),
   );
   const block = (await readSourceFile(source, unit.path)).toString('utf8');
   if (local == null) {
+    if (!create) {
+      return missingResult(unit);
+    }
     await writer.write(unit.path, block);
     return { path: unit.path, kind: unit.kind, action: 'created' };
   }
@@ -834,6 +913,10 @@ async function syncBlockUnit(
       reason: 'forced',
     };
   }
+  if (!create) {
+    // No IWSDK block: the developer removed it or replaced the file.
+    return missingResult(unit, unit.path, 'no iwsdk-agent-guidance block');
+  }
   await writer.write(
     unit.path,
     withLineEndings(
@@ -849,11 +932,43 @@ async function syncBlockUnit(
   };
 }
 
+/**
+ * A root CLAUDE.md that holds the full guidance of a release before 1.0, as
+ * that release wrote it. It is replaced with an `@AGENTS.md` import, so the
+ * guidance it held now comes from the AGENTS.md block.
+ */
+async function holdsLegacyClaudeGuidance(
+  unit: GuidanceUnit,
+  source: GuidanceSource,
+  projectRoot: string,
+): Promise<boolean> {
+  const filePath = path.join(projectRoot, unit.path);
+  const rootFile = await readTextIfExists(filePath);
+  if (
+    rootFile == null ||
+    (await isSameFile(filePath, path.join(projectRoot, ROOT_BLOCK)))
+  ) {
+    return false;
+  }
+  const hash = fileUnitHash(rootFile);
+  return (
+    hash !==
+      fileUnitHash((await readSourceFile(source, unit.path)).toString()) &&
+    (source.manifest.legacy[unit.path]?.includes(hash) ?? false)
+  );
+}
+
+/**
+ * `replaceLegacy`: whether a CLAUDE.md holding the full guidance of a release
+ * before 1.0 may become an import, which needs the AGENTS.md block in place.
+ */
 async function syncClaudeImport(
   unit: GuidanceUnit,
   source: GuidanceSource,
   writer: Writer,
   force: boolean,
+  create: boolean,
+  replaceLegacy: boolean,
 ): Promise<GuidanceUnitResult> {
   const rootFile = await readTextIfExists(
     path.join(writer.projectRoot, unit.path),
@@ -863,6 +978,9 @@ async function syncClaudeImport(
   );
   const next = await readSourceFile(source, unit.path);
   if (rootFile == null && nestedFile == null) {
+    if (!create) {
+      return missingResult(unit);
+    }
     await writer.write(unit.path, next);
     return { path: unit.path, kind: unit.kind, action: 'created' };
   }
@@ -870,21 +988,27 @@ async function syncClaudeImport(
     rootFile != null &&
     (await isSameFile(
       path.join(writer.projectRoot, unit.path),
-      path.join(writer.projectRoot, 'AGENTS.md'),
+      path.join(writer.projectRoot, ROOT_BLOCK),
     ))
   ) {
     // CLAUDE.md is a link to AGENTS.md: Claude already reads the guidance.
     return { path: unit.path, kind: unit.kind, action: 'unchanged' };
   }
-  if (
-    rootFile != null &&
-    fileUnitHash(rootFile) !== fileUnitHash(next.toString('utf8')) &&
-    source.manifest.legacy[unit.path]?.includes(fileUnitHash(rootFile))
-  ) {
+  if (await holdsLegacyClaudeGuidance(unit, source, writer.projectRoot)) {
     // Releases before 1.0 put the full guidance in CLAUDE.md.
+    if (!replaceLegacy) {
+      return {
+        path: unit.path,
+        kind: unit.kind,
+        action: 'skipped',
+        reason: 'retired',
+        detail:
+          'It holds the full guidance of an IWSDK release before 1.0, and becomes an @AGENTS.md import once AGENTS.md has the iwsdk-agent-guidance block.',
+      };
+    }
     await writer.write(
       unit.path,
-      withLineEndings(next.toString('utf8'), rootFile),
+      withLineEndings(next.toString('utf8'), rootFile!),
     );
     return {
       path: unit.path,
@@ -924,6 +1048,14 @@ async function syncClaudeImport(
     (nestedFile != null && /^@\.\.\/AGENTS\.md\s*$/mu.test(nestedFile))
   ) {
     return { path: unit.path, kind: unit.kind, action: 'unchanged' };
+  }
+  if (!create) {
+    // The import was removed, or CLAUDE.md replaced.
+    return missingResult(
+      unit,
+      rootFile != null ? unit.path : '.claude/CLAUDE.md',
+      'no @AGENTS.md import',
+    );
   }
   if (rootFile != null) {
     await writer.write(
@@ -972,16 +1104,32 @@ export function ownedSkillNames(manifest: GuidanceManifest): Set<string> {
   return names;
 }
 
+/** What a sync did to skills, for their Claude Code permissions. */
+interface SkillChanges {
+  /** Skills it created or updated in .claude/skills. */
+  installed: ReadonlySet<string>;
+  /** Retired skills it removes. */
+  removed: ReadonlySet<string>;
+  /** Retired Claude Code skills that stay in the project. */
+  kept: ReadonlySet<string>;
+  /** Retired Claude Code skill it removes -> the skills that replace it. */
+  replacedBy: ReadonlyMap<string, readonly string[]>;
+}
+
 async function syncClaudeSettings(
   unit: GuidanceUnit,
   source: GuidanceSource,
   writer: Writer,
-  installedSkills: ReadonlySet<string>,
-  retiredSkills: ReadonlySet<string>,
+  skills: SkillChanges,
   force: boolean,
+  onlyExisting: boolean,
+  create: boolean,
 ): Promise<GuidanceUnitResult> {
   const filePath = path.join(writer.projectRoot, unit.path);
   const raw = await readTextIfExists(filePath);
+  if (raw == null && !create) {
+    return missingResult(unit);
+  }
   let settings: Record<string, unknown> = {};
   if (raw != null) {
     let parsed: unknown;
@@ -1015,29 +1163,39 @@ async function syncClaudeSettings(
   const shipped = new Set(unit.skills ?? []);
   const owned = new Set([
     ...ownedSkillNames(source.manifest),
-    ...retiredSkills,
+    ...skills.removed,
   ]);
+  const skillOf = (rule: unknown) =>
+    typeof rule === 'string' ? rule.match(SKILL_PERMISSION)?.[1] : undefined;
+  const allowed = new Set(allow.map(skillOf));
   // Grant skills this sync installed (all of them for a new settings file);
   // a permission the developer removed for an untouched skill stays removed.
   // Grant every shipped skill when the file is new, when --force is given, or
   // when no IWSDK skill permission is left (after `adapter prune`, say).
+  // `onlyExisting` grants a skill only the permission of the retired skill it
+  // replaces, and keeps the permissions of retired skills that stay.
   const grantAll =
     raw == null ||
     force ||
     !allow.some((rule) => {
-      const name =
-        typeof rule === 'string'
-          ? rule.match(SKILL_PERMISSION)?.[1]
-          : undefined;
+      const name = skillOf(rule);
       return name != null && owned.has(name);
     });
-  const grant = [...shipped].filter(
-    (name) => grantAll || installedSkills.has(name),
-  );
+  const grant =
+    onlyExisting && raw != null
+      ? [...skills.replacedBy]
+          .filter(([retired]) => allowed.has(retired))
+          .flatMap(([, successors]) => successors)
+          .filter((name) => shipped.has(name))
+      : [...shipped].filter((name) => grantAll || skills.installed.has(name));
   const isRetired = (rule: unknown) => {
-    const name =
-      typeof rule === 'string' ? rule.match(SKILL_PERMISSION)?.[1] : undefined;
-    return name != null && owned.has(name) && !shipped.has(name);
+    const name = skillOf(rule);
+    return (
+      name != null &&
+      owned.has(name) &&
+      !shipped.has(name) &&
+      !(onlyExisting && skills.kept.has(name))
+    );
   };
   const nextAllow = allow.filter((rule) => !isRetired(rule));
   for (const name of grant) {
@@ -1127,11 +1285,29 @@ function toolsForPath(unitPath: string): readonly AiTool[] {
   return GUIDANCE_TOOLS;
 }
 
-async function pruneRetiredUnits(
+interface RetiredUnit {
+  path: string;
+  kind: 'directory' | 'file';
+  /** `managed` or `legacy`: IWSDK wrote it and nobody edited it. */
+  ownership: 'managed' | 'legacy' | 'modified';
+}
+
+/**
+ * IWSDK units in the project that this release no longer ships, for the
+ * selected tools. Also returns the temporary siblings a killed sync left
+ * behind, for the caller to delete once its writes are done, and the units
+ * such a sync was replacing when it was killed (their folder is gone, so
+ * they count as present).
+ */
+async function findRetiredUnits(
   source: GuidanceSource,
   tools: readonly AiTool[],
   writer: Writer,
-): Promise<{ results: GuidanceUnitResult[]; removedSkills: Set<string> }> {
+): Promise<{
+  retired: RetiredUnit[];
+  interrupted: Set<string>;
+  leftovers: string[];
+}> {
   const shipped = new Set(source.manifest.units.map((unit) => unit.path));
   const blocks = new Set(
     source.manifest.units
@@ -1174,8 +1350,9 @@ async function pruneRetiredUnits(
       }
     }
   }
-  const results: GuidanceUnitResult[] = [];
-  const removedSkills = new Set<string>();
+  const retired: RetiredUnit[] = [];
+  const interrupted = new Set<string>();
+  const leftovers: string[] = [];
   for (const directory of ['.', ...PRUNE_ROOTS.map((root) => root.directory)]) {
     let entries;
     try {
@@ -1186,7 +1363,17 @@ async function pruneRetiredUnits(
     for (const name of entries.filter(
       (entry) => TEMPORARY_SIBLING.test(entry) && !isInUse(entry),
     )) {
-      await writer.remove(path.posix.join(directory, name));
+      const [, original, label] = TEMPORARY_SIBLING.exec(name)!;
+      const originalPath = path.posix.join(directory, original);
+      if (
+        label === 'old' &&
+        (await pathKind(path.join(writer.projectRoot, originalPath))) ===
+          'missing'
+      ) {
+        // Killed between the two renames of replaceDirectory.
+        interrupted.add(originalPath);
+      }
+      leftovers.push(path.posix.join(directory, name));
     }
   }
   for (const [unitPath, kind] of candidates) {
@@ -1220,23 +1407,15 @@ async function pruneRetiredUnits(
       source.manifest.legacy[unitPath],
       source.manifest.version,
     );
-    if (ownership === 'managed' || ownership === 'legacy') {
-      await writer.remove(unitPath);
-      results.push({ path: unitPath, kind, action: 'removed' });
-      if (kind === 'directory') {
-        removedSkills.add(name);
-      }
-    } else if (ownership === 'modified') {
-      // A retired IWSDK unit the developer edited: keep it, but say so.
-      results.push({
-        path: unitPath,
-        kind,
-        action: 'skipped',
-        reason: 'modified',
-      });
+    if (
+      ownership === 'managed' ||
+      ownership === 'legacy' ||
+      ownership === 'modified'
+    ) {
+      retired.push({ path: unitPath, kind, ownership });
     }
   }
-  return { results, removedSkills };
+  return { retired, interrupted, leftovers };
 }
 
 function readSkillDescription(text: string): string {
@@ -1338,7 +1517,9 @@ function buildAgentNotice(
 /**
  * Write a guidance release into a project. Files IWSDK wrote and nobody edited
  * are replaced; edited files and files IWSDK does not own are reported and left
- * alone unless `force` is set; retired IWSDK files are removed.
+ * alone unless `force` is set; retired IWSDK files are removed once what
+ * replaces them is in place. Missing units are created unless `onlyExisting`
+ * is set (see there).
  */
 export async function syncAgentGuidance({
   projectRoot,
@@ -1346,53 +1527,193 @@ export async function syncAgentGuidance({
   tools = [...GUIDANCE_TOOLS],
   force = false,
   dryRun = false,
+  onlyExisting = false,
 }: SyncAgentGuidanceOptions): Promise<SyncAgentGuidanceResult> {
   const writer = createWriter(projectRoot, dryRun);
-  const pruned = await pruneRetiredUnits(source, tools, writer);
-  const results: GuidanceUnitResult[] = [];
-  const installedSkills = new Set<string>();
+  const { retired, interrupted, leftovers } = await findRetiredUnits(
+    source,
+    tools,
+    writer,
+  );
   const units = selectedUnits(source.manifest, tools);
-  // Settings last: they grant the skills this run installed.
-  for (const unit of [
-    ...units.filter((candidate) => candidate.kind !== 'claude-settings'),
-    ...units.filter((candidate) => candidate.kind === 'claude-settings'),
-  ]) {
+  const shipped = new Set(source.manifest.units.map((unit) => unit.path));
+  const selected = new Map(units.map((unit) => [unit.path, unit.kind]));
+  // A successor for a coding tool the project does not use is not this
+  // project's, and settings replace no guidance (permissions follow the
+  // skills); one this release does not ship can never be written.
+  const counts = (successor: string) =>
+    shipped.has(successor)
+      ? (selected.get(successor) ?? 'claude-settings') !== 'claude-settings'
+      : true;
+  // Retired units IWSDK wrote and nobody edited are replaced: removed once
+  // the units that replace them are in place. `onlyExisting` replaces only
+  // the ones the release names successors for, and keeps the rest.
+  const replacing = new Map<string, string[]>();
+  for (const unit of retired) {
+    const successors = source.manifest.successors?.[unit.path];
+    if (unit.ownership !== 'modified' && (successors || !onlyExisting)) {
+      replacing.set(unit.path, (successors ?? []).filter(counts));
+    }
+  }
+  const claudeImport = units.find((unit) => unit.kind === 'claude-import');
+  const migratesClaude =
+    onlyExisting &&
+    claudeImport != null &&
+    (await holdsLegacyClaudeGuidance(claudeImport, source, projectRoot));
+  // What `onlyExisting` may add: the successors of the guidance this run
+  // replaces, and folders a killed sync was replacing.
+  const additions = new Set([
+    ...[...replacing.values()].flat(),
+    ...(migratesClaude ? [ROOT_BLOCK] : []),
+    ...interrupted,
+  ]);
+  const create = (unit: GuidanceUnit) =>
+    !onlyExisting || additions.has(unit.path);
+  const results: GuidanceUnitResult[] = [];
+  const resultsByUnit = new Map<string, GuidanceUnitResult>();
+  // In the project once this run is done (in a dry run, once it would be).
+  const present = (unitPath: string) => {
+    const result = resultsByUnit.get(unitPath);
+    return result !== undefined && result.reason !== 'missing';
+  };
+  // AGENTS.md holds the iwsdk-agent-guidance block once this run is done: not
+  // when it is missing, holds edited guidance from before the block, or has
+  // broken markers.
+  const holdsRootBlock = () => {
+    const reason = resultsByUnit.get(ROOT_BLOCK)?.reason;
+    return (
+      present(ROOT_BLOCK) &&
+      reason !== 'legacy-modified' &&
+      reason !== 'malformed-block'
+    );
+  };
+  const installedSkills = new Set<string>();
+  // The CLAUDE.md import after the AGENTS.md block it points at. Settings
+  // last, once the skills and retired units are settled.
+  const position = (unit: GuidanceUnit) =>
+    unit.kind === 'claude-import' ? 1 : unit.kind === 'claude-settings' ? 2 : 0;
+  for (const unit of [...units].sort(
+    (left, right) => position(left) - position(right),
+  )) {
+    let result: GuidanceUnitResult;
     switch (unit.kind) {
-      case 'directory': {
-        const result = await syncDirectoryUnit(unit, source, writer, force);
+      case 'directory':
+        result = await syncDirectoryUnit(
+          unit,
+          source,
+          writer,
+          force,
+          create(unit),
+        );
         if (
           unit.path.startsWith('.claude/') &&
           (result.action === 'created' || result.action === 'updated')
         ) {
           installedSkills.add(path.posix.basename(unit.path));
         }
-        results.push(result);
         break;
-      }
       case 'file':
-        results.push(await syncFileUnit(unit, source, writer, force));
+        result = await syncFileUnit(unit, source, writer, force, create(unit));
         break;
       case 'block':
-        results.push(await syncBlockUnit(unit, source, writer, force));
+        result = await syncBlockUnit(unit, source, writer, force, create(unit));
         break;
       case 'claude-import':
-        results.push(await syncClaudeImport(unit, source, writer, force));
-        break;
-      case 'claude-settings':
-        results.push(
-          await syncClaudeSettings(
-            unit,
-            source,
-            writer,
-            installedSkills,
-            pruned.removedSkills,
-            force,
-          ),
+        result = await syncClaudeImport(
+          unit,
+          source,
+          writer,
+          force,
+          create(unit),
+          !onlyExisting || holdsRootBlock(),
         );
         break;
+      case 'claude-settings':
+        continue;
+    }
+    results.push(result);
+    resultsByUnit.set(unit.path, result);
+  }
+  const removals: RetiredUnit[] = [];
+  const retiredResults: GuidanceUnitResult[] = [];
+  for (const unit of retired) {
+    const successors = replacing.get(unit.path);
+    const result = { path: unit.path, kind: unit.kind };
+    if (unit.ownership === 'modified') {
+      // A retired IWSDK unit the developer edited: keep it, but say so.
+      retiredResults.push({ ...result, action: 'skipped', reason: 'modified' });
+    } else if (successors == null) {
+      retiredResults.push({
+        ...result,
+        action: 'skipped',
+        reason: 'retired',
+        detail: `IWSDK ${source.manifest.version} no longer ships it and does not name a replacement; \`npx @iwsdk/cli@latest agents sync\` removes it.`,
+      });
+    } else if (!successors.every(present)) {
+      // Never leave a project with less guidance than it had.
+      retiredResults.push({
+        ...result,
+        action: 'skipped',
+        reason: 'retired',
+        detail: `It stays until ${successors.filter((successor) => !present(successor)).join(', ')} can be written in its place.`,
+      });
+    } else {
+      removals.push(unit);
+      retiredResults.push({
+        ...result,
+        action: 'removed',
+        ...(successors.length > 0 ? { replacedBy: successors } : {}),
+      });
     }
   }
-  results.push(...pruned.results);
+  const settings = units.find((unit) => unit.kind === 'claude-settings');
+  if (settings) {
+    const claudeSkill = (unitPath: string) =>
+      unitPath.startsWith('.claude/skills/');
+    const name = (unitPath: string) => path.posix.basename(unitPath);
+    results.push(
+      await syncClaudeSettings(
+        settings,
+        source,
+        writer,
+        {
+          installed: installedSkills,
+          removed: new Set(
+            removals
+              .filter((unit) => unit.kind === 'directory')
+              .map((unit) => name(unit.path)),
+          ),
+          kept: new Set(
+            retired
+              .filter(
+                (unit) => claudeSkill(unit.path) && !removals.includes(unit),
+              )
+              .map((unit) => name(unit.path)),
+          ),
+          replacedBy: new Map(
+            removals
+              .filter((unit) => claudeSkill(unit.path))
+              .map((unit) => [
+                name(unit.path),
+                replacing.get(unit.path)!.filter(claudeSkill).map(name),
+              ]),
+          ),
+        },
+        force,
+        onlyExisting,
+        create(settings),
+      ),
+    );
+  }
+  for (const unit of removals) {
+    await writer.remove(unit.path);
+  }
+  // Last: until a folder that a killed sync moved aside is written again,
+  // its moved-aside copy is what tells the next sync to write it.
+  for (const leftover of leftovers) {
+    await writer.remove(leftover);
+  }
+  results.push(...retiredResults);
   const skills = await summarizeSkills(source, tools);
   const changedCount = results.filter(
     (result) => result.action !== 'unchanged' && result.action !== 'skipped',

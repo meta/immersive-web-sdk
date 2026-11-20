@@ -15,6 +15,7 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  rename,
   rm,
   writeFile,
 } from 'fs/promises';
@@ -205,6 +206,31 @@ describe('rendered guidance format', () => {
       )!;
       expect(twin.sha256).toBe(unit.sha256);
     }
+  });
+
+  test('names what replaces every unit in the legacy table that this release retired', () => {
+    const shipped = new Set(source.manifest.units.map((unit) => unit.path));
+    const retired = Object.keys(source.manifest.legacy).filter(
+      (unitPath) => !shipped.has(unitPath),
+    );
+    expect(retired.length).toBeGreaterThan(0);
+    for (const unitPath of retired) {
+      expect(source.manifest.successors?.[unitPath], unitPath).toBeDefined();
+    }
+    for (const successors of Object.values(source.manifest.successors ?? {})) {
+      for (const successor of successors) {
+        expect(shipped.has(successor), successor).toBe(true);
+      }
+    }
+    expect(
+      source.manifest.successors?.['.claude/skills/iwsdk-planner'],
+    ).toEqual(['.claude/skills/iwsdk-dev']);
+    expect(
+      source.manifest.successors?.['.agents/skills/iwsdk-scene-composer'],
+    ).toEqual([
+      '.agents/skills/iwsdk-build-model',
+      '.agents/skills/iwsdk-compose-scene',
+    ]);
   });
 
   test('the root block warns about surfaces that were removed in 0.5', async () => {
@@ -908,6 +934,221 @@ describe('syncAgentGuidance', () => {
         JSON.parse(await readFile(settingsPath, 'utf8')).permissions.allow,
       ),
     ).toHaveLength(full);
+  });
+
+  test('onlyExisting updates what the project has and adds nothing', async () => {
+    const projectRoot = await projectFixture();
+    await syncAgentGuidance({ projectRoot, source, tools: ['claude'] });
+    const rule = path.join(projectRoot, '.claude/rules/ecs-api.md');
+    const settingsPath = path.join(projectRoot, '.claude/settings.json');
+    const skill = path.join(projectRoot, '.claude/skills/iwsdk-ui');
+    for (const unit of [rule, settingsPath, skill]) {
+      expect(existsSync(unit), unit).toBe(true);
+    }
+    await rm(rule);
+    await rm(settingsPath);
+    // An emptied skill folder counts as removed too.
+    await rm(skill, { recursive: true });
+    await mkdir(skill);
+    // The import moved out of a CLAUDE.md the developer now keeps elsewhere.
+    await rm(path.join(projectRoot, 'CLAUDE.md'));
+    await writeFile(path.join(projectRoot, '.claude/CLAUDE.md'), '# Notes\n');
+    // Guidance from a release before the managed block is still upgraded.
+    const oldAgents = '# IWSDK project\n\nOld guidance.\n';
+    await writeFile(path.join(projectRoot, 'AGENTS.md'), oldAgents);
+    const legacySource: GuidanceSource = {
+      ...source,
+      manifest: {
+        ...source.manifest,
+        legacy: {
+          ...source.manifest.legacy,
+          'AGENTS.md': [fileUnitHash(oldAgents)],
+        },
+      },
+    };
+
+    const result = await syncAgentGuidance({
+      projectRoot,
+      source: legacySource,
+      tools: ['claude'],
+      onlyExisting: true,
+    });
+    const byPath = actions(result);
+    expect(byPath['AGENTS.md']).toBe('updated:legacy');
+    for (const missing of [
+      '.claude/rules/ecs-api.md',
+      '.claude/settings.json',
+      '.claude/skills/iwsdk-ui',
+      '.claude/CLAUDE.md',
+    ]) {
+      expect(byPath[missing], missing).toBe('skipped:missing');
+    }
+    expect(
+      result.results.find((entry) => entry.path === '.claude/CLAUDE.md')
+        ?.detail,
+    ).toBe('no @AGENTS.md import');
+    expect(byPath['.claude/skills/iwsdk-dev']).toBe('unchanged');
+    expect(existsSync(rule)).toBe(false);
+    expect(existsSync(settingsPath)).toBe(false);
+    expect(await readdir(skill)).toEqual([]);
+    expect(existsSync(path.join(projectRoot, 'CLAUDE.md'))).toBe(false);
+    expect(
+      await readFile(path.join(projectRoot, '.claude/CLAUDE.md'), 'utf8'),
+    ).toBe('# Notes\n');
+    expect(await readFile(path.join(projectRoot, 'AGENTS.md'), 'utf8')).toMatch(
+      /^<!-- BEGIN iwsdk-agent-guidance/u,
+    );
+
+    // Settings lose retired skills' permissions but gain none, even with no
+    // IWSDK skill permission left.
+    await writeFile(
+      settingsPath,
+      JSON.stringify({
+        permissions: { allow: ['Bash(ls)', 'Skill(iwsdk-planner)'] },
+      }),
+    );
+    const settings = await syncAgentGuidance({
+      projectRoot,
+      source,
+      tools: ['claude'],
+      onlyExisting: true,
+    });
+    expect(actions(settings)['.claude/settings.json']).toBe('updated');
+    expect(
+      JSON.parse(await readFile(settingsPath, 'utf8')).permissions.allow,
+    ).toEqual(['Bash(ls)']);
+  });
+
+  test('onlyExisting removes a retired unit only once what replaces it is in place', async () => {
+    const withOld = await renderGuidance({
+      edit: async (root) => {
+        const skill = path.join(root, 'claude/.claude/skills/iwsdk-old');
+        await mkdir(skill, { recursive: true });
+        await writeFile(
+          path.join(skill, 'SKILL.md'),
+          '---\nname: iwsdk-old\ndescription: Retired by the next release.\n---\n\nOld.\n',
+        );
+      },
+    });
+    const projectRoot = await projectFixture();
+    await syncAgentGuidance({
+      projectRoot,
+      source: withOld,
+      tools: ['claude'],
+    });
+    const old = path.join(projectRoot, '.claude/skills/iwsdk-old');
+    const settingsPath = path.join(projectRoot, '.claude/settings.json');
+    const replacedBy = (successors: string[]): GuidanceSource => ({
+      ...source,
+      manifest: {
+        ...source.manifest,
+        successors: {
+          ...source.manifest.successors,
+          '.claude/skills/iwsdk-old': successors,
+        },
+      },
+    });
+
+    // A successor this release does not ship can never be written.
+    const blocked = await syncAgentGuidance({
+      projectRoot,
+      source: replacedBy(['.claude/skills/iwsdk-nowhere']),
+      tools: ['claude'],
+      onlyExisting: true,
+    });
+    expect(actions(blocked)['.claude/skills/iwsdk-old']).toBe(
+      'skipped:retired',
+    );
+    expect(
+      blocked.results.find((entry) => entry.path === '.claude/skills/iwsdk-old')
+        ?.detail,
+    ).toContain('.claude/skills/iwsdk-nowhere');
+    expect(existsSync(old)).toBe(true);
+    expect(await readFile(settingsPath, 'utf8')).toContain('Skill(iwsdk-old)');
+
+    // Once it ships, the successor is written (here one the project lacks),
+    // with the old skill's permission, and only then is the old one removed.
+    await rm(path.join(projectRoot, '.claude/skills/iwsdk-ui'), {
+      recursive: true,
+    });
+    const settings = JSON.parse(await readFile(settingsPath, 'utf8'));
+    settings.permissions.allow = settings.permissions.allow.filter(
+      (rule: string) => rule !== 'Skill(iwsdk-ui)',
+    );
+    await writeFile(settingsPath, JSON.stringify(settings));
+    const plan = await syncAgentGuidance({
+      projectRoot,
+      source: replacedBy(['.claude/skills/iwsdk-ui']),
+      tools: ['claude'],
+      onlyExisting: true,
+      dryRun: true,
+    });
+    expect(actions(plan)['.claude/skills/iwsdk-ui']).toBe('created');
+    expect(actions(plan)['.claude/skills/iwsdk-old']).toBe('removed');
+    expect(existsSync(old)).toBe(true);
+    const replaced = await syncAgentGuidance({
+      projectRoot,
+      source: replacedBy(['.claude/skills/iwsdk-ui']),
+      tools: ['claude'],
+      onlyExisting: true,
+    });
+    expect(actions(replaced)).toMatchObject(actions(plan));
+    expect(existsSync(old)).toBe(false);
+    expect(
+      existsSync(path.join(projectRoot, '.claude/skills/iwsdk-ui/SKILL.md')),
+    ).toBe(true);
+    const allow = JSON.parse(await readFile(settingsPath, 'utf8')).permissions
+      .allow;
+    expect(allow).toContain('Skill(iwsdk-ui)');
+    expect(allow).not.toContain('Skill(iwsdk-old)');
+  }, 30_000);
+
+  test('onlyExisting writes a skill folder again when a killed sync left it moved aside', async () => {
+    const projectRoot = await projectFixture();
+    await syncAgentGuidance({ projectRoot, source, tools: ['claude'] });
+    const skills = path.join(projectRoot, '.claude/skills');
+    // Killed between the two renames that swap a skill folder: the old one
+    // is moved aside and the new one is not in place yet.
+    const movedAside = path.join(skills, '.iwsdk-dev.iwsdk-old-999999999-456');
+    await rename(path.join(skills, 'iwsdk-dev'), movedAside);
+    await rm(path.join(skills, 'iwsdk-ui'), { recursive: true });
+    const plan = await syncAgentGuidance({
+      projectRoot,
+      source,
+      tools: ['claude'],
+      onlyExisting: true,
+      dryRun: true,
+    });
+    expect(actions(plan)['.claude/skills/iwsdk-dev']).toBe('created');
+    // A folder the developer deleted stays deleted.
+    expect(actions(plan)['.claude/skills/iwsdk-ui']).toBe('skipped:missing');
+    // A sync that stops before it writes the folder (here, because a file
+    // of the guidance is unreadable) keeps the moved-aside copy that says
+    // the folder is to be written.
+    const broken = await tempDir('iwsdk-broken-guidance-');
+    await cp(source.root, broken, { recursive: true });
+    await rm(path.join(broken, 'files/.claude/skills/iwsdk-dev/SKILL.md'));
+    await expect(
+      syncAgentGuidance({
+        projectRoot,
+        source: await loadGuidanceSource(broken),
+        tools: ['claude'],
+        onlyExisting: true,
+      }),
+    ).rejects.toThrow('ENOENT');
+    expect(existsSync(path.join(skills, 'iwsdk-dev'))).toBe(false);
+    expect(existsSync(movedAside)).toBe(true);
+    await syncAgentGuidance({
+      projectRoot,
+      source,
+      tools: ['claude'],
+      onlyExisting: true,
+    });
+    expect(existsSync(path.join(skills, 'iwsdk-dev/SKILL.md'))).toBe(true);
+    expect(existsSync(path.join(skills, 'iwsdk-ui'))).toBe(false);
+    expect(
+      (await readdir(skills)).filter((name) => name.startsWith('.')),
+    ).toEqual([]);
   });
 
   test('cleans up temporary folders a killed sync left behind', async () => {

@@ -57,7 +57,12 @@ them:
 - `iwsdk upgrade` and `npx @iwsdk/cli@latest agents sync` refresh them
   directly.
 - After a plain `npm install` bump, the next `iwsdk dev up` refreshes the files
-  nobody edited and says what changed. It only reports, without writing, when
+  nobody edited and says what changed. A skill or file the release renamed or
+  retired is replaced by its successors in the same run, so the app never ends
+  up with less guidance than it had. Apart from that it never adds guidance
+  the app does not have: files you removed, and files new in the release, stay
+  out, and when it refreshes, its notice lists them for `agents sync`. It only
+  reports, without writing, when
   `CI` is set, when `node_modules` holds a different `@iwsdk/core` than the
   lockfile resolves, or when `iwsdk.config.json` sets
   `"dev": { "agentGuidance": "warn" }` (`"off"` disables the check).
