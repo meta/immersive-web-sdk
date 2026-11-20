@@ -1,0 +1,6 @@
+---
+'@iwsdk/core': patch
+'@iwsdk/vite-plugin-dev': patch
+---
+
+`iwsdk browser profile` draws three warm-up frames before it starts sampling an app that renders on demand (headless sessions). The first profile of such a session used to include one-time first-draw costs (shader programs, texture uploads) and reported a frame-time p95 far above the app's real cost. The warm-up waits at most 5 seconds, within the command's time budget. If the frames are not drawn in time, for example because an uncaught error stopped the app's render loop, the profile reports a `render-warmup-timeout` interruption. A profile also reports `render-loop-stopped` when the app drew nothing for 30 or more animation frames in a row while the profile held rendering, because its render loop stopped (before or during the profile) or stalled; such profiles used to look like a healthy 60 fps. It reports `render-warmup-skipped-budget` (less than a second of the command's time left) or `render-mode-unavailable` when it has to sample without warm-up frames. Long tasks and event timings now count only work that starts during the profile. The `iwsdk-dev` skill's headless-rendering reference covers the warm-up and these interruptions.

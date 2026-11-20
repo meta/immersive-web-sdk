@@ -48,6 +48,7 @@ function fakeRuntime() {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -124,14 +125,42 @@ describe('render holds', () => {
 describe('page probes', () => {
   test('request fresh frames from apps that support it', async () => {
     const runtime = fakeRuntime();
-    await requestApplicationRender(
-      fakeFrame({ FRAMEWORK_MCP_RUNTIME: runtime }),
-      2,
-    );
-    expect(runtime.requestRender).toHaveBeenCalledWith(2);
     await expect(
-      requestApplicationRender(fakeFrame({})),
-    ).resolves.toBeUndefined();
+      requestApplicationRender(
+        fakeFrame({ FRAMEWORK_MCP_RUNTIME: runtime }),
+        2,
+      ),
+    ).resolves.toBe('drawn');
+    expect(runtime.requestRender).toHaveBeenCalledWith(2);
+    await expect(requestApplicationRender(fakeFrame({}))).resolves.toBe(
+      'unsupported',
+    );
+  });
+
+  test('report frames not drawn in time, and clear the timer either way', async () => {
+    vi.useFakeTimers();
+    const runtime = fakeRuntime();
+    const frame = fakeFrame({ FRAMEWORK_MCP_RUNTIME: runtime });
+
+    await expect(requestApplicationRender(frame, 1, 5_000)).resolves.toBe(
+      'drawn',
+    );
+    expect(vi.getTimerCount()).toBe(0);
+
+    // The app's render loop has stopped, so the frames are never drawn.
+    runtime.requestRender.mockReturnValueOnce(new Promise<void>(() => {}));
+    const stalled = requestApplicationRender(frame, 3, 5_000);
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(vi.getTimerCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(stalled).resolves.toBe('timeout');
+    expect(vi.getTimerCount()).toBe(0);
+
+    runtime.requestRender.mockRejectedValueOnce(new Error('render failed'));
+    await expect(requestApplicationRender(frame, 1, 5_000)).rejects.toThrow(
+      'render failed',
+    );
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   test('report the render mode and whether drawn frames persist', async () => {

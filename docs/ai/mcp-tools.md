@@ -359,6 +359,26 @@ diagnostics, not measurements for a target headset: results report
 `rendering` mode omits event timing and concentrates on frame/long-task behavior;
 `trace` mode adds a bounded Playwright trace artifact to the interaction-oriented
 measurements. The result's `summary.collection` fields state which collectors ran.
+Long tasks and event timings count only work that starts after the profile does.
+
+A profile draws every frame while it runs. When the application renders on demand
+(headless sessions), `start` first draws three warm-up frames and waits up to 5
+seconds for them, so one-time first-draw costs such as shader compilation and texture
+uploads stay out of the samples. The profile's duration and auto-stop start after the
+warm-up. These interruptions mean its frame times may not describe the application's
+rendering:
+
+- `render-warmup-timeout`: the warm-up frames were not drawn in the time `start`
+  allowed (at most 5 seconds; the value says how long). The application's render loop
+  has probably stopped (one uncaught error in a frame stops it; check
+  `browser_get_console_logs`), or its first frames are very slow.
+- `render-loop-stopped`: the application drew nothing for 30 or more animation frames
+  in a row while the profile held rendering (the value says how many). Its render loop
+  most likely stopped, before the profile or during it, or stalled.
+- `render-warmup-skipped-budget` or `render-mode-unavailable`: `start` sampled without
+  warm-up frames, because less than a second of the command's time was left for them
+  or the application's render mode could not be read, so the samples may include
+  first-draw costs.
 
 ### `browser_get_console_logs`
 

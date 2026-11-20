@@ -47,25 +47,42 @@ export function resolveManagedRenderMode(
 }
 
 /**
- * Draw `frames` fresh frames in the application frame and wait until they have
- * been handed to the compositor. Apps that do not expose `requestRender`
- * (non-IWSDK runtimes, older @iwsdk/core) are left alone.
+ * What {@link requestApplicationRender} saw: the frames were drawn, they were
+ * not drawn within the timeout, or the app cannot be asked to draw.
+ */
+export type ApplicationRenderResult = 'drawn' | 'timeout' | 'unsupported';
+
+/**
+ * Draw `frames` fresh frames in the application frame and wait, at most
+ * `timeoutMs`, until they have been handed to the compositor. Resolves
+ * `'timeout'` when they were not drawn in time, for example because an
+ * uncaught error stopped the app's render loop. Apps that do not expose
+ * `requestRender` (non-IWSDK runtimes, older @iwsdk/core) are left alone and
+ * resolve `'unsupported'`. Rejects when the app's `requestRender` does.
  */
 export async function requestApplicationRender(
   frame: Frame,
   frames = 1,
   timeoutMs = 10000,
-): Promise<void> {
-  await frame.evaluate(
-    ({ frames, timeoutMs }) => {
+): Promise<ApplicationRenderResult> {
+  return frame.evaluate(
+    ({
+      frames,
+      timeoutMs,
+    }): ApplicationRenderResult | Promise<ApplicationRenderResult> => {
       const runtime = (window as any).FRAMEWORK_MCP_RUNTIME;
       if (typeof runtime?.requestRender !== 'function') {
-        return;
+        return 'unsupported';
       }
+      let timer: ReturnType<typeof setTimeout> | undefined;
       return Promise.race([
-        runtime.requestRender(frames),
-        new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
-      ]);
+        Promise.resolve(runtime.requestRender(frames)).then(
+          () => 'drawn' as const,
+        ),
+        new Promise<'timeout'>((resolve) => {
+          timer = setTimeout(() => resolve('timeout'), timeoutMs);
+        }),
+      ]).finally(() => clearTimeout(timer));
     },
     { frames, timeoutMs },
   );

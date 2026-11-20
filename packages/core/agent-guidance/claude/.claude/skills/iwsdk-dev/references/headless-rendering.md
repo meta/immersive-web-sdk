@@ -17,7 +17,9 @@ per second.
   room behind the app draws with it, so the two always match.
 - `scene render-stats` draws one fresh frame before it reads the stats.
   `browser profile`, runtime evidence and `browser run` scripts draw every
-  frame while they run.
+  frame while they run. A profile first draws three warm-up frames, so
+  one-time first-draw costs (shader compilation, texture uploads) stay out of
+  its numbers.
 - Headed sessions, including collaborate mode, always draw every frame.
 - To draw every frame in a headless session, start it with
   `IWSDK_DEV_RENDER_MODE=continuous`.
@@ -67,6 +69,18 @@ set it back to `"on-demand"` when done.
   `npx @iwsdk/cli browser profile --input-json '{"action":"start","mode":"rendering"}'`,
   exercise the scene, then
   `npx @iwsdk/cli browser profile --input-json '{"action":"stop"}'`.
+- Trust the frame times of a profile that reports a `render-warmup-timeout`
+  interruption (the app did not draw its warm-up frames in the time the start
+  allowed, at most 5 seconds) or `render-loop-stopped` (the app drew nothing
+  for 30 or more animation frames in a row while the profile held rendering:
+  its render loop stopped, before the profile or during it, or stalled). The
+  usual cause is an uncaught error in a frame, which stops the render loop;
+  check `npx @iwsdk/cli browser logs`. After a warm-up timeout, the first
+  frames may also just be very slow. Fix the error, or profile again.
+- Trust the frame times of a profile that reports
+  `render-warmup-skipped-budget` (less than a second of the command's time
+  was left for the warm-up) or `render-mode-unavailable`. It sampled without
+  warm-up frames, so its numbers may include first-draw costs. Profile again.
 - Expect a frame to change between screenshots if the scene did not change.
 - Restart into headed mode to "fix" a stale view; screenshots already draw a
   fresh frame.

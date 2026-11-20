@@ -87,7 +87,10 @@ frame rate instead of a few frames per second, and keeps commands responsive.
   simulation frame. `browser filmstrip` captures several in one image.
 - `scene_get_render_stats` (`scene render-stats`) draws one fresh frame
   before it reads the stats. `browser profile`, runtime evidence and
-  `browser run` scripts draw every frame while they run.
+  `browser run` scripts draw every frame while they run. A profile first
+  draws three warm-up frames, so one-time first-draw costs (shader
+  compilation, texture uploads) stay out of its numbers; see
+  [`browser_profile`](./mcp-tools#browser-profile).
 - The runtime-only `RuntimeSettings` component switches the mode live:
   `ecs find` it, then `ecs set-component` its `renderMode` field to
   `"continuous"` or `"on-demand"`. It is never saved into scene files.

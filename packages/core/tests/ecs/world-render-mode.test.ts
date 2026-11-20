@@ -108,6 +108,29 @@ describe('World render mode', () => {
     expect(ticks(world, 1)).toEqual([false]);
   });
 
+  it('resolves a render request made while a hold is open', async () => {
+    // A browser profile holds rendering, then waits for warm-up frames.
+    const world = new World();
+    world.renderMode = 'on-demand';
+    const release = world.holdRender();
+    let resolved = false;
+    const done = world.requestRender(3).then(() => {
+      resolved = true;
+    });
+
+    expect(ticks(world, 3)).toEqual([true, true, true]);
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+
+    // The tick after the third frame releases the request and, with the
+    // hold still open, draws too.
+    expect(world.beginRenderTick()).toBe(true);
+    await done;
+    expect(resolved).toBe(true);
+    release();
+    expect(ticks(world, 1)).toEqual([false]);
+  });
+
   it.each([Number.NaN, Number.POSITIVE_INFINITY, -3, 0, 0.4])(
     'draws one frame for a frame count of %s and keeps working',
     async (frames) => {
