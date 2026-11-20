@@ -535,11 +535,18 @@ describe('launchManagedBrowser', () => {
     expect(page.evaluate).toHaveBeenCalledWith(expect.any(Function));
     expect(page.setDefaultTimeout).toHaveBeenCalledWith(15_000);
     expect(page.setDefaultNavigationTimeout).toHaveBeenCalledWith(15_000);
+    // The capture gets what is left of the 15 s budget, so a slow machine
+    // can see a few milliseconds less than the full budget.
     expect(page.screenshot).toHaveBeenCalledWith({
       fullPage: false,
-      timeout: 15_000,
+      timeout: expect.any(Number),
       type: 'png',
     });
+    const { timeout } = page.screenshot.mock.calls[0][0] as {
+      timeout: number;
+    };
+    expect(timeout).toBeGreaterThan(14_000);
+    expect(timeout).toBeLessThanOrEqual(15_000);
   });
 
   test('captures a filmstrip in runtime view: pause, lossless panels, step, resume', async () => {

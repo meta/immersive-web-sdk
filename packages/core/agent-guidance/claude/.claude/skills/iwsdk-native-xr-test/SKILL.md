@@ -20,7 +20,8 @@ Use this skill only when you drive the headset. If the user wants to put the
 headset on and try the app themselves, do not start native control and do not
 give them a pairing URL. A `--native-xr-control` session overrides the head pose
 and controllers of every Quest Browser page it serves, even after the pairing
-token is removed from the URL. Restart without the flag and hand over a plain URL as described in
+token is removed from the URL; the page shows an "Agent-controlled page"
+notice saying so. Restart without the flag and hand over a plain URL as described in
 AGENTS.md. If a native-control test is running when the user asks to try the
 app, finish or stop it, clean up as in step 6, then do the same.
 

@@ -769,6 +769,25 @@ describe('native editor route middleware', () => {
     expect(restartedConfig.server?.https?.cert).toBe(
       userConfig.server?.https?.cert,
     );
+
+    // plugin-basic-ssl's own cache write lands after config returns; it must
+    // not touch the file the plugin owns.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await expect(readFile(certPath, 'utf8')).resolves.toBe(
+      userConfig.server?.https?.cert,
+    );
+
+    // A cache that is not a certificate is replaced, not served.
+    await writeFile(certPath, 'not a certificate');
+    const repairedConfig: typeof userConfig = { cacheDir, root: tempRoot };
+    await iwsdkDev().config?.(repairedConfig as never, {
+      command: 'serve',
+      mode: 'development',
+    });
+    expect(repairedConfig.server?.https?.cert).toContain('BEGIN CERTIFICATE');
+    await expect(readFile(certPath, 'utf8')).resolves.toBe(
+      repairedConfig.server?.https?.cert,
+    );
   });
 
   test('preserves explicit HTTP and custom HTTPS configuration', async () => {

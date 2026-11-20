@@ -22,6 +22,7 @@ import {
   initMCPBridge,
   initMCPClient,
 } from './mcp/ws-client.js';
+import { showNativeControlNotice } from './native-control-notice.js';
 import {
   configureOnDemandEmulator,
   type OnDemandEmulatorWindow,
@@ -284,6 +285,15 @@ function initDevRuntime(config: ProcessedDevOptions): void {
           active: true,
           gazeSimulation: 'head',
         };
+      } else {
+        // The person holding the headset no longer controls this page; say
+        // so, and how to get control back.
+        showNativeControlNotice(document);
+        console.warn(
+          '[IWSDK Dev] Native XR control is on: the IWSDK CLI drives the ' +
+            'headset and controllers on this page. Restart the dev server ' +
+            'without --native-xr-control to test by hand.',
+        );
       }
       (window as any).IWER_NATIVE_OVERRIDE = nativeOverride;
     } else {

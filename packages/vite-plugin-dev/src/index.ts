@@ -5,7 +5,13 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
+import {
+  createHash,
+  randomBytes,
+  randomUUID,
+  timingSafeEqual,
+  X509Certificate,
+} from 'crypto';
 import {
   existsSync,
   lstatSync,
@@ -864,19 +870,12 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         const certDir = path.isAbsolute(configuredCacheDir)
           ? configuredCacheDir
           : path.resolve(projectRoot, configuredCacheDir);
-        const certificate = await getCertificate(
+        const certificate = await loadDevelopmentCertificate(
           certDir,
           httpsOptions.name ?? 'IWSDK Development',
           httpsOptions.domains,
           httpsOptions.ttlDays ?? 365,
         );
-        // @vitejs/plugin-basic-ssl writes its cache asynchronously after
-        // returning. Complete the write before Vite starts so a rapid restart
-        // cannot generate a second certificate for the same project.
-        mkdirSync(certDir, { recursive: true });
-        writeFileSync(path.join(certDir, '_cert.pem'), certificate, {
-          mode: 0o600,
-        });
         userConfig.server ??= {};
         userConfig.server.https = {
           cert: certificate,
@@ -8445,3 +8444,39 @@ async function readRequestBody(
 
 /** @deprecated Use `iwsdkDev` instead */
 export const injectIWER = iwsdkDev;
+
+/**
+ * Returns the project's development certificate from `<certDir>/_cert.pem`,
+ * generating and caching one when it is missing, unreadable or expired.
+ *
+ * `@vitejs/plugin-basic-ssl` writes its own cache without awaiting the write,
+ * after `getCertificate` has returned. Pointing it at `certDir` itself let that
+ * late write truncate `_cert.pem` while the next start was reading it. It now
+ * generates into a subdirectory that is never read, and this function owns
+ * `_cert.pem` with a synchronous write.
+ */
+async function loadDevelopmentCertificate(
+  certDir: string,
+  name: string,
+  domains: string[] | undefined,
+  ttlDays: number,
+): Promise<string> {
+  const certPath = path.join(certDir, '_cert.pem');
+  try {
+    const cached = readFileSync(certPath, 'utf8');
+    if (new Date(new X509Certificate(cached).validTo).getTime() > Date.now()) {
+      return cached;
+    }
+  } catch {
+    // Missing, unreadable or not a certificate: generate a new one.
+  }
+  const certificate = await getCertificate(
+    path.join(certDir, '.basic-ssl'),
+    name,
+    domains,
+    ttlDays,
+  );
+  mkdirSync(certDir, { recursive: true });
+  writeFileSync(certPath, certificate, { mode: 0o600 });
+  return certificate;
+}
