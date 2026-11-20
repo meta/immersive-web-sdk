@@ -674,6 +674,7 @@ describe('common starter project files', () => {
       'data.runtimeUrls.network',
       '**Browser automation is a last resort.**',
       'not module-level objects.',
+      'ray-only panel ignores hand presses.',
     ]) {
       expect(textFile(files, 'AGENTS.md')).toContain(sharedGuidance);
     }

@@ -259,6 +259,9 @@ renderer imports; systems import the declarations, never the reverse.
 - Load assets through `AssetManager` / the manifest, never a raw `GLTFLoader`.
 - Create entities with `world.createTransformEntity(...)`, never `scene.add()`.
 - Use the `RayInteractable` component, never a manual `Raycaster`.
+- Give a UI panel or button both `RayInteractable` and `PokeInteractable`.
+  Fingertip touches only reach entities with `PokeInteractable`, so a
+  ray-only panel ignores hand presses.
 - VR targets 72–90 fps: 11–14 ms per frame. Treat per-frame allocation as a bug.
 - Keep app and game state that a person or agent will want to read or change
   (score, lives, gold, wave, phase, timers, debug switches) in ECS components,
