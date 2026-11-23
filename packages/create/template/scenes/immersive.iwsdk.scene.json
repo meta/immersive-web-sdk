@@ -368,6 +368,7 @@
         "scale": 0.46
       },
       "components": {
+        "PokeInteractable": {},
         "RayInteractable": {}
       }
     },

@@ -274,6 +274,12 @@ describe('common starter project files', () => {
         content: { asset: 'welcome-panel', type: 'asset' },
       });
       expect(welcomePanel?.components).not.toHaveProperty('PanelDocument');
+      // Hands press the panel's buttons with a fingertip only when it is
+      // PokeInteractable as well; rays need RayInteractable.
+      expect(welcomePanel?.components).toMatchObject({
+        PokeInteractable: {},
+        RayInteractable: {},
+      });
 
       expect(findNode(scene.nodes, 'graphite-cube')).toMatchObject({
         content: { asset: 'graphite-cube', type: 'asset' },
