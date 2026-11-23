@@ -182,7 +182,7 @@ the interactive setup controls language, features, Git, and installation.
 | `--git` / `--no-git`                                 | Initialize or skip a Git repository                                                              |
 | `--canary`                                           | Use the default canary SDK bundle                                                                |
 | `--canary URL`                                       | Use a custom HTTP(S) SDK bundle                                                                  |
-| `--metavr-native`                                    | Alpha, VR only: add `npm run build:metavr`, a native Quest APK built with `@iwer/native`         |
+| `--metavr-native`                                    | Alpha, VR or AR: add `npm run build:metavr`, a native Quest APK built with `@iwer/native`        |
 
 Automation and coding agents should map the requested experience to a target
 and high-level feature flags before invoking Create, then pass those choices

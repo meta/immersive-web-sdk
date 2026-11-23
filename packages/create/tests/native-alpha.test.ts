@@ -141,9 +141,9 @@ describe('--metavr-native (alpha)', () => {
       nativeAlphaRequested(['my-app'], { IWSDK_CREATE_METAVR_NATIVE: '0' }),
     ).toBe(false);
     expect(() => validateNativeAlphaTarget('vr')).not.toThrow();
-    expect(() => validateNativeAlphaTarget('ar')).toThrow(/--target vr only/u);
+    expect(() => validateNativeAlphaTarget('ar')).not.toThrow();
     expect(() => validateNativeAlphaTarget('browser')).toThrow(
-      /--target vr only/u,
+      /--target vr or ar only/u,
     );
   });
 });

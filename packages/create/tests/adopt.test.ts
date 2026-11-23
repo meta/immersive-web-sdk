@@ -735,6 +735,56 @@ describe('adoptExistingProject', () => {
     expect(steps).toContain("`import './src/iwsdk';` to main.js");
   });
 
+  it('adds the native build target pieces with --metavr-native, and names the manifest step it cannot write', async () => {
+    const nativeFiles = () =>
+      buildStarterProjectFiles({
+        appName: 'starter',
+        configuration: {
+          ...getRecommendedConfiguration('vr'),
+          nativeAlpha: true,
+        },
+        language: 'ts',
+        packageSource: { getPackageInstallSpec: () => '9.9.9' },
+        templateRoot: path.join(PACKAGE_ROOT, 'dist', 'template'),
+      });
+    // A plain Vite app gets the manifest with its native section, and the ignore entry.
+    const fresh = await existingProject(VITE_APP);
+    const freshReport = await adoptExistingProject({
+      outDir: fresh,
+      files: await nativeFiles(),
+      guidanceRoot: GUIDANCE_ROOT,
+      language: 'ts',
+    });
+    expect(freshReport.gitignoreAdded).toContain('dist-metavr/');
+    const written = JSON.parse(
+      await readFile(path.join(fresh, 'iwsdk.config.json'), 'utf8'),
+    );
+    expect(written.native.packageId).toBe('com.example.starter');
+    expect(freshReport.manualSteps.join('\n')).not.toContain(
+      'native build target',
+    );
+
+    // An IWSDK project keeps its own manifest, so the native section becomes a step.
+    const existing = await existingProject(VITE_APP);
+    await adopt(existing);
+    const report = await adoptExistingProject({
+      outDir: existing,
+      files: await nativeFiles(),
+      guidanceRoot: GUIDANCE_ROOT,
+      language: 'ts',
+    });
+    expect(report.kept).toContain('iwsdk.config.json');
+    expect(report.gitignoreAdded).toEqual(['dist-metavr/']);
+    const step = report.manualSteps.find((line) =>
+      line.includes('native build target'),
+    );
+    expect(step).toContain('"packageId":"com.example.starter"');
+    const pkg = JSON.parse(
+      await readFile(path.join(existing, 'package.json'), 'utf8'),
+    );
+    expect(pkg.scripts['build:metavr']).toContain('iwer-native pack');
+  });
+
   it('is idempotent', async () => {
     const root = await existingProject(VITE_APP);
     await adopt(root);

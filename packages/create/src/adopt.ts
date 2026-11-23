@@ -101,6 +101,8 @@ const VITE_CONFIG_NAMES = [
 const VITE_PEER_RANGE = '^7.0.0';
 const SKELETON_DIRECTORY = 'src/iwsdk';
 /** IWSDK's own .gitignore entries: runtime state and generated MCP configs. */
+/** Added with --metavr-native: native APK builds (npm run build:metavr). */
+const NATIVE_GITIGNORE_ENTRY = 'dist-metavr/';
 const GITIGNORE_ENTRIES = [
   '.iwsdk/',
   '.mcp.json',
@@ -813,6 +815,16 @@ export async function adoptExistingProject({
     );
   }
 
+  const plannedManifestFile = files.find(
+    (file) => file.path === 'iwsdk.config.json',
+  );
+  const plannedNative = plannedManifestFile
+    ? (JSON.parse(textContents(plannedManifestFile)) as JsonObject).native
+    : undefined;
+  const gitignoreEntries =
+    plannedNative === undefined
+      ? GITIGNORE_ENTRIES
+      : [...GITIGNORE_ENTRIES, NATIVE_GITIGNORE_ENTRY];
   const gitignoreAdded: string[] = [];
   if ((await writeTarget(outDir, '.gitignore')) !== 'blocked') {
     const gitignorePath = path.join(outDir, '.gitignore');
@@ -821,7 +833,7 @@ export async function adoptExistingProject({
       : '';
     const present = new Set(current.split(/\r?\n/u).map((line) => line.trim()));
     gitignoreAdded.push(
-      ...GITIGNORE_ENTRIES.filter((line) => !present.has(line)),
+      ...gitignoreEntries.filter((line) => !present.has(line)),
     );
     if (gitignoreAdded.length > 0) {
       const eol = current.includes('\r\n') ? '\r\n' : '\n';
@@ -881,6 +893,17 @@ export async function adoptExistingProject({
         `Locomotion is on in iwsdk.config.json, but ${path.relative(outDir, sceneFile).split(path.sep).join('/')} has no \`LocomotionEnvironment\`: add it to the floor the player walks on, or set \`world.features.locomotion\` to \`false\`. Otherwise the player falls through the world.`,
       );
     }
+  }
+  // --metavr-native over a project that already has iwsdk.config.json: the
+  // manifest is kept, so build:metavr would stop at "no native section".
+  if (
+    plannedNative !== undefined &&
+    isRecord(manifest) &&
+    manifest.native === undefined
+  ) {
+    manualSteps.push(
+      `Add the native build target to iwsdk.config.json (your file was kept): \`"native": ${JSON.stringify(plannedNative)}\`. Replace the com.example package id before a store build. Until then \`npm run build:metavr\` stops at "no native section".`,
+    );
   }
   const locomotionOff: AdoptReport['locomotionOff'] =
     created.includes('iwsdk.config.json') &&

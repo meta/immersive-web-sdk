@@ -9,7 +9,7 @@ import type { ExperienceTarget } from './types.js';
 
 /**
  * Alpha: `--metavr-native` (or IWSDK_CREATE_METAVR_NATIVE=1) adds the native
- * Quest build to a new VR project. `npm run build:metavr` builds with Vite in
+ * Quest build to a new VR or AR project. `npm run build:metavr` builds with Vite in
  * the `metavr` mode (the dev plugin then leaves the IWER emulator out) and packs
  * dist/ into dist-metavr/<appName>.apk with @iwer/native, which runs the app
  * without a browser. Off by default while @iwer/native is an alpha.
@@ -37,11 +37,15 @@ export function nativeAlphaRequested(
   );
 }
 
-/** The native runtime offers immersive-vr only for now (no passthrough / AR, no 2D page). */
+/**
+ * The native runtime runs immersive sessions only: immersive-vr, and
+ * immersive-ar over passthrough, which pack declares from world.xr.mode "ar".
+ * It has no 2D page, so the Desktop 3D starting point cannot be packed.
+ */
 export function validateNativeAlphaTarget(target: ExperienceTarget): void {
-  if (target !== 'vr') {
+  if (target !== 'vr' && target !== 'ar') {
     throw new Error(
-      `${NATIVE_ALPHA_FLAG} is available for --target vr only (the @iwer/native alpha runs immersive-vr apps; got ${target}).`,
+      `${NATIVE_ALPHA_FLAG} is available for --target vr or ar only (the @iwer/native alpha runs immersive sessions, with no 2D page; got ${target}).`,
     );
   }
 }

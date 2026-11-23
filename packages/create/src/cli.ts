@@ -276,7 +276,7 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
     .option('--no-environment-raycast', 'Disable environment raycast')
     .option(
       NATIVE_ALPHA_FLAG,
-      '(alpha) Add npm run build:metavr: a native Quest APK built with @iwer/native (VR only)',
+      '(alpha) Add npm run build:metavr: a native Quest APK built with @iwer/native (VR or AR)',
     )
     .option(
       '--skip-reference-warmup',
@@ -619,6 +619,7 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
         res.actionItems || [],
         projectTarget.inPlace,
         res.xrEnabled,
+        nativeAlpha,
       );
     } finally {
       await source.cleanup();

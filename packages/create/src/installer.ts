@@ -184,6 +184,7 @@ export function printNextSteps(
   actionItems: ActionItem[] = [],
   inPlace = false,
   xrEnabled = true,
+  nativeAlpha = false,
 ) {
   const startCmd = 'npm run dev';
   printMetavrNotice();
@@ -213,6 +214,22 @@ export function printNextSteps(
   console.log(stdoutColor.gray(`  ${startCmd}`));
   if (xrEnabled) {
     console.log(stdoutColor.gray(`  IWER controls: ${IWER_CONTROLS_URL}`));
+  }
+  if (nativeAlpha) {
+    console.log('\nNative Quest build (alpha):');
+    console.log(
+      stdoutColor.gray(
+        '  npx iwer-native doctor        # adb, headset, native config',
+      ),
+    );
+    console.log(
+      stdoutColor.gray(
+        '  npm run build:metavr          # writes dist-metavr/<appName>.apk',
+      ),
+    );
+    console.log(
+      stdoutColor.gray('  npx iwer-native install && npx iwer-native run'),
+    );
   }
 }
 
