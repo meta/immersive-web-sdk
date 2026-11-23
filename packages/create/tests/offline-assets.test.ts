@@ -31,8 +31,8 @@ import { afterEach, expect, test } from 'vitest';
 const PACKAGE_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const WORKSPACE_ROOT = path.resolve(PACKAGE_ROOT, '..', '..');
 const ASSETS = path.join(
-  PACKAGE_ROOT,
-  'guidance/claude/.claude/skills/iwsdk-offline/assets',
+  WORKSPACE_ROOT,
+  'packages/core/agent-guidance/claude/.claude/skills/iwsdk-offline/assets',
 );
 const tempDirs: string[] = [];
 

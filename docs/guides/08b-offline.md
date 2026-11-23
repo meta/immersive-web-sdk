@@ -36,7 +36,7 @@ Projects created with `@iwsdk/create` include the `iwsdk-offline` skill. Ask you
 | `scripts/sw.js.template`           | The service worker, as plain JavaScript with three placeholders: install copies the release, activate removes older releases, and fetch answers from the copy |
 | `src/offline.ts`                   | The page's side: when the copy is made, and when a new release may take over                                                                                  |
 
-To add them by hand, copy them from the skill's `assets/` folder, in `.claude/skills/iwsdk-offline/` or `.agents/skills/iwsdk-offline/` in your project, or [on GitHub](https://github.com/facebook/immersive-web-sdk/tree/main/packages/create/guidance/claude/.claude/skills/iwsdk-offline/assets). Drop the `.template` suffix from all but the worker, and in a JavaScript project save the page module as `src/offline.js` without its type annotations. Then make the script the last step of the build:
+To add them by hand, copy them from the skill's `assets/` folder, in `.claude/skills/iwsdk-offline/` or `.agents/skills/iwsdk-offline/` in your project, or [on GitHub](https://github.com/facebook/immersive-web-sdk/tree/main/packages/core/agent-guidance/claude/.claude/skills/iwsdk-offline/assets). Drop the `.template` suffix from all but the worker, and in a JavaScript project save the page module as `src/offline.js` without its type annotations. Then make the script the last step of the build:
 
 ```json
 {

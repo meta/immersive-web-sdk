@@ -44,7 +44,7 @@ on a local port with `npx vite preview`, and forward it so that
 
 ```bash
 npm run build
-npx vite preview --port 4173
+npx vite preview
 adb reverse tcp:4173 tcp:4173   # then open http://localhost:4173 on the headset
 ```
 
