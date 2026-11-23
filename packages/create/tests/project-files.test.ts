@@ -206,13 +206,13 @@ describe('common starter project files', () => {
     expect(packageJson.devDependencies['@meta-quest/hzdb']).toBeUndefined();
     expect(packageJson.devDependencies['@types/three']).toBe('^0.185.0');
     expect(packageJson.overrides).toEqual({
-      sharp: '0.35.4',
+      sharp: '0.35.5',
       three: 'npm:super-three@0.185.0',
     });
     expect(pnpmWorkspace).toEqual({
       packages: ['.'],
       overrides: {
-        sharp: '0.35.4',
+        sharp: '0.35.5',
         three: 'npm:super-three@0.185.0',
       },
       onlyBuiltDependencies: ['esbuild', 'protobufjs', 'sharp'],

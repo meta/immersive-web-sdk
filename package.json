@@ -151,7 +151,7 @@
       "protobufjs": "7.6.5",
       "qs": "6.16.0",
       "serialize-javascript": "7.0.5",
-      "sharp": "0.35.4",
+      "sharp": "0.35.5",
       "tar": "7.5.22",
       "three": "npm:super-three@0.185.0",
       "three-mesh-bvh": "^0.9.1",

@@ -181,7 +181,7 @@ describe('installDependenciesFromBundle', () => {
       packages: ['.'],
       overrides: {
         custom: '1.0.0',
-        sharp: '0.35.4',
+        sharp: '0.35.5',
         three: 'npm:super-three@0.185.0',
         ...bundlePackageSpecs,
       },

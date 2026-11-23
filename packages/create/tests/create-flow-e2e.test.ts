@@ -82,7 +82,7 @@ const LEGACY_EDITOR_CLI_ENV = ['META', 'SPATIAL', 'EDITOR', 'CLI', 'PATH'].join(
 );
 const TEST_MANAGED_WORKSPACE_TOKEN = 'create-flow-managed-workspace-token';
 const PACKED_ASSET_PUBLIC_PATH = '__iwsdk-example-assets/assets';
-const EXPECTED_SHARP_VERSION = '0.35.4';
+const EXPECTED_SHARP_VERSION = '0.35.5';
 const MANAGED_WORKSPACE_HEADERS = {
   'x-iwsdk-managed-workspace': TEST_MANAGED_WORKSPACE_TOKEN,
 };

@@ -50,7 +50,7 @@ try {
     await readFile(path.join(appRoot, 'pnpm-workspace.yaml'), 'utf8'),
   );
   if (
-    packageJson.overrides?.sharp !== '0.35.4' ||
+    packageJson.overrides?.sharp !== '0.35.5' ||
     packageJson.overrides?.three !== 'npm:super-three@0.185.0'
   ) {
     blockers.push(
@@ -60,7 +60,7 @@ try {
   if (
     pnpmWorkspace.packages?.length !== 1 ||
     pnpmWorkspace.packages[0] !== '.' ||
-    pnpmWorkspace.overrides?.sharp !== '0.35.4' ||
+    pnpmWorkspace.overrides?.sharp !== '0.35.5' ||
     pnpmWorkspace.overrides?.three !== 'npm:super-three@0.185.0' ||
     pnpmWorkspace.allowBuilds?.sharp !== true ||
     pnpmWorkspace.allowBuilds?.['@meta-quest/metavr'] !== false

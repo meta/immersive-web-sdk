@@ -363,7 +363,7 @@ and typed `UIKitMLAsset` scene lookup against the final public declarations.
 Clean npm installation also exposed an upstream advisory in the optional
 development reference tool: released Transformers versions still declare Sharp
 `^0.34.x`, while the fixed line starts at 0.35. Generated starters already
-override Sharp to 0.35.4. The sole repository example that installs
+override Sharp to 0.35.5. The sole repository example that installs
 `@iwsdk/reference` now carries the same tested override, and the native-scene
 verifier prevents future reference-enabled examples from omitting it. Its full
 npm audit, reference tests, and production build pass with zero findings.

@@ -194,7 +194,7 @@ describe('mergePackageJson', () => {
       '@types/three': '^0.185.0',
       vite: '^7.1.4',
     },
-    overrides: { three: 'npm:super-three@0.185.0', sharp: '0.35.4' },
+    overrides: { three: 'npm:super-three@0.185.0', sharp: '0.35.5' },
     engines: { node: '>=20' },
   };
 

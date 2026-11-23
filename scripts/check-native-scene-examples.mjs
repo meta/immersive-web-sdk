@@ -277,7 +277,7 @@ const LEGACY_DUPLICATE_ASSET_DIRS = [
   'plantSansevieria',
   'robot',
 ];
-const REFERENCE_SHARP_OVERRIDE = '0.35.4';
+const REFERENCE_SHARP_OVERRIDE = '0.35.5';
 
 function readRelative(relativePath) {
   return readFileSync(path.join(REPO_ROOT, relativePath), 'utf8');
