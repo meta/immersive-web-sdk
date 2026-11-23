@@ -1,5 +1,19 @@
 # @iwsdk/core
 
+## 1.2.0-rc.2
+
+### Minor Changes
+
+- 250a9ad: Native target for Meta Quest: `iwsdk.config.json` accepts a top-level `native` section (validated by the manifest validator, the JSON schema and the types) that `@iwer/native` reads to package the app as an APK. `@iwsdk/vite-plugin-dev` leaves the IWER emulator out of `vite build --mode metavr` (or `IWSDK_BUILD_TARGET=metavr`) whatever `dev.emulator.injectOnBuild` says, and keeps the `native` section out of the browser bundle. `npm create @iwsdk@latest -- --metavr-native` (VR starter) adds `@iwer/native`, a `native` section and a `build:metavr` script (`vite build --mode metavr && iwer-native pack`).
+
+### Patch Changes
+
+- eecd6ca: Directional and spot light targets now hang from their light, 1 m down its -Z, so three.js aims the light, its shadow camera and its helpers along the light's node in the same frame even when a system moves the node after `LightSystem` has synced it. Before, the target stayed where the light had been for that frame: shadows and shading leaned toward the old spot, and a step of about a metre along the light put the target on or behind it, so the shadow map looked away and the light went out for that frame.
+- c9b96df: Agent guidance: a new `iwsdk-metavr-native` skill builds, installs, runs and debugs a standalone Quest APK made with `@iwer/native` (`npm run build:metavr`), with a client for the runtime's debug endpoint (eval, eye-buffer screenshots, stats). AGENTS.md and the `iwsdk-dev` skill now route hosting, PWA/TWA packaging, offline and native APK requests straight to their skills, and the PWA packaging skill points native APK requests to the new one.
+  - @iwsdk/locomotor@1.2.0-rc.2
+  - @iwsdk/scene-composition@1.2.0-rc.2
+  - @iwsdk/xr-input@1.2.0-rc.2
+
 ## 1.2.0-rc.1
 
 ### Patch Changes

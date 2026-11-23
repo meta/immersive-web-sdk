@@ -1,5 +1,20 @@
 # @iwsdk/vite-plugin-dev
 
+## 1.2.0-rc.2
+
+### Minor Changes
+
+- 250a9ad: Native target for Meta Quest: `iwsdk.config.json` accepts a top-level `native` section (validated by the manifest validator, the JSON schema and the types) that `@iwer/native` reads to package the app as an APK. `@iwsdk/vite-plugin-dev` leaves the IWER emulator out of `vite build --mode metavr` (or `IWSDK_BUILD_TARGET=metavr`) whatever `dev.emulator.injectOnBuild` says, and keeps the `native` section out of the browser bundle. `npm create @iwsdk@latest -- --metavr-native` (VR starter) adds `@iwer/native`, a `native` section and a `build:metavr` script (`vite build --mode metavr && iwer-native pack`).
+
+### Patch Changes
+
+- 2938382: New projects pin sharp 0.35.5 (in the `package.json` and `pnpm-workspace.yaml` overrides) instead of 0.35.4, which has a high-severity advisory (GHSA-wq5f-xc86-pv6w, fixed in 0.35.5). `@iwsdk/vite-plugin-dev` requires sharp ^0.35.5. Existing projects keep their own override; change it to 0.35.5 to get the fix.
+- Updated dependencies [eecd6ca]
+- Updated dependencies [c9b96df]
+- Updated dependencies [250a9ad]
+  - @iwsdk/core@1.2.0-rc.2
+  - @iwsdk/scene-composition@1.2.0-rc.2
+
 ## 1.2.0-rc.1
 
 ### Patch Changes
