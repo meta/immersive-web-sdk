@@ -20,6 +20,63 @@ function resolveMetaVrEntrypoint(): string | null {
   }
 }
 
+// At most this many MetaVR processes run at once. Each event is its own
+// Node process that lives under a second; a caller that issues commands
+// faster than that (an agent's check script calling runCli in a loop, the MCP
+// server) would otherwise start one per command with nothing waiting for
+// them, and thousands piled up on a devserver.
+const MAX_RUNNING = 4;
+// Events waiting beyond this are dropped, so telemetry never grows without
+// bound when a caller outpaces MetaVR for a long time.
+const MAX_QUEUED = 1000;
+
+const queued: string[][] = [];
+let running = 0;
+let exitHookInstalled = false;
+
+function launch(argv: string[]): void {
+  running++;
+  let finished = false;
+  const finish = () => {
+    if (finished) {
+      return;
+    }
+    finished = true;
+    running--;
+    drain();
+  };
+  try {
+    const child = spawn(process.execPath, argv, {
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    child.on('error', finish);
+    child.on('exit', finish);
+    child.unref();
+  } catch {
+    finish();
+  }
+}
+
+function drain(): void {
+  while (running < MAX_RUNNING && queued.length > 0) {
+    launch(queued.shift()!);
+  }
+}
+
+/**
+ * Starts up to MAX_RUNNING of the events still waiting and drops the rest.
+ * Runs when the process exits, so a burst at the end neither floods the
+ * machine nor keeps the process alive.
+ */
+export function flushQueuedTelemetry(): void {
+  const remaining = queued.splice(0, MAX_RUNNING);
+  queued.length = 0;
+  for (const argv of remaining) {
+    launch(argv);
+  }
+}
+
 function metaVrTelemetry(args: string[], clientVersion?: string): void {
   const entrypoint = resolveMetaVrEntrypoint();
   if (entrypoint == null) {
@@ -30,12 +87,15 @@ function metaVrTelemetry(args: string[], clientVersion?: string): void {
   if (clientVersion) {
     globalArgs.push('--client-version', clientVersion);
   }
-  const child = spawn(process.execPath, [entrypoint, ...globalArgs, ...args], {
-    stdio: 'ignore',
-    windowsHide: true,
-  });
-  child.on('error', () => {});
-  child.unref();
+  if (!exitHookInstalled) {
+    exitHookInstalled = true;
+    process.once('exit', flushQueuedTelemetry);
+  }
+  if (queued.length >= MAX_QUEUED) {
+    return;
+  }
+  queued.push([entrypoint, ...globalArgs, ...args]);
+  drain();
 }
 
 export function reportToolCall(
