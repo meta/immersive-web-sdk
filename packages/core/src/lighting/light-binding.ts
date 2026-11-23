@@ -144,6 +144,14 @@ function applyShadow(light: ShadowLight, spec: LightShadowSpec): void {
  */
 export class LightBinding {
   readonly light: Light;
+  /**
+   * What a directional or spot light shines at: a child of the light, 1 m down
+   * its local -Z. Three.js aims the light, its shadow camera and its helpers at
+   * the target's world position, which it re-derives from the light's whenever
+   * it updates the scene graph (the first thing `WebGLRenderer.render()` does),
+   * so the light keeps pointing along its node's -Z even when a system moves the
+   * node after LightSystem has synced it.
+   */
   readonly target: Object3D | undefined;
 
   private readonly desiredWorldMatrix = new Matrix4();
@@ -151,10 +159,13 @@ export class LightBinding {
   private readonly localMatrix = new Matrix4();
   private readonly worldPosition = new Vector3();
   private readonly worldQuaternion = new Quaternion();
-  private readonly worldDirection = new Vector3();
   private disposed = false;
   private specSignature = '';
 
+  /**
+   * @param targetRoot - No longer used: the target hangs from the light (see
+   *   {@link LightBinding.target}). Kept so existing callers still compile.
+   */
   constructor(
     readonly parent: Object3D,
     readonly targetRoot: Object3D,
@@ -173,7 +184,8 @@ export class LightBinding {
       target.userData.iwsdkLightTarget = true;
       target.userData.iwsdkRuntimeOnly = true;
       copySceneIdentity(parent, target);
-      targetRoot.add(target);
+      target.position.copy(LOCAL_FORWARD);
+      this.light.add(target);
       this.target = target;
       (this.light as ThreeDirectionalLight | ThreeSpotLight).target = target;
     }
@@ -275,12 +287,9 @@ export class LightBinding {
     this.light.matrixWorld.copy(this.desiredWorldMatrix);
 
     if (this.target != null) {
-      this.worldDirection
-        .copy(LOCAL_FORWARD)
-        .applyQuaternion(this.worldQuaternion);
-      this.target.position.copy(this.worldPosition).add(this.worldDirection);
-      if (this.target.parent !== this.targetRoot) {
-        this.targetRoot.add(this.target);
+      this.target.position.copy(LOCAL_FORWARD);
+      if (this.target.parent !== this.light) {
+        this.light.add(this.target);
       }
       this.target.updateMatrixWorld(true);
     }

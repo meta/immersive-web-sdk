@@ -10,7 +10,13 @@ import {
   LightBinding,
   lightSpecFromComponentValue,
 } from '../../src/lighting/index.js';
-import { Object3D, Scene, Vector3 } from '../../src/runtime/index.js';
+import {
+  DirectionalLight,
+  Object3D,
+  Scene,
+  SpotLight,
+  Vector3,
+} from '../../src/runtime/index.js';
 
 const shadow = {
   castShadow: true,
@@ -59,7 +65,11 @@ describe('LightBinding', () => {
         expect.closeTo(1, 5),
       ]),
     );
-    expect(binding.target?.parent).toBe(scene);
+    expect(binding.target?.parent).toBe(binding.light);
+    expect(binding.target?.position.toArray()).toEqual([0, 0, -1]);
+    expect(
+      binding.target!.getWorldPosition(new Vector3()).distanceTo(lightPosition),
+    ).toBeCloseTo(1, 6);
     expect(binding.light.color.getHexString()).toBe('ffcc99');
     expect((binding.light as any).shadow.camera).toMatchObject({
       bottom: -6,
@@ -69,6 +79,76 @@ describe('LightBinding', () => {
       right: 6,
       top: 6,
     });
+  });
+
+  it('keeps the target on the light when the parent moves after syncTransform', () => {
+    const specs = [
+      {
+        color: [1, 1, 1, 1],
+        intensity: 2,
+        kind: 'directional',
+        shadowCameraSize: 12,
+        ...shadow,
+      },
+      {
+        angleDeg: 35,
+        color: [1, 1, 1, 1],
+        decay: 2,
+        distance: 8,
+        intensity: 30,
+        kind: 'spot',
+        penumbra: 0.4,
+        ...shadow,
+      },
+    ] as const;
+    for (const spec of specs) {
+      const scene = new Scene();
+      const parent = new Object3D();
+      parent.position.set(2, 3, 4);
+      parent.rotation.set(-1.24, 0.73, 0);
+      parent.scale.set(2, 3, 0.5);
+      scene.add(parent);
+      const binding = new LightBinding(parent, scene, spec);
+      const light = binding.light as DirectionalLight | SpotLight;
+      const forward = () =>
+        new Vector3()
+          .setFromMatrixColumn(parent.matrixWorld, 2)
+          .negate()
+          .normalize();
+      const aim = () =>
+        new Vector3()
+          .setFromMatrixPosition(light.target.matrixWorld)
+          .sub(new Vector3().setFromMatrixPosition(light.matrixWorld));
+
+      // syncTransform leaves the target's world matrix current at once
+      binding.syncTransform();
+      expect(aim().distanceTo(forward())).toBeLessThan(1e-6);
+
+      // Something moves the parent after the sync and before the frame
+      // renders; WebGLRenderer.render() starts with scene.updateMatrixWorld().
+      parent.translateZ(-1);
+      parent.translateX(0.4);
+      parent.rotateY(0.5);
+      scene.updateMatrixWorld();
+      expect(
+        new Vector3()
+          .setFromMatrixPosition(light.matrixWorld)
+          .distanceTo(parent.getWorldPosition(new Vector3())),
+      ).toBeLessThan(1e-6);
+      expect(aim().distanceTo(forward())).toBeLessThan(1e-6);
+      light.shadow.updateMatrices(light);
+      expect(
+        light.shadow.camera
+          .getWorldDirection(new Vector3())
+          .distanceTo(forward()),
+      ).toBeLessThan(1e-6);
+
+      // A target taken off the light is put back on the next sync
+      light.target.removeFromParent();
+      binding.syncTransform();
+      expect(light.target.parent).toBe(light);
+      expect(aim().distanceTo(forward())).toBeLessThan(1e-6);
+    }
   });
 
   it('creates every light kind and keeps rect-area lights target-free', () => {
