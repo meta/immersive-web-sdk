@@ -5,8 +5,9 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-// src/offline.ts: the page's side. Call startOffline() first thing at startup, and keepOfflineCopy()
-// once the first screen is up. isIdle() is your app's own test: would a reload now interrupt nothing?
+// src/offline.ts: the page's side. Call startOffline() first thing at startup, keepOfflineCopy()
+// once the first screen is up, and checkIdle() whenever the app becomes idle (an XR session ends).
+// isIdle() is your app's own test: would a reload now interrupt nothing?
 
 export function startOffline(isIdle: () => boolean): void {
   if (!('serviceWorker' in navigator)) return;
@@ -29,6 +30,8 @@ export function keepOfflineCopy(isIdle: () => boolean): void {
     .register('./sw.js', { scope: './' })
     .then((registration) => {
       watch(registration, isIdle);
+      // Ask the browser not to evict the copy under storage pressure. It decides without a prompt.
+      navigator.storage?.persist?.().catch(() => {});
       // Tell the worker what the page fetched before it took control, so it can keep optional files.
       new PerformanceObserver((list) => {
         const fetched = list.getEntries().map((entry) => entry.name);
@@ -42,7 +45,14 @@ export function keepOfflineCopy(isIdle: () => boolean): void {
     });
 }
 
+// A release that installed while the app was busy waits; call this when the app becomes idle to
+// let it take over now rather than at the next load.
+export function checkIdle(): void {
+  retry?.();
+}
+
 const watched = new WeakSet<ServiceWorkerRegistration>();
+let retry: (() => void) | undefined;
 
 function watch(
   registration: ServiceWorkerRegistration,
@@ -65,6 +75,7 @@ function watch(
     if (worker.state === 'installed') settled();
     else worker.addEventListener('statechange', settled);
   };
+  retry = () => follow(registration.waiting);
   follow(registration.waiting);
   follow(registration.installing); // an update the navigation started before this script ran
   registration.addEventListener('updatefound', () =>
@@ -72,15 +83,17 @@ function watch(
   );
 }
 
-let asked: ServiceWorker | null = null;
+let listening = false;
 
+// The worker takes over only if this is the only page of the app open; asking again later is safe.
 function takeOver(worker: ServiceWorker): void {
-  if (asked === worker) return;
-  asked = worker;
-  navigator.serviceWorker.addEventListener(
-    'controllerchange',
-    () => location.reload(),
-    { once: true },
-  );
+  if (!listening) {
+    listening = true;
+    navigator.serviceWorker.addEventListener(
+      'controllerchange',
+      () => location.reload(),
+      { once: true },
+    );
+  }
   worker.postMessage('take-over');
 }

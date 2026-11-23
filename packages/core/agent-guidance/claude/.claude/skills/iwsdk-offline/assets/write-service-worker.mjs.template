@@ -17,7 +17,7 @@ import { pathToFileURL } from 'node:url';
 const LEFT_OUT = [
   /^sw\.js$/,
   /\.map$/,
-  /^(robots\.txt|sitemap\.xml|og-image\.png)$/,
+  /^(robots\.txt|sitemap\.xml|llms\.txt|og-image\.png)$/,
   /(^|\/)AGENTS\.md$/,
 ];
 // Listed, but kept only once the page fetches them: files that only some users need.

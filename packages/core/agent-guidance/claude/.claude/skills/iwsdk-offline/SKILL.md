@@ -21,7 +21,7 @@ User request is in `$ARGUMENTS`.
 3. Adapt the worker → cache names and PINNED third-party paths
 4. Wire the page    → startOffline() and keepOfflineCopy() in src/index.ts
 5. Hosting          → sw.js uncached, hashed files immutable   [iwsdk-hosting]
-6. Verify           → first visit, reload, offline, update, mid-session
+6. Verify           → first visit, reload, offline, update, mid-session, two pages
 ```
 
 The kit in `assets/` was tested end to end in Chromium against an IWSDK starter
@@ -43,22 +43,23 @@ Ask of every file the build emits or the app fetches:
 What the user creates — saves, settings, progress — belongs in IndexedDB or
 `localStorage`, never in the release cache, which is replaced on every update.
 
-IWSDK fetches from two other origins at runtime, and the kit's `PINNED` already
-matches both:
+IWSDK and the starter fetch from other origins at runtime, and the kit's
+`PINNED` already matches all three:
 
 - **Controller models** —
   `https://cdn.jsdelivr.net/npm/@webxr-input-profiles/assets@1.0/dist/profiles/<profile>/<handedness>.glb`.
   The path is hard-coded, so the worker's cache is the only way to keep them
   offline. `@1.0` is a release line, not one version; the worker keeps the
-  first copy it receives.
+  first copy it receives, and keeps the other hand's model with it.
 - **Draco and KTX2 decoders** — `https://unpkg.com/three@0.<revision>.0/…`,
   fetched only when the app loads compressed glTF files or KTX2 textures. Apps
   cannot point IWSDK at self-hosted decoders.
 
-A starter that loads stock models from `@iwsdk/example-assets` on jsDelivr
-either adds that path to `PINNED`, or mirrors the files under `public/` with
-`VITE_IWSDK_EXAMPLE_ASSET_BASE_URL` — preferred, because mirrored files become
-release files and are hash-checked like any other.
+- **Stock models** — the starter's `src/assets.ts` loads them from
+  `https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@0.4.2/assets/…`. Mirroring
+  them under `public/` with `VITE_IWSDK_EXAMPLE_ASSET_BASE_URL` is better:
+  mirrored files become release files and are hash-checked like any other.
+  Then delete that path from `PINNED`.
 
 ## Step 2 — Copy the kit
 
@@ -95,14 +96,19 @@ In `scripts/sw.js.template`, change only:
 
 - **`PREFIX`, `KEPT`, `HASH`** — rename for the app. `KEPT` must not start with
   `PREFIX`, or the next activation deletes the third-party cache.
-- **`PINNED`** — the kit pins `three@0.185.0`, the revision new projects get.
-  Match it to the project's `three` in `package.json` (`super-three@0.181.0` →
-  `three@0.181.0`), and add any other third-party paths from step 1. If the app fetches nothing from other origins, delete
-  `PINNED`, `thirdParty()`, and `keepPinned()`.
+- **`PINNED`** — the kit pins `three@0.185.0` and `example-assets@0.4.2`, the
+  versions new projects get. Match `three@` to the project's `three` in
+  `package.json` (`super-three@0.181.0` → `three@0.181.0`) and
+  `example-assets@` to `src/assets.ts`, delete paths the app never loads, and
+  add any other third-party paths from step 1. If the app fetches nothing from
+  other origins, delete `PINNED`, `PAIRED`, `thirdParty()`, `keepPinned()`, and
+  `keepPair()`.
 
 Never add `skipWaiting()` to `install` or `activate`, and never revalidate in
 `fetch`: the page alone decides when a release takes over, and answers are
-cache-first so that a page is exactly its release. Request routing, hash checks,
+cache-first so that a page is exactly its release. The worker grants a
+take-over only while the asking page is the app's only open page, because it
+moves every open page onto the new release. Request routing, hash checks,
 and updates: [`references/service-worker.md`](references/service-worker.md).
 
 ## Step 4 — Wire the page
@@ -111,7 +117,7 @@ In `src/index.ts`:
 
 ```ts
 import { VisibilityState, World } from '@iwsdk/core';
-import { keepOfflineCopy, startOffline } from './offline.js';
+import { checkIdle, keepOfflineCopy, startOffline } from './offline.js';
 
 let world: World | undefined;
 const isIdle = () =>
@@ -122,11 +128,14 @@ World.create(container, projectOptions).then((created) => {
   world = created;
   // …system registration…
   keepOfflineCopy(isIdle); // after the first screen, not at startup
+  created.visibilityState.subscribe(() => checkIdle()); // a session just ended
 });
 ```
 
 `isIdle()` must be `false` whenever a reload would interrupt anything: an XR
-session (covered above), an unsaved edit, a game in progress. Registering only
+session (covered above), an unsaved edit, a game in progress. Call
+`checkIdle()` whenever one of those ends, so a release that installed
+meanwhile takes over then rather than at the next load. Registering only
 once `World.create()` has resolved lets the worker take every file from the
 HTTP cache instead of downloading it a second time. The reason for each line:
 [`references/page.md`](references/page.md).
@@ -156,7 +165,7 @@ The `vercel.json` headers for Vercel are in
 ## Step 6 — Verify
 
 `npm run dev` serves no `sw.js`, so registration fails quietly there and proves
-nothing — verify a production build. Five checks, each about what crosses the
+nothing — verify a production build. Six checks, each about what crosses the
 wire:
 
 1. **First visit** — the release cache holds every listed file, and no file was
@@ -166,8 +175,10 @@ wire:
    are served.
 4. **Update while idle** — only the changed file downloads, the new release
    takes over, and the old release cache is gone.
-5. **Update mid-session** — the page is not reloaded, and the next load moves
-   onto the new release.
+5. **Update mid-session** — the page is not reloaded during the session; when
+   it ends, the new release takes over.
+6. **Two pages open** — an update takes over neither page; once one remains,
+   its next idle moment or load takes it.
 
 The harness rules (logging server, no Playwright routes, persistent profile,
 polling loops) and headset testing over `adb reverse`:
@@ -183,7 +194,7 @@ offline — after **one online launch**, which is when the copy is made.
   `"start_url": "/?source=pwa"` is served the cached `index.html`.
 - The manifest and its icons live in `public/`, so they are in the release list.
 - A web redeploy installs in the background during a launch and takes over when
-  the app is idle, or on the launch after that — one launch later than without
+  the app is idle (no XR session), or on the launch after that — one launch later than without
   the copy. Native changes still need a new APK.
 - An immersive app that auto-enters XR (`iwsdk-pwa-packaging` step 1) spends the
   launch tap on `world.launchXR()`. When a release is waiting, `startOffline()`

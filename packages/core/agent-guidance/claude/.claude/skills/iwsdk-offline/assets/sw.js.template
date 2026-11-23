@@ -14,10 +14,15 @@ const PREFIX = 'myapp-release-'; // every release's cache; activation deletes al
 const CACHE = PREFIX + RELEASE;
 const HASH = 'x-content-sha256'; // each cached copy carries its hash, so a later release can reuse it
 const KEPT = 'myapp-third-party'; // outside PREFIX, so no release's activation deletes it
-// Third-party paths kept once per device: IWSDK's controller models, and the three.js decoders it
-// fetches for Draco or KTX2 assets. Match three@ to your app's three.js revision.
+// Third-party paths kept once per device: IWSDK's controller models, the three.js decoders it
+// fetches for Draco or KTX2 assets, and the starter's stock models. Match three@ to your app's
+// three.js revision and example-assets@ to src/assets.ts, or delete what the app never loads.
 const PINNED =
-  /^https:\/\/(cdn\.jsdelivr\.net\/npm\/@webxr-input-profiles\/assets@1\.0\/|unpkg\.com\/three@0\.185\.0\/)/;
+  /^https:\/\/(cdn\.jsdelivr\.net\/npm\/@webxr-input-profiles\/assets@1\.0\/|unpkg\.com\/three@0\.185\.0\/|cdn\.jsdelivr\.net\/npm\/@iwsdk\/example-assets@0\.4\.2\/)/;
+// A controller model and its other hand: keeping one keeps both, so a user who only ever held one
+// controller online still sees both offline.
+const PAIRED =
+  /^(https:\/\/cdn\.jsdelivr\.net\/npm\/@webxr-input-profiles\/assets@1\.0\/dist\/profiles\/[^/]+\/)(left|right)\.glb$/;
 const scope = new URL(self.registration.scope);
 
 const urlOf = (path) => new URL(path, scope).href;
@@ -140,22 +145,53 @@ async function thirdParty(event) {
   if (held != null) return held;
   const response = await fetch(event.request);
   // Only a CORS response can be kept: an opaque one (status 0) has ok === false.
-  if (response.ok)
-    event.waitUntil(cache.put(event.request.url, response.clone()));
+  if (response.ok) {
+    event.waitUntil(
+      Promise.all([
+        cache.put(event.request.url, response.clone()),
+        keepPair(event.request.url),
+      ]).catch(() => {}),
+    );
+  }
   return response;
 }
 
 // Keeps a pinned third-party file the page fetched before this worker controlled it.
 async function keepPinned(url) {
   const cache = await caches.open(KEPT);
-  if ((await cache.match(url)) != null) return;
-  const response = await fetch(url); // from the HTTP cache when it can
-  if (response.ok) await cache.put(url, response);
+  if ((await cache.match(url)) == null) {
+    const response = await fetch(url); // from the HTTP cache when it can
+    if (response.ok) await cache.put(url, response);
+  }
+  await keepPair(url);
+}
+
+// Keeps the other hand's controller model, if url is one.
+async function keepPair(url) {
+  const match = PAIRED.exec(url);
+  if (match == null) return;
+  const other = `${match[1]}${match[2] === 'left' ? 'right' : 'left'}.glb`;
+  const cache = await caches.open(KEPT);
+  if ((await cache.match(other)) != null) return;
+  const response = await fetch(other);
+  if (response.ok) await cache.put(other, response);
+}
+
+// Taking over moves every open page of this scope onto the new release, and the old release's
+// cache is deleted under them. So it happens only when the asking page is the only one open;
+// otherwise the release waits for a later request, or until every page has closed.
+async function takeOver() {
+  const pages = await self.clients.matchAll({
+    type: 'window',
+    includeUncontrolled: true,
+  });
+  if (pages.filter((page) => scopedPath(page.url) != null).length <= 1)
+    await self.skipWaiting();
 }
 
 self.addEventListener('message', (event) => {
   if (event.data === 'take-over') {
-    self.skipWaiting();
+    event.waitUntil(takeOver());
   } else if (Array.isArray(event.data?.fetched)) {
     const hrefs = event.data.fetched.filter((href) => typeof href === 'string');
     const ours = hrefs

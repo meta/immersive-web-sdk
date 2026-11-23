@@ -1,6 +1,6 @@
 # Testing the Offline Copy
 
-Five checks prove the design. Each is about what crosses the wire, so the test
+Six checks prove the design. Each is about what crosses the wire, so the test
 watches the wire.
 
 | # | Check | Pass when |
@@ -9,7 +9,8 @@ watches the wire.
 | 2 | Reload | the server is asked for nothing but `sw.js` |
 | 3 | Offline | with the network off, a reload starts the app and kept files are served; an optional file never fetched online is missing, as it should be |
 | 4 | Update while idle | after one file changes, only that file is downloaded; the new release takes over; the old release cache is gone; kept optional files came across |
-| 5 | Update mid-session | the page is not reloaded, and the next load moves onto the new release |
+| 5 | Update mid-session | the page is not reloaded during the session; when it ends, the new release takes over |
+| 6 | Two pages open | an update while a second page of the app is open takes over neither page; once only one remains, the next idle moment or load takes it |
 
 ## Harness
 
@@ -39,14 +40,18 @@ only the page attached, or by hand.
 ## On the headset
 
 Test a production build: `npm run dev` serves no `sw.js`. Build, serve `dist/`
-on a local port with `npx vite preview`, and forward it so that
+over plain HTTP on a local port, and forward it so that
 `http://localhost:<port>` counts as a secure context in Meta Quest Browser:
 
 ```bash
 npm run build
-npx vite preview
+python3 -m http.server 4173 --bind 127.0.0.1 --directory dist
 adb reverse tcp:4173 tcp:4173   # then open http://localhost:4173 on the headset
 ```
+
+Not `npx vite preview`: the IWSDK Vite plugin serves it over HTTPS with a
+self-signed certificate, and Quest Browser refuses to register a service worker
+from a page with a certificate error.
 
 Clear the origin's storage between runs, for example with the DevTools
 Protocol's `Storage.clearDataForOrigin`, or the site settings in the browser.

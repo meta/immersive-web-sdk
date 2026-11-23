@@ -21,16 +21,18 @@ copy.
 
 - **`PREFIX`, `KEPT`, `HASH`** — rename for the app. `KEPT` must not start with
   `PREFIX`, or the next activation deletes it.
-- **`PINNED`** — covers IWSDK's controller models and the three.js decoders.
-  Match `three@` to the project's three.js revision, and add
-  `cdn\.jsdelivr\.net\/npm\/@iwsdk\/example-assets@<version>\/` if the app loads
-  stock models from the CDN. If the app fetches nothing from other origins,
-  delete `PINNED`, `thirdParty()`, and `keepPinned()`.
+- **`PINNED`** — covers IWSDK's controller models, the three.js decoders, and
+  the starter's stock models on jsDelivr. Match `three@` to the project's
+  three.js revision and `example-assets@` to `src/assets.ts`, and delete the
+  stock-model path if the app mirrors those files or never loads them. If the
+  app fetches nothing from other origins, delete `PINNED`, `PAIRED`,
+  `thirdParty()`, `keepPinned()`, and `keepPair()`.
 
 Third-party files often come in families. IWSDK's controller models come as
-`left.glb` and `right.glb` in the same profile folder: when one arrives, fetch
-its sibling into `KEPT` too, so a user who only ever used one controller online
-still has both offline.
+`left.glb` and `right.glb` in the same profile folder, so `PAIRED` keeps the
+other hand's model whenever one is kept: a user who only ever used one
+controller online still has both offline. Add a rule like it for any other
+family the app fetches piece by piece.
 
 ## Behaviour to keep
 
@@ -40,6 +42,12 @@ still has both offline.
   cached `index.html`.
 - **No `skipWaiting()` of its own.** The worker calls it only on the page's
   `'take-over'` message; the page decides when a release takes over.
+- **A take-over needs the asking page to be alone.** `skipWaiting()` moves every
+  open page of the scope onto the new release, and activation deletes the old
+  release's cache under them: a second tab in the middle of an XR session would
+  load the new release's files, or none offline. So the worker grants
+  `'take-over'` only when one window of the scope is open; otherwise the release
+  waits until every page has closed, and the browser activates it then.
 - **Only CORS responses are kept.** A `no-cors` request returns an opaque
   response with status `0` and an unreadable body, which cannot be checked.
 
@@ -67,8 +75,9 @@ still has both offline.
 ## Updates
 
 A new release installs beside the old one and waits. The page decides when it
-takes over: at once if `isIdle()` is `true`, otherwise at the next load, before
-the app builds anything. Installing reuses every unchanged file from the old
+takes over: at once if `isIdle()` is `true`, when the app next calls
+`checkIdle()` while idle, or otherwise at the next load, before the app builds
+anything — each time only if no other page of the app is open. Installing reuses every unchanged file from the old
 release's cache by its hash, so an update downloads only what changed. Optional
 files the old release kept come across while their hash is unchanged, and the
 third-party cache is never touched. After `'take-over'`, activation deletes the

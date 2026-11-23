@@ -82,6 +82,7 @@ test('writes a deterministic worker that leaves out source maps and agent guidan
     'assets/index-3f9a2c.js.map': '{}',
     'fonts/ja-sans.woff2': 'font',
     'robots.txt': 'User-agent: *',
+    'llms.txt': '# App',
     'scenes/AGENTS.md': '# Scenes',
     'ui/AGENTS.md': '# UI',
   };

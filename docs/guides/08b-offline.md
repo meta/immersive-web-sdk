@@ -23,7 +23,7 @@ Five rules hold it together:
 - **One release at a time.** The build lists every file with its hash, and the copy is exactly that list, never a mix of two releases.
 - **Each file crosses the wire once.** The first copy comes out of the browser's HTTP cache, and an update downloads only the files whose hash changed.
 - **Nothing unchecked is kept.** Every file is hashed before it is cached.
-- **Never mid-session.** A new release takes over only when a reload would interrupt nothing, or on the next load.
+- **Never mid-session.** A new release takes over only when a reload would interrupt nothing, or on the next load, and never while another page of the app is open.
 - **Only what a user needs.** Files that only some users want are kept the first time they are fetched.
 
 ## Add It to Your Project
@@ -78,13 +78,11 @@ Keep a third-party file only at a pinned version, one named in its URL. Only a C
 
 ### Third-Party Files in an IWSDK App
 
-IWSDK fetches some files from other origins at runtime, so the service worker keeps them in its long-lived cache. Its default `PINNED` pattern covers the first two:
+IWSDK and the starter fetch some files from other origins at runtime, so the service worker keeps them in its long-lived cache. Its default `PINNED` pattern covers all three:
 
-- **Controller models.** IWSDK loads each controller's model from `https://cdn.jsdelivr.net/npm/@webxr-input-profiles/assets@1.0/dist/profiles/<profile>/<handedness>.glb`. `@1.0` names a release line rather than one version, so the CDN serves the newest 1.0 release, and the worker keeps the first copy it receives.
+- **Controller models.** IWSDK loads each controller's model from `https://cdn.jsdelivr.net/npm/@webxr-input-profiles/assets@1.0/dist/profiles/<profile>/<handedness>.glb`. `@1.0` names a release line rather than one version, so the CDN serves the newest 1.0 release, and the worker keeps the first copy it receives. Models come as `left.glb` and `right.glb` in one profile folder, and the worker keeps the other hand's model whenever it keeps one, so a user who only ever used one controller online still has both offline.
 - **Draco and KTX2 decoders.** When the app loads Draco-compressed glTF files or KTX2 textures, IWSDK fetches the decoders from `https://unpkg.com/three@0.<revision>.0/`, pinned to the app's three.js revision: `three@0.185.0` for `super-three@0.185.0`, the version new projects use.
-- **Stock example assets.** A starter that loads models from `https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@<version>/` can add that path to `PINNED`, or mirror the files under `public/` as described in [Remote Stock Assets And Local Mirrors](/guides/04-external-assets#remote-stock-assets-and-local-mirrors). A mirrored file is part of the release and is hash-checked like any other.
-
-Third-party files often come in families. IWSDK's controller models come as `left.glb` and `right.glb` in the same profile folder: when one arrives, fetch its sibling into the long-lived cache too, so a user who only ever used one controller online still has both offline.
+- **Stock example assets.** The starter loads its models from `https://cdn.jsdelivr.net/npm/@iwsdk/example-assets@<version>/`, pinned to the version in its `src/assets.ts`. Mirroring them under `public/`, as described in [Remote Stock Assets And Local Mirrors](/guides/04-external-assets#remote-stock-assets-and-local-mirrors), is better: a mirrored file is part of the release and is hash-checked like any other. Then remove that path from `PINNED`.
 
 ## Identify Files by Hash
 
@@ -124,12 +122,12 @@ Answers are cache-first with no revalidation, so a page loaded from the copy is 
 
 ## Connect the Page
 
-`src/offline.ts` exports two functions. `startOffline()` runs first thing at startup, so that a release that finished installing on an earlier visit takes over before anything starts. `keepOfflineCopy()` registers the worker once the first screen is up. Both take your app's idle test. An IWSDK app is idle when no XR session is running; add your own state, such as an unsaved edit or a game in progress:
+`src/offline.ts` exports three functions. `startOffline()` runs first thing at startup, so that a release that finished installing on an earlier visit takes over before anything starts. `keepOfflineCopy()` registers the worker once the first screen is up and asks the browser to keep the copy with `navigator.storage.persist()`. Both take your app's idle test. `checkIdle()` runs whenever the app becomes idle, so a release that installed during a session takes over when it ends. An IWSDK app is idle when no XR session is running; add your own state, such as an unsaved edit or a game in progress:
 
 ```ts
 import { VisibilityState, World } from '@iwsdk/core';
 import projectOptions from 'virtual:iwsdk-project';
-import { keepOfflineCopy, startOffline } from './offline.js';
+import { checkIdle, keepOfflineCopy, startOffline } from './offline.js';
 
 let world: World | undefined;
 const isIdle = () =>
@@ -143,20 +141,23 @@ World.create(
   world = created;
   // ... register your systems ...
   keepOfflineCopy(isIdle);
+  created.visibilityState.subscribe(() => checkIdle());
 });
 ```
 
 Three choices are yours:
 
 - **When the first screen is up.** Registered at startup, the worker downloads the release while the page is still downloading it, so every file comes down twice. Registered after `World.create()` resolves, it takes each file from the HTTP cache instead.
-- **What idle means.** `isIdle()` must be `false` whenever a reload could lose work or interrupt a session. When it is `true` and a new release has installed, the page reloads into the new release from the local copy.
+- **What idle means.** `isIdle()` must be `false` whenever a reload could lose work or interrupt a session, and the app calls `checkIdle()` when such a state ends. When it is `true` and a new release has installed, the page reloads into the new release from the local copy.
 - **How much the first load fetches.** Files the page fetched before the worker existed never passed through it, so the module reports them and the worker keeps the optional and pinned ones. The browser buffers 250 resource entries by default; if the first load fetches more, raise the limit early with `performance.setResourceTimingBufferSize()`.
 
 `navigator.onLine` and the `online` and `offline` events say whether the device has a network, not whether your server answers. Use them to disable or explain features that need a connection, and still handle failed requests.
 
 ## How Updates Work
 
-A new release installs beside the old one and waits, because the worker never calls `skipWaiting()` on its own. The page alone decides when it takes over: at once if `isIdle()` is `true`, otherwise at the next load, before the app builds anything.
+A new release installs beside the old one and waits, because the worker never calls `skipWaiting()` on its own. The page alone decides when it takes over: at once if `isIdle()` is `true`, when `checkIdle()` next finds the app idle, or otherwise at the next load, before the app builds anything.
+
+A take-over moves every open page of the app onto the new release and deletes the old release's cache under them, so the worker grants it only while the asking page is the app's only open page. With two tabs open, the release waits until one closes and the other is next idle or reloads, or until both close.
 
 Installing reuses every unchanged file from the old release's cache by its hash, so an update downloads only what changed. Optional files the old release kept come across while their hash is unchanged, and the third-party cache is never touched.
 
@@ -214,17 +215,18 @@ An immersive app that enters XR on launch spends the launch tap on `world.launch
 
 ## Test the Offline Copy
 
-Five checks prove the design. Each is about what crosses the wire, so the test watches the wire.
+Six checks prove the design. Each is about what crosses the wire, so the test watches the wire.
 
 1. **First visit.** The release cache holds every listed file, and no file was sent in full twice. No optional file nobody asked for was downloaded, and optional and pinned files the page fetched before the worker existed are kept.
 2. **Reload.** The server is asked for nothing but `sw.js`.
 3. **Offline.** With the network off, a reload starts the app and kept files are served. An optional file never fetched online is missing, as it should be.
 4. **Update while idle.** After one file changes, only that file is downloaded. The new release takes over, the old release cache is gone, and kept optional files came across.
-5. **Update mid-session.** The page is not reloaded, and the next load moves onto the new release.
+5. **Update mid-session.** The page is not reloaded during the session; when it ends, the new release takes over.
+6. **Two pages open.** An update takes over neither page; once only one remains, its next idle moment or load takes it.
 
-Serve the built output from a small server that logs every request and answers revalidations with ETags and `304`, as a real host does, and count only full `200` responses per path: a path sent twice is a duplicate download. The `iwsdk-offline` skill describes a Playwright harness for all five checks, including the browser settings that keep the HTTP cache realistic.
+Serve the built output from a small server that logs every request and answers revalidations with ETags and `304`, as a real host does, and count only full `200` responses per path: a path sent twice is a duplicate download. The `iwsdk-offline` skill describes a Playwright harness for all six checks, including the browser settings that keep the HTTP cache realistic.
 
-On a headset, test a production build: `npm run dev` serves no `sw.js`, so registration fails quietly and the app runs online only. Build, serve `dist/` on a local port with `npx vite preview`, and forward that port with `adb reverse tcp:<port> tcp:<port>` so that `http://localhost:<port>` counts as a secure context in Meta Quest Browser. Clear the origin's storage between runs, for example with the DevTools Protocol's `Storage.clearDataForOrigin`.
+On a headset, test a production build: `npm run dev` serves no `sw.js`, so registration fails quietly and the app runs online only. Build, serve `dist/` over plain HTTP on a local port (for example `python3 -m http.server 4173 --bind 127.0.0.1 --directory dist`), and forward that port with `adb reverse tcp:<port> tcp:<port>` so that `http://localhost:<port>` counts as a secure context in Meta Quest Browser. Avoid `npx vite preview` here: the IWSDK Vite plugin serves it over HTTPS with a self-signed certificate, and Quest Browser refuses to register a service worker from a page with a certificate error. Clear the origin's storage between runs, for example with the DevTools Protocol's `Storage.clearDataForOrigin`.
 
 ## Related Resources
 
