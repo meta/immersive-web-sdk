@@ -15,7 +15,11 @@
     "assets": { "$ref": "#/$defs/moduleDeclaration" },
     "components": { "$ref": "#/$defs/moduleDeclaration" },
     "world": { "$ref": "#/$defs/world" },
-    "dev": { "$ref": "#/$defs/dev" }
+    "dev": { "$ref": "#/$defs/dev" },
+    "native": {
+      "type": "object",
+      "description": "Alpha: native Android/OpenXR build target (npm run build:metavr). Its keys are defined and validated by @iwer/native (iwer-native validate)."
+    }
   },
   "$defs": {
     "moduleDeclaration": {

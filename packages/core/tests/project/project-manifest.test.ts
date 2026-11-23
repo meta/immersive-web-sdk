@@ -534,6 +534,30 @@ describe('iwsdk.project.v1 validation and normalization', () => {
     },
   );
 
+  it('accepts an opaque native (metavr) target section owned by @iwer/native', () => {
+    const withNative = {
+      ...structuredClone(vrManifest),
+      native: {
+        packageId: 'com.example.app',
+        signing: { keystore: '../keys/release.jks' },
+      },
+    };
+    expect(validateIwsdkProjectManifest(withNative)).toEqual({
+      valid: true,
+      issues: [],
+    });
+    expect(normalizeProjectWorldOptions(withNative)).toEqual(
+      normalizeProjectWorldOptions(vrManifest),
+    );
+
+    for (const native of ['com.example.app', ['x'], null]) {
+      expect(
+        validateIwsdkProjectManifest({ ...structuredClone(vrManifest), native })
+          .issues,
+      ).toEqual([expect.objectContaining({ path: '$.native', code: 'type' })]);
+    }
+  });
+
   it('throws a path-rich aggregate error before normalization', () => {
     expect(() => assertValidIwsdkProjectManifest({ version: 'wrong' })).toThrow(
       ProjectManifestValidationError,

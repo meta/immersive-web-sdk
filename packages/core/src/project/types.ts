@@ -248,6 +248,12 @@ export interface IwsdkProjectManifestV1 {
   components?: ProjectModuleDeclaration;
   world: ProjectWorldConfiguration;
   dev?: ProjectDevOptions;
+  /**
+   * Alpha: the native Android/OpenXR build target (`npm run build:metavr`),
+   * read and validated by @iwer/native at pack time. Never part of the
+   * browser bundle.
+   */
+  native?: Record<string, unknown>;
 }
 
 /** World options produced before Vite injects executable asset/component manifests. */

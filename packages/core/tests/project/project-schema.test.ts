@@ -67,6 +67,9 @@ describe('published project JSON Schema source', () => {
     expect(schema.$defs.emulator.properties).toHaveProperty(
       'userAgentException',
     );
+    // Alpha native target: an object whose keys @iwer/native owns.
+    expect(schema.properties.native.type).toBe('object');
+    expect(schema.properties.native).not.toHaveProperty('properties');
   });
 
   it('rejects path traversal in schema-level source path patterns', () => {

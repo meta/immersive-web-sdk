@@ -135,6 +135,8 @@ export type ScaffoldConfiguration = {
   mode?: XRMode;
   featureFlags: FeatureFlags;
   xrFeatureStates: Record<string, TriState>;
+  /** Alpha: add the native Quest build (`npm run build:metavr`, @iwer/native). VR only. */
+  nativeAlpha?: boolean;
 };
 
 export function deriveXRFeatureStates(

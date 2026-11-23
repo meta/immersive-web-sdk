@@ -53,7 +53,9 @@ iwsdkDev({
     // RegExp - custom hostname pattern
     activation: 'localhost',
 
-    // Inject during production build (not just dev)
+    // Inject during production build (not just dev). Never applies to native
+    // builds (`vite build --mode metavr` or IWSDK_BUILD_TARGET=metavr, used by
+    // the alpha `npm run build:metavr` with @iwer/native): those get no emulator.
     injectOnBuild: false, // default
 
     // User-Agent pattern to skip (avoids injection on real XR browsers)

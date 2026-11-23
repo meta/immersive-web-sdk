@@ -10,6 +10,12 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ScaffoldConfiguration } from './catalog.js';
+import {
+  BUILD_METAVR_SCRIPT,
+  IWER_NATIVE_ALPHA_VERSION,
+  NATIVE_ALPHA_GITIGNORE,
+  createNativeTargetSection,
+} from './native-alpha.js';
 import { createPnpmWorkspaceYaml } from './pnpm-workspace.js';
 import { createProjectManifest } from './project-manifest.js';
 import type { ProjectFileInput } from './scaffold.js';
@@ -57,18 +63,33 @@ export async function buildStarterProjectFiles({
     path: 'public/scenes/main.iwsdk.scene.json',
     contents: await readFile(sceneSource),
   });
+  const manifest = createProjectManifest(configuration);
+  if (configuration.nativeAlpha) {
+    manifest.native = createNativeTargetSection(appName);
+  }
   files.push({
     path: 'iwsdk.config.json',
-    contents: `${JSON.stringify(createProjectManifest(configuration), null, 2)}\n`,
+    contents: `${JSON.stringify(manifest, null, 2)}\n`,
   });
   files.push({
     path: 'package.json',
     contents: `${JSON.stringify(
-      createProjectPackageJson(appName, language, packageSource),
+      createProjectPackageJson(
+        appName,
+        language,
+        packageSource,
+        configuration.nativeAlpha === true,
+      ),
       null,
       2,
     )}\n`,
   });
+  if (configuration.nativeAlpha) {
+    const gitignore = files.find((file) => file.path === '.gitignore');
+    if (gitignore != null && typeof gitignore.contents === 'string') {
+      gitignore.contents = `${gitignore.contents.trimEnd()}\n${NATIVE_ALPHA_GITIGNORE}`;
+    }
+  }
   files.push({
     path: 'pnpm-workspace.yaml',
     contents: createPnpmWorkspaceYaml(),
@@ -88,6 +109,7 @@ function createProjectPackageJson(
   appName: string,
   language: Language,
   source: ProjectPackageSource,
+  nativeAlpha = false,
 ): Record<string, unknown> {
   const packageSpec = (name: string) =>
     source.getPackageInstallSpec(name) ?? VERSION;
@@ -104,6 +126,7 @@ function createProjectPackageJson(
       'reference:status': 'iwsdk reference status',
       ...(language === 'ts' ? { typecheck: 'tsc --noEmit' } : {}),
       build: 'vite build',
+      ...(nativeAlpha ? { 'build:metavr': BUILD_METAVR_SCRIPT } : {}),
       preview: 'vite preview',
     },
     dependencies: {
@@ -119,6 +142,7 @@ function createProjectPackageJson(
       '@iwsdk/reference': packageSpec('@iwsdk/reference'),
       '@iwsdk/cli': packageSpec('@iwsdk/cli'),
       '@iwsdk/vite-plugin-dev': packageSpec('@iwsdk/vite-plugin-dev'),
+      ...(nativeAlpha ? { '@iwer/native': IWER_NATIVE_ALPHA_VERSION } : {}),
       '@meta-quest/metavr': '^1.8.1',
       ...(language === 'ts'
         ? { '@types/three': '^0.185.0', typescript: '^5.5.0' }

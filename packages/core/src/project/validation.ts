@@ -61,7 +61,16 @@ export function validateIwsdkProjectManifest(
   const root = objectValue(
     value,
     '$',
-    ['$schema', 'version', 'scene', 'assets', 'components', 'world', 'dev'],
+    [
+      '$schema',
+      'version',
+      'scene',
+      'assets',
+      'components',
+      'world',
+      'dev',
+      'native',
+    ],
     ['version', 'scene', 'world'],
     issues,
   );
@@ -89,6 +98,11 @@ export function validateIwsdkProjectManifest(
   validateWorld(root.world, '$.world', issues);
   if ('dev' in root) {
     validateDev(root.dev, '$.dev', issues);
+  }
+  if ('native' in root && !isPlainObject(root.native)) {
+    // Alpha: the native (metavr) build target is validated by @iwer/native
+    // (`iwer-native validate`), which owns its keys; IWSDK only checks the shape.
+    addIssue(issues, '$.native', 'type', 'expected an object');
   }
 
   return { valid: issues.length === 0, issues };

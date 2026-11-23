@@ -117,6 +117,10 @@ import { resolveManagedRenderMode } from './managed-browser/render-mode.js';
 import { createRelayHandler } from './mcp-relay.js';
 import { reportSessionStart, reportSessionEnd } from './metavr-telemetry.js';
 import {
+  isNativeTargetBuild,
+  runtimeProjectManifest,
+} from './native-target.js';
+import {
   loadIwsdkProject,
   resolveProjectModulePath,
   type LoadedIwsdkProject,
@@ -668,6 +672,7 @@ function createProjectVirtualModuleSource(
 function shouldInjectRuntime(
   command: 'serve' | 'build',
   options: ProcessedDevOptions,
+  nativeTarget = false,
 ): boolean {
   if (command === 'build' && options.nativeXRControl) {
     throw new Error(
@@ -676,6 +681,11 @@ function shouldInjectRuntime(
   }
   if (command === 'serve') {
     return options.iwer !== false || options.workspace != null;
+  }
+  // Native (metavr) builds are packed by @iwer/native, whose runtime provides
+  // WebXR itself: never inject the emulator, whatever injectOnBuild says.
+  if (nativeTarget) {
+    return false;
   }
   // The managed editor is a development-server capability. Production builds
   // include only explicitly requested IWER emulation, never the workspace
@@ -3652,7 +3662,7 @@ if (import.meta.hot) {
           );
         }
         return createProjectVirtualModuleSource(
-          loadedProject.manifest,
+          runtimeProjectManifest(loadedProject.manifest),
           pluginOptions.nativeXRControl,
         );
       }
@@ -3766,11 +3776,22 @@ if (import.meta.hot) {
       // Development always builds the managed-workspace bridge, even when
       // IWER is disabled. Production builds include only explicitly enabled
       // IWER emulation; the editor bridge is never a production side effect.
-      const shouldInject = shouldInjectRuntime(config.command, pluginOptions);
+      const shouldInject = shouldInjectRuntime(
+        config.command,
+        pluginOptions,
+        isNativeTargetBuild(config.command, config.mode),
+      );
 
       if (!shouldInject) {
         if (pluginOptions.verbose) {
-          if (config.command === 'build' && pluginOptions.iwer === false) {
+          if (isNativeTargetBuild(config.command, config.mode)) {
+            console.log(
+              '⏭️  IWSDK Dev: Skipping build injection (metavr native build)',
+            );
+          } else if (
+            config.command === 'build' &&
+            pluginOptions.iwer === false
+          ) {
             console.log(
               '⏭️  IWSDK Dev: Skipping build injection (IWER disabled)',
             );
@@ -3806,7 +3827,11 @@ if (import.meta.hot) {
       order: 'pre', // Run before other HTML transformations
       handler(html) {
         // Check if the IWER runtime or managed-workspace bridge should load.
-        const shouldInject = shouldInjectRuntime(config.command, pluginOptions);
+        const shouldInject = shouldInjectRuntime(
+          config.command,
+          pluginOptions,
+          isNativeTargetBuild(config.command, config.mode),
+        );
 
         if (!shouldInject || !injectionBundle) {
           return html;
@@ -3834,7 +3859,11 @@ if (import.meta.hot) {
       order: 'post',
       async handler() {
         // Only show summary when the runtime/workspace bundle actually loaded.
-        const shouldInject = shouldInjectRuntime(config.command, pluginOptions);
+        const shouldInject = shouldInjectRuntime(
+          config.command,
+          pluginOptions,
+          isNativeTargetBuild(config.command, config.mode),
+        );
 
         if (shouldInject && injectionBundle) {
           const mode = config.command === 'serve' ? 'Development' : 'Build';

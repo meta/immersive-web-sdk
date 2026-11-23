@@ -37,6 +37,11 @@ import {
   printPrerequisites,
 } from './installer.js';
 import {
+  NATIVE_ALPHA_FLAG,
+  nativeAlphaRequested,
+  validateNativeAlphaTarget,
+} from './native-alpha.js';
+import {
   buildStarterProjectFiles,
   resolvePackagedGuidanceRoot,
 } from './project-files.js';
@@ -75,6 +80,7 @@ type CliOptions = {
   sceneUnderstanding?: boolean;
   environmentRaycast?: boolean;
   skipReferenceWarmup?: boolean;
+  metavrNative?: boolean;
 };
 
 function hasFlag(args: string[], flag: string): boolean {
@@ -268,6 +274,10 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
     .option('--no-scene-understanding', 'Disable scene understanding')
     .option('--environment-raycast', 'Enable environment raycast (AR mode)')
     .option('--no-environment-raycast', 'Disable environment raycast')
+    .option(
+      NATIVE_ALPHA_FLAG,
+      '(alpha) Add npm run build:metavr: a native Quest APK built with @iwer/native (VR only)',
+    )
     .option(
       '--skip-reference-warmup',
       'No effect; kept for older scripts (@iwsdk/reference bundles its corpus)',
@@ -477,7 +487,17 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
       );
     }
 
+    const nativeAlpha = nativeAlphaRequested(process.argv.slice(2));
+    if (nativeAlpha) {
+      validateNativeAlphaTarget(res.target);
+    }
+
     printConfigurationSummary(res, adopting);
+    if (nativeAlpha) {
+      console.log(
+        `  Native Quest build: npm run build:metavr (alpha, @iwer/native)`,
+      );
+    }
 
     const source = resolveSource(cliOpts.canary);
 
@@ -512,6 +532,7 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
         mode: res.mode,
         featureFlags: res.featureFlags,
         xrFeatureStates: res.xrFeatureStates,
+        nativeAlpha,
       };
       const outDir = projectTarget.outDir;
       const projectFiles = await buildStarterProjectFiles({
