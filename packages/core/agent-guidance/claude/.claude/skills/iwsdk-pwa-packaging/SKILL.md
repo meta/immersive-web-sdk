@@ -1,6 +1,6 @@
 ---
 name: iwsdk-pwa-packaging
-description: Ship an IWSDK app to Meta Quest and the Horizon Store as a PWA/TWA — both immersive WebXR and 2D windowed panel modes. Use for PWA packaging, web app manifest and icons, auto-enter-XR on launch, bubblewrap APK builds, signing keystores, Digital Asset Links, sideloading, and Horizon Store upload. Also use when a packaged app is stuck loading, shows a URL bar, or will not launch.
+description: Ship an IWSDK app to Meta Quest and the Horizon Store as a PWA/TWA — both immersive WebXR and 2D windowed panel modes. Use for PWA packaging, web app manifest and icons, auto-enter-XR on launch, bubblewrap APK builds, signing keystores, Digital Asset Links, sideloading, and Horizon Store upload. Also use when a packaged app is stuck loading, shows a URL bar, or will not launch. Not for a standalone APK that runs the app without Quest Browser (iwsdk-metavr-native).
 argument-hint: '[packaging goal, e.g. "ship to the store" or "build an APK"]'
 ---
 
@@ -11,6 +11,10 @@ runs from a live URL inside a Trusted Web Activity — the APK is a thin native
 wrapper, not a bundle of your files. That single fact explains most of the
 pipeline: the origin must be live before packaging, and web fixes ship by
 redeploying rather than rebuilding.
+
+A different kind of APK, one that carries the app's files and runs them
+without Quest Browser, is `iwsdk-metavr-native` (`npm run build:metavr`). If
+the user only says "an APK", ask which one before starting.
 
 User request is in `$ARGUMENTS`.
 

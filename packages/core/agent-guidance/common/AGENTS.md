@@ -226,6 +226,15 @@ debug it), never when the user wants to put the headset on and try it, and
 `iwsdk-glasses-test` whenever the user targets Meta VR Glasses or asks for gaze
 input.
 
+Distribution skills are invoked directly too, without `iwsdk-dev`, when the
+request ships an app rather than changes it: `iwsdk-hosting` to put it on a
+public HTTPS origin, `iwsdk-pwa-packaging` for a PWA/TWA APK of the hosted
+site, `iwsdk-offline` to keep it working without a connection, and
+`iwsdk-metavr-native` for a standalone APK built with `@iwer/native`
+(`npm run build:metavr`, a `native` section in `iwsdk.config.json`) and for
+installing, running and debugging that APK. "Make an APK" alone is ambiguous:
+ask which of the last two the user wants.
+
 The failure worth guarding against is improvising a domain that already has a
 skill because the naive approach looks tractable. Before hand-authoring scene
 JSON, a 3D model, a UIKitML panel, or a physics body, invoke the owning skill.

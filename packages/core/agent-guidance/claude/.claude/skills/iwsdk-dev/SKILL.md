@@ -31,6 +31,25 @@ Observable workspace state wins over wording:
   already exist;
 - explicit user selection of a child route overrides automatic routing.
 
+## Distribution requests
+
+A request that only ships an existing app — hosting it, packaging it for
+Quest or the Horizon Store, making it work offline, or building, installing
+and debugging a native `@iwer/native` APK — takes neither playbook. Invoke
+the owning skill directly and let it own the task:
+
+| Request                                                                           | Skill                 |
+| --------------------------------------------------------------------------------- | --------------------- |
+| Put the app on a public HTTPS origin                                              | `iwsdk-hosting`       |
+| Installable PWA, or a TWA APK of the hosted site, Store upload                    | `iwsdk-pwa-packaging` |
+| Work with no connection after one visit                                           | `iwsdk-offline`       |
+| Standalone APK with no browser (`build:metavr`, `native` section, `dist-metavr/`) | `iwsdk-metavr-native` |
+
+"Make an APK" alone could mean either the TWA or the native APK; ask which,
+using the comparison in `iwsdk-metavr-native` step 0. A request that changes
+the experience and then ships it routes to a playbook first; invoke the
+distribution skill after the playbook's work is verified.
+
 ## Internal handoff
 
 1. State the selected route in one sentence.

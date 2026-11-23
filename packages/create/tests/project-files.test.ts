@@ -695,6 +695,45 @@ describe('common starter project files', () => {
     );
   });
 
+  it('teaches the native APK build and routes distribution requests to it', async () => {
+    const files = await buildStarterProjectFiles({
+      appName: 'native-app',
+      configuration: getRecommendedConfiguration('vr'),
+      language: 'ts',
+      packageSource: npmSource,
+      templateRoot: TEMPLATE_ROOT,
+    });
+    const skill = textFile(
+      files,
+      '.claude/skills/iwsdk-metavr-native/SKILL.md',
+    );
+    expect(textFile(files, '.agents/skills/iwsdk-metavr-native/SKILL.md')).toBe(
+      skill.replaceAll('.claude/skills/', '.agents/skills/'),
+    );
+    expect(
+      textFile(files, '.claude/skills/iwsdk-metavr-native/assets/iwn-host.mjs'),
+    ).toContain('/host');
+    const prose = skill.replace(/\s+/gu, ' ');
+    for (const guidance of [
+      'npm run build:metavr',
+      'npx iwer-native doctor',
+      'iwn-host.mjs',
+      'localabstract:<packageId>_devtools_9229',
+      'LaunchCheckRequires6dofDialogActivity',
+      'Scripted input does not exist on the APK.',
+      'iwsdk-pwa-packaging',
+    ]) {
+      expect(prose).toContain(guidance);
+    }
+    expect(textFile(files, 'AGENTS.md')).toContain('`iwsdk-metavr-native`');
+    expect(textFile(files, '.claude/skills/iwsdk-dev/SKILL.md')).toContain(
+      '`iwsdk-metavr-native`',
+    );
+    expect(
+      textFile(files, '.claude/skills/iwsdk-pwa-packaging/SKILL.md'),
+    ).toContain('iwsdk-metavr-native');
+  });
+
   it('teaches Meta VR Glasses testing and routes agents to it', async () => {
     const files = await buildStarterProjectFiles({
       appName: 'glasses-app',
