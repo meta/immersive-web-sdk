@@ -354,8 +354,8 @@ importers:
         specifier: 0.1.8
         version: 0.1.8(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@pmndrs/uikit@1.0.74(super-three@0.185.0))(super-three@0.185.0)
       '@iwer/devui':
-        specifier: ^2.8.0
-        version: 2.8.0(css-to-react-native@3.2.0)(iwer@2.8.0)(use-sync-external-store@1.6.0(react@19.2.8))
+        specifier: ^2.9.0
+        version: 2.9.0(css-to-react-native@3.2.0)(iwer@2.9.0)(use-sync-external-store@1.6.0(react@19.2.8))
       '@iwsdk/core':
         specifier: workspace:*
         version: link:../core
@@ -397,8 +397,8 @@ importers:
         version: 8.21.1
     devDependencies:
       '@iwer/sem':
-        specifier: ^2.8.0
-        version: 2.8.0(iwer@2.8.0)(typescript@5.9.3)(vite@7.3.6(@types/node@20.19.25)(terser@5.44.1)(yaml@2.8.3))
+        specifier: ^2.9.0
+        version: 2.9.0(iwer@2.9.0)(typescript@5.9.3)(vite@7.3.6(@types/node@20.19.25)(terser@5.44.1)(yaml@2.8.3))
       '@iwsdk/cli':
         specifier: workspace:*
         version: link:../cli
@@ -406,8 +406,8 @@ importers:
         specifier: ^8.5.13
         version: 8.18.1
       iwer:
-        specifier: ^2.8.0
-        version: 2.8.0
+        specifier: ^2.9.0
+        version: 2.9.0
       vitest:
         specifier: 4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@20.19.25)(@vitest/coverage-v8@4.1.11)(vite@7.3.6(@types/node@20.19.25)(terser@5.44.1)(yaml@2.8.3))
@@ -955,13 +955,13 @@ packages:
     resolution: {integrity: sha512-O8jcjabXaleOG9DQ0+ARXWZBTfnP4WNAqzuiJK7ll44AmxGKv/J2M4TPjxjY3znBCfvBXFzucm1twdyFybFqEA==}
     engines: {node: '>=12'}
 
-  '@iwer/devui@2.8.0':
-    resolution: {integrity: sha512-LCiOrCFxDyXLxgjjyFbA4ZZ7Oq4wTu6Xhc4hBl1lfLIGJeBIJElEzOGjg0QsFcIKrYJs2JA73WS1Eo5qsFwjFA==}
+  '@iwer/devui@2.9.0':
+    resolution: {integrity: sha512-78JWSfyO6Z0xvgXM88bR+0ywxT2NBpbOvt1mH7RJhO3DGIlq+694mWyzmdb8LAytpsBNXzb9CntRqUf4oqlVnQ==}
     peerDependencies:
       iwer: ^2.7.0
 
-  '@iwer/sem@2.8.0':
-    resolution: {integrity: sha512-5TDdMjMgbIYcaRhtCNL0LisJ9IPwfwmrVfR8aknZAp6ZkHfeO5WZDf7fKSIjBE99z0xaw5822/RUJnlNgD5sAA==}
+  '@iwer/sem@2.9.0':
+    resolution: {integrity: sha512-SUBJfOfhOFb/Iesnb6PD59ljOkQngTBIh8KZ9pTXtBCQqWgJv9VvF3FcS3mFzPSIxTo0lwB4FUSKcUGuKwjPHw==}
     peerDependencies:
       iwer: ^2.3.0
 
@@ -2771,8 +2771,8 @@ packages:
     resolution: {integrity: sha512-HGYWWS/ehqTV3xN10i23tkPkpH46MLCIMFNCaaKNavAXTF1RkqxawEPtnjnGZ6XKSInBKkiOA5BKS+aZiY3AvA==}
     engines: {node: '>=8'}
 
-  iwer@2.8.0:
-    resolution: {integrity: sha512-7TKWVKl/FCPP7WMCqkwCod1peol4EkSmgveOdbtpjuACBSqVumFXjy/UUnMWMUjaaLNWwZZGXDkI+J6il+r5FQ==}
+  iwer@2.9.0:
+    resolution: {integrity: sha512-lNHWRFdCEblkpKQMnJqjBop7hoTljtSBFmK1W2z3jbCGevVnVWs98zwxdivXmpINPdYeWJNwxgIETn8aIzmF0w==}
 
   jackspeak@4.1.1:
     resolution: {integrity: sha512-zptv57P3GpL+O0I7VdMJNBZCu+BPHVQUk55Ft8/QCJjTVxrnJHuVuX/0Bl2A6/+2oyR/ZMEuFKwmzqqZ/U5nPQ==}
@@ -4582,11 +4582,11 @@ snapshots:
       wrap-ansi: 8.1.0
       wrap-ansi-cjs: wrap-ansi@7.0.0
 
-  '@iwer/devui@2.8.0(css-to-react-native@3.2.0)(iwer@2.8.0)(use-sync-external-store@1.6.0(react@19.2.8))':
+  '@iwer/devui@2.9.0(css-to-react-native@3.2.0)(iwer@2.9.0)(use-sync-external-store@1.6.0(react@19.2.8))':
     dependencies:
       '@pmndrs/handle': 6.6.30(react@19.2.8)
       '@pmndrs/pointer-events': 6.6.30
-      iwer: 2.8.0
+      iwer: 2.9.0
       lucide-react: 1.26.0(react@19.2.8)
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
@@ -4600,12 +4600,12 @@ snapshots:
       - react-native
       - use-sync-external-store
 
-  '@iwer/sem@2.8.0(iwer@2.8.0)(typescript@5.9.3)(vite@7.3.6(@types/node@20.19.25)(terser@5.44.1)(yaml@2.8.3))':
+  '@iwer/sem@2.9.0(iwer@2.9.0)(typescript@5.9.3)(vite@7.3.6(@types/node@20.19.25)(terser@5.44.1)(yaml@2.8.3))':
     dependencies:
       '@bufbuild/protobuf': 2.13.0
       '@drawcall/glts': 0.15.0(super-three@0.185.0)(typescript@5.9.3)(vite@7.3.6(@types/node@20.19.25)(terser@5.44.1)(yaml@2.8.3))
       gl-matrix: 3.4.4
-      iwer: 2.8.0
+      iwer: 2.9.0
       three: super-three@0.185.0
       ts-proto: 2.12.0
     transitivePeerDependencies:
@@ -6589,7 +6589,7 @@ snapshots:
       html-escaper: 2.0.2
       istanbul-lib-report: 3.0.1
 
-  iwer@2.8.0:
+  iwer@2.9.0:
     dependencies:
       gl-matrix: 3.4.4
       webxr-layers-polyfill: 1.1.0

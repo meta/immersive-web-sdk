@@ -1,5 +1,27 @@
 # @iwsdk/vite-plugin-dev
 
+## 1.2.0-rc.1
+
+### Patch Changes
+
+- 1428da8: The emulator dependencies (`iwer`, `@iwer/sem`, `@iwer/devui`) move to ^2.9.0, the IWER release that ships alongside `@iwer/native`. The browser emulator behaves as on 2.8.
+- cc17a68: MetaVR telemetry no longer starts one process per command with nothing waiting for it. At most four MetaVR processes run at once and further events wait their turn, so a caller that issues commands quickly (a check script calling `runCli` in a loop, an agent driving the dev server) cannot pile up hundreds of Node processes; 600 rapid commands used to leave about 600 running, now at most four. Events beyond 1000 waiting are dropped, session and error events from the dev server go ahead of waiting tool calls, and on exit a few waiting events are started and the rest dropped. A single command reports exactly as before.
+- f3f5996: `iwsdk browser profile` draws three warm-up frames before it starts sampling an app that renders on demand (headless sessions). The first profile of such a session used to include one-time first-draw costs (shader programs, texture uploads) and reported a frame-time p95 far above the app's real cost. The warm-up waits at most 5 seconds, within the command's time budget. If the frames are not drawn in time, for example because an uncaught error stopped the app's render loop, the profile reports a `render-warmup-timeout` interruption. A profile also reports `render-loop-stopped` when the app drew nothing for 30 or more animation frames in a row while the profile held rendering, because its render loop stopped (before or during the profile) or stalled; such profiles used to look like a healthy 60 fps. It reports `render-warmup-skipped-budget` (less than a second of the command's time left) or `render-mode-unavailable` when it has to sample without warm-up frames. Long tasks and event timings now count only work that starts during the profile. The `iwsdk-dev` skill's headless-rendering reference covers the warm-up and these interruptions.
+- Updated dependencies [2a7cd96]
+- Updated dependencies [c6f0c4b]
+- Updated dependencies [930331d]
+- Updated dependencies [4e37890]
+- Updated dependencies [9dd21ff]
+- Updated dependencies [67d5a48]
+- Updated dependencies [a239c76]
+- Updated dependencies [925c442]
+- Updated dependencies [75ffab4]
+- Updated dependencies [32ee415]
+- Updated dependencies [d6da276]
+- Updated dependencies [f3f5996]
+  - @iwsdk/core@1.2.0-rc.1
+  - @iwsdk/scene-composition@1.2.0-rc.1
+
 ## 1.2.0-rc.0
 
 ### Minor Changes
